@@ -3,7 +3,8 @@
 Estado: borrador fundacional. Esto describe la forma del sistema, no una
 especificación cerrada. Las decisiones y su razonamiento viven en
 [adr.md](adr.md); la definición formal de la API v1 del core, en
-[api.md](api.md).
+[api.md](api.md); la vista dinámica (comunicación, orquestación y
+limitaciones, con diagramas), en [modelo-ejecucion.md](modelo-ejecucion.md).
 
 ## Vista general
 

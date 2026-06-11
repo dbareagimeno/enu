@@ -156,6 +156,9 @@ providers viven en Lua y consumen SSE).
 | `Stream:chunks() -> iterator` ⏸ | Trozos crudos del body según llegan. |
 | `Stream:events() -> iterator` ⏸ | Parser SSE incorporado: itera `{event?, data, id?}`. |
 | `Stream:close()` | Aborta la conexión. |
+
+Backpressure: los streams se bufferizan en Go mientras Lua consume a su
+ritmo; el buffer tiene límite y al excederlo el stream falla con `EIO`.
 | `nu.ws.connect(url, opts?) -> Ws` ⏸ | `Ws:send(data)` ⏸, `Ws:recv() -> string?` ⏸ (`nil` al cerrar), `Ws:close()`. |
 
 Reservado para futuro (no v1): `nu.net.tcp`.
@@ -245,7 +248,7 @@ Las operaciones cuadráticas-en-pantalla viven aquí, en Go (ADR-004/007).
 | Firma | Semántica |
 |---|---|
 | `nu.worker.spawn(module: string) -> Worker` | Levanta un estado Lua nuevo en su goroutine, cargando `module` (resoluble por el loader). Sin `nu.ui`, `nu.events` (bus principal), `nu.plugin` ni workers anidados. |
-| `Worker:send(msg)` / `Worker:recv() -> msg` ⏸ | Mensajes = valores JSON-ables, **copiados** (las tablas no cruzan estados). |
+| `Worker:send(msg)` / `Worker:recv() -> msg` ⏸ | Mensajes = valores JSON-ables, **copiados** (las tablas no cruzan estados). Tampoco cruzan closures, userdata ni Blocks: un worker manda datos digeridos y el estado principal renderiza. |
 | `Worker:on_message(fn) -> Sub` | Alternativa por callback en el estado principal. |
 | `Worker:terminate()` | Inmediato y seguro (estados aislados). |
 | *(dentro del worker)* `nu.worker.parent.send(msg)` / `...recv() -> msg` ⏸ | Canal con el estado principal. |
