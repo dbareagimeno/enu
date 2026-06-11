@@ -106,7 +106,8 @@ recibir el chunk ya parseado, pedir el Block, colocarlo.
 4. **Workers sin `nu.ui` ni `nu.events`.** Su único canal con el mundo es la
    mensajería con el padre. Diseño deliberado (un solo escritor de UI), pero
    significa que un worker no puede reaccionar a eventos del bus ni emitirlos
-   directamente.
+   directamente. La API del worker puede recortarse aún más al crearlo
+   (`opts.caps`), hasta dejar solo los módulos concedidos.
 5. **Memoria compartida dentro del estado principal.** Un memory leak de un
    plugin infla el proceso entero; no hay presupuesto de memoria por plugin
    en v1 (los actores aislados quedaron como evolución futura, ADR-008).

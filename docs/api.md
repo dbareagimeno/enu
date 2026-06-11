@@ -297,4 +297,5 @@ primero y son sustituibles por nombre desde el directorio de usuario.
 - Namespaces de eventos `core:`/`ui:` y códigos de error de §1.4 reservados.
 - Fuera de esta especificación (deliberadamente): toolkit de widgets, hooks
   del agente (`agent:*`), MCP, formato de `providers.toml`. Son contratos de
-  sus extensiones, versionados aparte.
+  sus extensiones, versionados aparte. El de providers ya tiene borrador:
+  [providers.md](providers.md).

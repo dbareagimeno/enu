@@ -69,7 +69,10 @@ Tres patas (ADR-004):
    masticar datos. Los workers **no tienen acceso al módulo `ui`**: la
    pantalla solo se pinta desde el estado principal (como los Web Workers
    respecto al DOM). Los mensajes son copias — un worker devuelve resultados
-   digeridos, no datos crudos masivos.
+   digeridos, no datos crudos masivos. Opcionalmente, un worker puede nacer
+   con la API recortada (`opts.caps`): los módulos no concedidos no existen
+   dentro del estado — sandboxing por capacidades para subagentes y código
+   no confiable.
 3. **Primitivas Go paralelas por dentro.** `core.search()` y compañía saturan
    todos los cores sin que Lua se entere. El rendimiento bruto nunca depende
    de la velocidad del intérprete.
@@ -111,7 +114,8 @@ División datos/código (ADR-005):
   velocidad de lectura humana.
 
 Añadir un provider raro (vLLM, proxy corporativo) es un fichero Lua, no una
-recompilación.
+recompilación. El contrato del adaptador y el formato del registro están en
+[providers.md](providers.md).
 
 ## Distribución
 
