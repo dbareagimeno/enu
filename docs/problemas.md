@@ -8,8 +8,9 @@ resolución se aplica a los documentos afectados y la entrada pasa a
 aquello es lo que decidimos no decidir; esto son agujeros que la v1 sí
 necesita cerrados.
 
-Orden sugerido: primero los que condicionan contratos congelables (G1, G3,
-G4, G5), luego los de alcance (G6, G9), luego DX (G2, G7, G8).
+Orden sugerido: contratos congelables y seguridad primero (G3, G4, G5, G1,
+G14), luego alcance (G6, G9, G12, G13), luego DX y semánticas finas (G2,
+G7, G8, G10, G11, G15, G16).
 
 ---
 
@@ -142,3 +143,115 @@ la distribución ("un binario para todas las plataformas").
 documentado (la tool bash exige WSL o git-bash); (b) Windows de primera
 desde v1 (coste alto: shell portable, semántica kill, pruebas de
 terminal); (c) v1 sin Windows, explícitamente.
+
+## G10 · Reentrada del bus de eventos — `api.md` §4 — **Pendiente**
+
+**Problema.** `emit` dentro de un handler (¿recursión o cola?), suscribir
+o cancelar durante el despacho (¿el handler nuevo ve el evento en curso?
+¿el cancelado a mitad se ejecuta?): todo indefinido. Produce bugs
+dependientes del orden de carga de plugins.
+
+**Impacto.** Núcleo del modelo de extensión; barato de definir, imposible
+de cambiar después.
+
+**Opciones.** (a) Despacho sobre snapshot de la lista de handlers + emits
+anidados encolados al final del despacho en curso (sin recursión); (b)
+despacho recursivo en profundidad con límite anti-ciclos; (c) emits
+anidados via `task.defer` obligatorio (más simple en el core, más
+sorpresa para el autor).
+
+## G11 · Datos no-UTF-8 en las fronteras JSON — `api.md` §12 / transversal — **Pendiente**
+
+**Problema.** Un tool result con bytes binarios (cat de un PNG) cruza
+tres fronteras que asumen JSON/UTF-8 (request al provider, transcript
+JSONL, mensajes de worker) sin regla definida: ¿lanzar, reemplazar,
+base64? El bug aparecería lejos del origen.
+
+**Impacto.** Robustez básica de la tool `bash` — pasará el primer día.
+
+**Opciones.** (a) `nu.json.encode` lanza `EINVAL` ante UTF-8 inválido y
+las tools sanean (reemplazo lossy + nota "output binario truncado") —
+regla en la guía y en la tool oficial; (b) base64 automático con marca;
+(c) reemplazo silencioso con U+FFFD en el codec (cómodo, pero esconde
+corrupción).
+
+## G12 · TLS/proxy para endpoints corporativos — `api.md` §8 — **Pendiente**
+
+**Problema.** El "proxy corporativo" es caso anunciado en la filosofía,
+pero `nu.http` no tiene opciones TLS (CA propia, insecure) ni política de
+proxy (¿se respeta `HTTPS_PROXY`?). El caso no se puede configurar.
+
+**Impacto.** Adopción en empresas — público natural de un binario sin
+dependencias.
+
+**Opciones.** (a) `opts.tls = { ca_file?, insecure? }` + respetar
+`HTTP(S)_PROXY`/`NO_PROXY` por defecto (documentado); (b) además,
+configuración global en `nu.toml` para no repetirlo por petición.
+
+## G13 · Providers por suscripción (OAuth) — `providers.md` / `api.md` — **Pendiente**
+
+**Problema.** El device flow es escribible con lo que hay (polling +
+abrir URL), pero el flujo con callback localhost no: no existe primitiva
+de listener HTTP. Y no hay convención de dónde/cómo guarda un adaptador
+sus refresh tokens.
+
+**Impacto.** Los planes de suscripción (no API key) son cada vez más
+comunes; decide si nu los soporta de primera.
+
+**Opciones.** (a) Bendecir device flow como el camino v1 + convención de
+almacenamiento de tokens (`plugins/<nombre>/`, `0600`) y nada de
+listener; (b) añadir un listener HTTP mínimo (`nu.http.listen_once` para
+callbacks de OAuth, efímero, solo loopback) — superficie pequeña y
+acotada; (c) posponer OAuth entero con disparador.
+
+## G14 · Modelo de confianza del contenido del repo — `agente.md` §6-§7 / transversal — **Pendiente**
+
+**Problema.** Abrir nu en un repo clonado ya ejecuta la voluntad del
+repo: sus `.nu/skills/` se inyectan al system prompt y su
+`.nu/agent.toml` puede ampliar permisos (`allow = ["bash:*"]`) por la
+precedencia proyecto > global. Las descripciones de tools de servidores
+MCP de terceros son el mismo agujero (texto no confiable al modelo). No
+hay trust-on-first-use ni distinción entre config inocua y config
+peligrosa.
+
+**Impacto.** **El problema de seguridad más serio de la lista**: convierte
+"clonar y abrir" en vector de ataque. Hay que resolverlo antes de
+congelar el contrato del agente.
+
+**Opciones.** (a) Trust-on-first-use por directorio (primer arranque en
+un repo: diálogo "¿confías?"; sin confianza: se ignoran skills y config
+del repo); (b) TOFU granular: la config del repo se divide en inocua
+(siempre) y sensible (permisos: NUNCA ampliables desde el repo, solo
+recortables — los `allow` del proyecto requieren confirmación explícita);
+(c) ambas: TOFU para skills/contexto + regla dura "el repo solo recorta
+permisos, jamás amplía".
+
+## G15 · El interior de un worker: scheduler propio y watchdog — `api.md` §13 / `modelo-ejecucion.md` — **Pendiente**
+
+**Problema.** `task` es [W] y el escenario 4 ya asumió multiplexar con
+`race` dentro del worker, pero nunca se escribió que cada worker tenga su
+propio event loop, ni si admite múltiples tasks y timers, ni si el
+watchdog aplica dentro (¿con qué presupuesto, si no hay UI que proteger?).
+
+**Impacto.** Clarificación de contrato; el escenario 4 depende de ello.
+
+**Opciones.** (a) Cada worker = mini-runtime completo (loop propio,
+multi-task, timers) sin watchdog (no hay UI que proteger; `terminate()`
+es el control); (b) igual pero con watchdog configurable (protege de
+workers zombis quemando CPU).
+
+## G16 · Subagentes paralelos escribiendo los mismos ficheros — `agente.md` §9 — **Pendiente**
+
+**Problema.** Las tools de subagentes paralelos se intercalan en el
+principal, pero nada coordina dos escrituras al mismo path:
+last-write-wins silencioso.
+
+**Impacto.** Calidad de resultados con subagentes paralelos; los
+harnesses de referencia tampoco lo resuelven (mitigan repartiendo
+territorio vía prompt).
+
+**Opciones.** (a) Documentar como limitación conocida + guía ("reparte
+territorio entre subagentes"); (b) lock advisory por fichero dentro de la
+sesión (las tools oficiales de escritura lo respetan, aviso al chocar);
+(c) detección a posteriori (aviso si dos subagentes tocaron el mismo
+path).
