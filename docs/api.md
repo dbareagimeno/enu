@@ -233,7 +233,7 @@ Un **Block** es un handle opaco de líneas estilizadas, producido por
 | Firma | Semántica |
 |---|---|
 | `nu.ui.block(lines: (string\|Span[])[]) -> Block` | Construcción manual. Un `Span` es `{text, style?}`. |
-| `Style` | Tabla `{fg?, bg?, bold?, italic?, underline?, reverse?}`; colores `"#rrggbb"`, índice 0-255 o nombre semántico del theme (`"accent"`, `"error"`, ...). |
+| `Style` | Tabla `{fg?, bg?, bold?, italic?, underline?, reverse?}`; colores **literales**: `"#rrggbb"` o índice 0-255 (el render los degrada a lo que el terminal soporte, `nu.ui.caps().colors`). Los nombres semánticos (`"accent"`, `"error"`, ...) **no son del core**: son vocabulario del theme del toolkit, que los resuelve a literales al construir los Blocks (G22). |
 | `nu.ui.caps() -> {colors, kitty_keyboard, mouse, images}` | Capacidades del terminal. |
 | `nu.ui.clipboard_set(s)` / `nu.ui.clipboard_get() -> string?` ⏸ | Vía OSC 52 cuando el terminal lo soporta. |
 

@@ -53,7 +53,9 @@ Notas:
 - La API de **ui** es deliberadamente de bajo nivel (ADR-007): el core expone
   celdas/regiones y un compositor; el **toolkit de widgets es una extensión
   Lua oficial** (retenida por dentro: árbol + nodos sucios) que aporta slots,
-  focus y composición entre plugins, y se versiona aparte de la API sagrada.
+  focus, composición entre plugins y el sistema de themes — los nombres
+  semánticos de color se resuelven aquí, no en el core (G22) —, y se
+  versiona aparte de la API sagrada.
   Lua coloca bloques pre-rendidos por `text`, no celdas sueltas, en los
   caminos calientes. Es el patrón de ADR-003 aplicado a la UI: el core no
   sabe lo que es un widget.

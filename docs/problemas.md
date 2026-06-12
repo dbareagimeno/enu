@@ -9,11 +9,11 @@ resolución se aplica a los documentos afectados y la entrada pasa a
 aquello es lo que decidimos no decidir; esto son agujeros que la v1 sí
 necesita cerrados.
 
-**Estado: 21 resueltas · 1 abierta (G22)**. Las dieciséis de
-las rondas 3-4 se cerraron el 2026-06-12; ese mismo día, una revisión de
-coherencia de la documentación completa encontró seis grietas nuevas
-(G17-G22) — sobre todo contratos que presuponen API que no existe —
-añadidas aquí con el mismo método. G17-G21 se resolvieron el mismo día.
+**Estado: 22/22 resueltas** (2026-06-12). Las dieciséis de las rondas
+3-4 y las seis de la revisión de coherencia de la documentación completa
+(G17-G22, sobre todo contratos que presuponían API inexistente) están
+cerradas. La lista queda como registro del proceso; los problemas nuevos
+que surjan (spike incluido) se añaden aquí con el mismo método.
 
 ---
 
@@ -520,7 +520,25 @@ oficial `bootstrap` siempre activa que hace solo esto (¿contradice el
 "ninguna se activa sola" de ADR-010?); (c) sin UI: el binario imprime
 instrucciones (`nu --enable-official`) y sale — austero pero hostil.
 
-## G22 · Resolución de colores semánticos entre core y toolkit — `api.md` §9.2 — **ABIERTO**
+## G22 · Resolución de colores semánticos entre core y toolkit — `api.md` §9.2 — **RESUELTO**
+
+**Resolución** (aplicada en [api.md](api.md) §9.2,
+[arquitectura.md](arquitectura.md) y guía §6): opción (b) — el core solo
+acepta colores **literales** (`#rrggbb`, índice 0-255; degradados a
+`nu.ui.caps().colors` al pintar); el vocabulario semántico y los themes
+son enteramente del toolkit, que resuelve nombre → literal al construir
+los Blocks. Razón decisiva: no congelar un único modelo de theming en la
+API sagrada — una paleta global del core restringiría a toolkits
+alternativos con modelos más ricos; en espacio de extensiones el theming
+puede competir e iterar. Mitigaciones de los costes conocidos: el árbol
+retenido del toolkit re-renderiza solo al cambiar de theme (sus
+consumidores cambian en vivo gratis); los plugins de `nu.ui` crudo que
+usen colores del theme se suscriben a su evento de cambio (misma
+convención que `ui:resize`: tu región, tu repintado); el cambio en vivo
+para plugins que no cooperan se asume imperfecto. Descartadas: (a) tabla
+`nu.ui.theme` en el core (bendice un modelo único y mete vocabulario de
+theming en la API sagrada); (c) estilos por referencia (mucha superficie
+para el mismo resultado).
 
 **Problema.** Un `Style` del core acepta nombres semánticos (`"accent"`,
 `"error"`), pero los themes son plugins del toolkit
