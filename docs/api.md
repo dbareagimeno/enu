@@ -172,6 +172,12 @@ providers viven en Lua y consumen SSE).
 
 Backpressure: los streams se bufferizan en Go mientras Lua consume a su
 ritmo; el buffer tiene límite y al excederlo el stream falla con `EIO`.
+
+TLS y proxy (G12): `request` y `stream` aceptan
+`opts.tls = { ca_file?, insecure? }` (CA corporativa por petición);
+`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` del entorno se respetan por defecto.
+Defaults globales en la sección `[net]` de `nu.toml` (`ca_file`, proxy),
+sobreescribibles por petición.
 | `nu.ws.connect(url, opts?) -> Ws` ⏸ | `Ws:send(data)` ⏸, `Ws:recv() -> string?` ⏸ (`nil` al cerrar), `Ws:close()`. |
 
 Reservado para futuro (no v1): `nu.net.tcp`.

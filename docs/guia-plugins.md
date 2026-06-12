@@ -107,6 +107,8 @@ error({ code = "EINVAL", message = "filtro vacío", detail = { arg = "filter" } 
 
 - **Almacenamiento**: solo bajo `nu.config.data_dir()/plugins/<tu-nombre>/`.
   Las sesiones (`sessions/`) se leen, no se escriben — son del agente.
+  Credenciales y tokens: en tu directorio, `0600`, y jamás en el repo del
+  usuario ni en resultados de tools (acabarían en el transcript).
 - **Eventos propios**: namespace = tu nombre de plugin
   (`"mi-plugin:cosa.paso"`). `core:`, `ui:` y `agent:` están reservados.
 - **Sé librería**: lo reutilizable, en `lua/` de tu plugin — otros podrán

@@ -225,7 +225,13 @@ regla en la guía y en la tool oficial; (b) base64 automático con marca;
 (c) reemplazo silencioso con U+FFFD en el codec (cómodo, pero esconde
 corrupción).
 
-## G12 · TLS/proxy para endpoints corporativos — `api.md` §8 — **Pendiente**
+## G12 · TLS/proxy para endpoints corporativos — `api.md` §8 — **RESUELTO**
+
+**Resolución** (aplicada en [api.md](api.md) §8): `opts.tls = { ca_file?,
+insecure? }` en `request`/`stream`; las variables de entorno
+`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` se respetan por defecto (el estándar
+de facto corporativo); defaults globales en `[net]` de `nu.toml`
+sobreescribibles por petición.
 
 **Problema.** El "proxy corporativo" es caso anunciado en la filosofía,
 pero `nu.http` no tiene opciones TLS (CA propia, insecure) ni política de
@@ -238,7 +244,14 @@ dependencias.
 `HTTP(S)_PROXY`/`NO_PROXY` por defecto (documentado); (b) además,
 configuración global en `nu.toml` para no repetirlo por petición.
 
-## G13 · Providers por suscripción (OAuth) — `providers.md` / `api.md` — **Pendiente**
+## G13 · Providers por suscripción (OAuth) — `providers.md` / `api.md` — **RESUELTO**
+
+**Resolución** (aplicada en [providers.md](providers.md) §4 y guía §7):
+camino v1 sin listener — device flow o pegado manual de código (patrón
+`gh`/`gcloud`), escribible con `http.request` + `nu.proc`; tokens en
+`data_dir()/plugins/<nombre>/` con `0600`, en claro (coherente con P7). El
+listener localhost (`listen_once`) va a [P19](pospuesto.md) con disparador
+"provider real sin device flow ni pegado de código".
 
 **Problema.** El device flow es escribible con lo que hay (polling +
 abrir URL), pero el flujo con callback localhost no: no existe primitiva

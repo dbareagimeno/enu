@@ -192,6 +192,14 @@ return {
   `providers.resolve("anthropic/opus") -> { adapter, config }` y
   `providers.list() -> ModelInfo[]` (alimenta el selector de modelos de la UI).
 
+**Suscripciones / OAuth (G13).** El camino v1 es el que no necesita
+servidor local: **device flow o pegado manual de código** (`nu.http.request`
+en polling + abrir el navegador con `nu.proc` — el patrón de `gh` o
+`gcloud`). Tokens de refresco: en `data_dir()/plugins/<nombre>/`, permisos
+`0600`, en claro (coherente con [P7](pospuesto.md): el cifrado en reposo es
+del filesystem). El flujo con callback localhost requeriría un listener
+HTTP que el core no tiene: pospuesto ([P19](pospuesto.md)).
+
 ---
 
 ## 5. Alcance v1: decisiones cerradas
