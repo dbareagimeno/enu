@@ -14,7 +14,16 @@ G7, G8, G10, G11, G15, G16).
 
 ---
 
-## G1 · Comportamiento ante resize — `api.md` §9 — **Pendiente**
+## G1 · Comportamiento ante resize — `api.md` §9 — **RESUELTO**
+
+**Resolución** (aplicada en [api.md](api.md) §9.1 y
+[guia-plugins.md](guia-plugins.md) §6): regla dura en el core — las
+regiones fuera de pantalla se recortan sin error y conservan sus
+coordenadas; recolocarse es del dueño (convención "tu región, tu
+`ui:resize`"); el relayout automático es del toolkit. Anclajes
+declarativos en `region{}` descartados: sería congelar un mini-lenguaje de
+layout en la API sagrada — el patrón de la casa es "el core da garantías,
+no comodidades".
 
 **Problema.** Una región que queda fuera (o parcialmente fuera) de la
 pantalla tras un resize tiene comportamiento indefinido, y no hay

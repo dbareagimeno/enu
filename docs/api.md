@@ -189,7 +189,7 @@ viven en Go; los cambios se coalescen y se pinta como mucho cada ~30 ms
 | Firma | Semántica |
 |---|---|
 | `nu.ui.size() -> {w, h}` | Tamaño del terminal en celdas. Cambios → evento `ui:resize`. |
-| `nu.ui.region(opts) -> Region` | `opts`: `x, y, w, h, z?`. Las regiones son la unidad de composición: rectángulos con z-order propiedad de quien los crea. |
+| `nu.ui.region(opts) -> Region` | `opts`: `x, y, w, h, z?`. Las regiones son la unidad de composición: rectángulos con z-order propiedad de quien los crea. **Resize (G1)**: una región total o parcialmente fuera de pantalla se recorta sin error (jamás pinta fuera de límites; si no cabe nada, no se pinta); sus coordenadas no se tocan — si la pantalla vuelve a crecer, reaparece tal cual. Recolocarse es responsabilidad del dueño (convención "tu región, tu `ui:resize`"); el relayout automático es trabajo del toolkit, no del core. |
 | `Region:blit(x, y, block: Block)` | Estampa un bloque pre-renderizado (ver `nu.text`) en coordenadas locales de la región. Recorta a los límites. |
 | `Region:fill(style?)` / `Region:clear()` | |
 | `Region:move(x, y)` / `Region:resize(w, h)` / `Region:raise()` / `Region:lower()` | |

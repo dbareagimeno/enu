@@ -90,6 +90,10 @@ error({ code = "EINVAL", message = "filtro vacío", detail = { arg = "filter" } 
   que hardcodea `#ff0000` rompe todos los themes menos el del autor.
 - Input modal: tu handler devuelve `true` (consume) mientras esté activo, y
   se desapila en cuanto terminas. No dejes handlers huérfanos en la pila.
+- **Tu región, tu `ui:resize`**: si creas regiones a pelo, suscríbete y
+  recolócate (el core solo garantiza el recorte sin error — tu picker
+  centrado para 120 columnas se verá recortado en 60 hasta que lo muevas
+  tú). Con el toolkit, el relayout es automático.
 - Contenido en streaming: re-renderiza el mensaje en curso **una vez por
   tick de pintado** (el repintado ya va coalescido a ~30 ms), no por cada
   delta — el render en Go es barato; lo que mata es hacerlo mil veces por
