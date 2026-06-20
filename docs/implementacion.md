@@ -52,6 +52,10 @@ quedara desfasado. El documento manda; git es la red de seguridad.
    sesión siguiente, marca el tablero si cerraste una fase, y añade una fila a
    la bitácora. Un commit que toca código pero no mueve el puntero es una
    sesión a medias.
+4. **Si la sesión cierra una fase**: ejecuta su **Checkpoint de integración**
+   (🔎 CP-N, marcado tras la fase) antes de tocar el puntero. Si el checkpoint
+   falla, el puntero se queda donde está y la bitácora anota qué falló: la
+   siguiente sesión arregla la integración, no abre fase nueva.
 
 ## Antes de empezar: un cambio de fase
 
@@ -99,6 +103,21 @@ Una sesión no está hecha hasta cumplir las cinco:
 - **Depende de** — sesiones que deben existir antes (el grafo es estricto).
 - **Espec** — sección de `api.md` (u otro contrato) que la define.
 - **Criterio de hecho** — la prueba concreta que la cierra.
+
+### Dónde parar a probar (tres tipos de parada)
+
+El plan tiene paradas de tres granularidades, de menor a mayor alcance:
+
+1. **Definition of Done** — al final de *cada sesión*. Unidad: prueba la firma
+   recién implementada, aislada (lo de arriba).
+2. **Checkpoint de integración (🔎 CP-N)** — al cierre de *cada fase*. Une lo
+   acumulado y lo ejercita **de extremo a extremo** con una prueba de humo
+   concreta; aparecen marcados tras la última sesión de cada fase. Es el "para
+   y comprueba que todo lo de esta fase encaja antes de seguir". Si el
+   checkpoint falla, **no se avanza de fase** aunque cada sesión esté verde por
+   separado.
+3. **Hito de veto** — puntos donde el resultado puede *reordenar el plan*
+   (S09, S28, S37). Listados al final, en "Hitos de validación".
 
 ## Por qué este orden (el grafo de dependencias)
 
@@ -160,6 +179,12 @@ ninguna primitiva todavía.
 | **S02** | Errores estructurados (puente Go↔Lua: `error{code,message,detail}`) + **arnés de tests** que corre snippets Lua contra el runtime y hace asserts. | S01 | §1.4 | Un test fuerza `EINVAL` y captura la tabla con `pcall`; el arnés es reutilizable por todas las sesiones siguientes. |
 | **S03** | `nu.log` (a fichero en `data_dir`, anotando plugin de origen; `print` = `info`). | S01 | §15 | Snippet escribe y el test lee la línea del log. Útil para depurar todo lo demás. |
 
+> 🔎 **CP-1 · El runtime arranca y ejecuta Lua aislado** (tras S03).
+> Prueba de humo: `nu -e 'nu.log.info("hola"); return nu.version.api'` imprime
+> el nivel y deja la línea en el log; desde Lua, `io`, `os.execute` y
+> `os.getenv` son `nil` (sandbox sin fugas); el arnés corre su suite verde. Si
+> el sandbox tiene un agujero, se ve aquí, antes de construir nada encima.
+
 ## Fase 1 — El scheduler (la quilla)
 
 Lo más difícil del kernel. Se parte en piezas pequeñas porque cada una es
@@ -174,6 +199,15 @@ sutil y debe probarse aislada.
 | **S08** | **Cancelación**: `Task:cancel()` + `nu.task.cleanup` (pila LIFO) + desenrollado **no capturable por `pcall`** (§1.3); `ECANCELED` solo observable en `await`. | S04 | §1.3, §3 | Una task cancelada corre sus `cleanup`s; un `pcall` envolvente *no* atrapa el aborto. |
 | **S09** | **Watchdog**: presupuesto por slice (100 ms, configurable), aborto por `EBUDGET` no capturable, emisión de `core:plugin.misbehaved`. | S08 | §1.3 | Un bucle Lua de CPU puro que excede el presupuesto es abortado; el evento se emite (verificable tras S10). |
 
+> 🔎 **CP-2 · El modelo de concurrencia del navegador, completo** (tras S09) —
+> el checkpoint más importante del kernel. Prueba de humo en un solo script:
+> (a) `task.all` sobre 3 tasks devuelve resultados alineados; (b) `race`
+> cancela a las perdedoras; (c) una task cancelada corre sus `cleanup` y un
+> `pcall` envolvente *no* atrapa el aborto; (d) un bucle de CPU puro lo corta
+> el watchdog (`EBUDGET`) **sin congelar el loop** — una `every` en paralelo
+> sigue tickeando. Valida ADR-004/008 de extremo a extremo; cualquier grieta
+> del puente o del desenrollado es barata de cerrar aquí y carísima después.
+
 ## Fase 2 — Bus de eventos y loader
 
 Con esto el runtime ya puede *cargar plugins reales* y emitir su ciclo de vida.
@@ -184,6 +218,13 @@ Con esto el runtime ya puede *cargar plugins reales* y emitir su ciclo de vida.
 | **S11** | **Loader**: `plugin.toml`/`init.lua`, rutas de `require` del plugin, **orden de arranque canónico** (core → plugins topológico por `requires` → `init.lua` usuario → `core:ready`), `nu.plugin.current/list`, `nu.config.dir/data_dir`. | S10 | §14 | Dos plugins con dependencia se cargan en orden topológico; el `init.lua` del usuario va último; `core:ready` se emite una vez. |
 | **S12** | Activación de extensiones embebidas (`go:embed`, **inactivas por defecto**, ADR-010) gobernada por `nu.toml`; errores por extensión inactiva **accionables** (nombran la línea que lo arregla). Sin red. | S11 | §14, ADR-010 | Una extensión embebida no se carga salvo que `nu.toml` la active; el error apunta a la línea exacta. (La *pantalla* de runtime desnudo, que es UI, llega en S30.) |
 | **S13** | `nu.plugin.reload` (best-effort, G2): etiquetado de handles por dueño, `core:plugin.unload`, vaciado de caché de `require`, recarga de `init.lua`. | S11 | §14 | Recargar un plugin suelta sus suscripciones y vuelve a registrar; un test verifica que no quedan handlers huérfanos. |
+
+> 🔎 **CP-3 · Cargar y recargar plugins reales** (tras S13). Prueba de humo:
+> dos plugins en disco, uno hace `require` del otro; se cargan en orden
+> topológico; `core:ready` se emite una vez; el `init.lua` del usuario corre
+> el último; editar un plugin y `reload` no deja handlers huérfanos; un plugin
+> que lanza en un handler queda aislado por `pcall` sin tumbar a los demás
+> (ADR-008). Es la primera vez que "el producto" (un plugin) corre de verdad.
 
 ## Fase 3 — IO, sistema y codecs
 
@@ -198,6 +239,14 @@ sí; se ordenan por valor de desbloqueo para los tests posteriores.
 | **S17** | `nu.sys`: `platform`, `env`/`setenv` (solo subprocesos futuros), `now_ms`/`mono_ms`, `hostname`. | S01 | §7 | `setenv` se ve en un subproceso lanzado después, no en el actual. |
 | **S18** | Codecs: `nu.json` (**UTF-8 estricto** G11, sentinel `NULL`, `pretty`), `nu.toml`, `nu.yaml`. | S02 | §12 | `json.encode` de bytes inválidos lanza `EINVAL`; `NULL` ida y vuelta no pierde claves; `toml.decode` lee un `plugin.toml`. |
 
+> 🔎 **CP-4 · Una herramienta de verdad, solo con primitivas** (tras S18; sin
+> red ni UI). Prueba de humo / dogfooding temprano: un plugin Lua que recorre
+> el repo (`search.files`), lee ficheros (`fs.read`), lanza `git status`
+> (`proc.run`), parsea y emite un resumen (`json.encode`). Ejercita el
+> **corolario de completitud** (filosofía §2): si alguna pieza no se puede
+> escribir solo con la API, falta una primitiva — y se trata como hallazgo,
+> no como atajo.
+
 ## Fase 4 — Red
 
 El streaming es de primera clase porque los adaptadores de providers viven en
@@ -208,6 +257,12 @@ Lua y consumen SSE (ADR-005).
 | **S19** | `nu.http.request` (buffereada; no lanza por status ≥400; `tls`, proxy por entorno y por petición G12). | S04 | §8 | Contra un servidor de test, un 404 devuelve `status=404` sin lanzar; un fallo de transporte lanza `ENET`. |
 | **S20** | `nu.http.stream`: `Stream` (status/headers), `chunks()`, **`events()` parser SSE incorporado**, `idle_timeout_ms`, backpressure (buffer acotado → `EIO`). | S19 | §8 | Un SSE de prueba itera `{event,data,id}`; un consumidor lento que desborda el buffer recibe `EIO`. |
 | **S21** | `nu.ws.connect` (`send`/`recv`/`close`). | S04 | §8 | Eco websocket: `send` y `recv` round-trip; `recv` tras cierre da `nil`. |
+
+> 🔎 **CP-5 · El camino de red, incluido streaming** (tras S21). Prueba de
+> humo contra un servidor local de test: `http.request` trata un 404 como dato
+> (no lanza); un SSE consumido con `Stream:events()` mientras **otra task
+> progresa** (el loop no se bloquea); un `ws` de eco round-trip; y un
+> consumidor lento que desborda el buffer recibe `EIO` (backpressure real).
 
 ## Fase 5 — Texto y búsqueda (Go pesado)
 
@@ -223,6 +278,13 @@ con la UI).
 | **S26** | `nu.re` (RE2): `compile`, `match`, `find_all`, `replace`. | S02 | §10 | Patrón con grupos captura; `find_all` devuelve rangos; RE2 no acepta backreferences (error claro). |
 | **S27** | `nu.search`: `files` (recursivo, `.gitignore`), `grep` (iterador paralelo), `fuzzy` (síncrono acotado, para pickers). | S04, S14 | §11 | `grep` itera `{path,line_no,ranges}` según llegan; `fuzzy` ordena por score; `files` respeta `.gitignore`. |
 
+> 🔎 **CP-6 · Render y búsqueda a escala de repo, en headless** (tras S27).
+> Prueba de humo, todo inspeccionable en tests sin pintar pantalla:
+> `markdown` del propio README → Block con dimensiones; `highlight` de un
+> `.go`; `diff` de dos versiones de un fichero; `grep` y `fuzzy` sobre el repo
+> entero con sus tiempos. Deja listas las piezas pesadas que la UI solo
+> *coloca*.
+
 ## Fase 6 — UI (con spike de veto primero)
 
 No se compromete la arquitectura de UI sin validarla. El spike es una sesión de
@@ -237,6 +299,14 @@ pleno derecho con criterio de **veto pre-comprometido** (ADR-007).
 | **S32** | Resto de `nu.ui`: `clipboard` (OSC 52) y eventos `ui:resize`/`focus`/`suspend`/`resume`; headless G20 (`nu.ui` **no existe** sin TTY, detectable por `nu.has("ui")`). | S29 | §9.2, §9, §4 | Bajo `nu -e` el módulo `nu.ui` es inexistente y `nu.has("ui")` es `false`. |
 | **S33** | **Pantalla de runtime desnudo** (G21): render fijo pre-Lua (versión, rutas, embebidas, acciones) cuando hay TTY y ningún plugin activo. | S12, S29 | §14 | Arrancar sin plugins activos pinta la pantalla; activar el conjunto oficial escribe `plugins.enabled` y continúa el arranque. |
 
+> 🔎 **CP-7 · Ver nu por primera vez: TUI interactiva** (tras S33; el veto
+> S28 ya quedó atrás dentro de esta fase). Prueba de humo **manual, con TTY**:
+> arrancar sin plugins → pantalla de runtime desnudo; activar el conjunto
+> oficial; un plugin pinta una región con markdown en streaming token a token
+> y responde a un keymap (`ctrl+k`); redimensionar la terminal y ver el
+> recorte/relayout (G1); pegar una imagen y comprobar que llega como `path`,
+> no como bytes (G30). El primer momento "producto".
+
 ## Fase 7 — Workers (paralelismo opt-in)
 
 Llegan tarde a propósito: necesitan que la API **[W]** ya exista para recortarla
@@ -247,6 +317,12 @@ watchdog**).
 |---|---|---|---|---|
 | **S34** | `nu.worker.spawn` (estado Lua aislado, carga `module`), **`caps` con dos granularidades** (`"fs"` vs `"fs.read"`, deny-by-default para superficie nueva, G6), `send`/`recv` con colas **acotadas** (backpressure). | S04, S11 | §13 | Un worker con `caps={"fs.read"}` no ve `fs.write` (no existe); `send` suspende cuando la cola se llena. |
 | **S35** | `Worker:on_message` (**excluyente con `recv`**, G8: lanza `EINVAL` si se mezclan), canal `nu.worker.parent`, `terminate` (inmediato y seguro), tasks/timers/futures dentro del worker. | S34 | §13 | Registrar `on_message` con un `recv` pendiente lanza `EINVAL`; un worker corre varias tasks; `terminate` lo corta sin afectar al padre. |
+
+> 🔎 **CP-8 · Paralelismo real y sandbox por capacidades** (tras S35). Prueba
+> de humo: un worker con `caps={"fs.read","search"}` indexa el repo y devuelve
+> un digesto al estado principal; dentro del worker, `fs.write` y `ui`
+> **no existen** (deny-by-default, G6); `terminate` a mitad no afecta al padre;
+> `send` suspende al llenar la cola acotada (backpressure, coherente con CP-5).
 
 ## Fase 8 — Extensiones oficiales (Lua sobre la API congelada)
 
@@ -269,9 +345,30 @@ sesión S28 ejecutó el veto, el toolkit (S40) se construye en Go en su lugar.
 
 ---
 
+La Fase 8 es larga, así que lleva checkpoints **internos**, no solo al cierre:
+
+> 🔎 **CP-9 · El camino caliente completo, extremo a extremo** (tras S37;
+> coincide con el hito de veto de perf). Prueba de humo: una vuelta de
+> conversación contra un SSE **grabado** del adaptador Anthropic, pintada con
+> markdown en streaming. Primera vez que HTTP stream → SSE → markdown → blit
+> corre junto; mide la fluidez real (limitación nº8 de
+> [modelo-ejecucion.md](modelo-ejecucion.md)).
+
+> 🔎 **CP-10 · Agente headless mínimo, usable** (tras S39). Prueba de humo:
+> `nu -e` ejecuta un turno con una tool de fichero y un permiso **denegado**
+> (error accionable), persistiendo la sesión en JSONL y reanudable. El caso
+> CI/headless (G20) funciona sin una sola línea de UI.
+
+> 🔎 **CP-11 · Dogfooding: usar nu para construir nu** (tras S43). Prueba de
+> humo: una sesión de chat real de extremo a extremo contra un provider real.
+> A partir de aquí, el resto del trabajo (repl, CLI, más adaptadores) puede
+> hacerse con el propio nu — la señal de que el harness ya se sostiene.
+
 ## Hitos de validación
 
-No todo el valor está en las features; tres puntos son **decisiones con veto**:
+No todo el valor está en las features; tres puntos son **decisiones con veto**
+(distintos de los checkpoints 🔎: un checkpoint comprueba que lo construido
+encaja; un hito puede *reordenar el plan*):
 
 - **S09 (watchdog) + S08 (cancelación)**: validan el modelo de robustez de
   ADR-008 (aislamiento por tarea, no por plugin). Si el desenrollado no
