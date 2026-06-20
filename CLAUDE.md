@@ -46,6 +46,7 @@ Todo vive en `docs/`. Orden de lectura sugerido (y dependencias conceptuales):
 | `docs/pseudocodigo.md` | **El ejercicio de validación**: rondas de pseudocódigo que torturan la API. |
 | `docs/problemas.md` | Grietas que la v1 *necesita* cerradas (hallazgos G##, con estado). |
 | `docs/pospuesto.md` | Lo que se decidió no decidir todavía (P##), cada uno con su *disparador* de reapertura. |
+| `docs/implementacion.md` | Plan de construcción incremental: una feature por sesión (S##), ordenado por dependencias del kernel. |
 
 `README.md` es el índice de entrada con el mismo orden de lectura.
 
