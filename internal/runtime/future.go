@@ -135,15 +135,26 @@ func (s *scheduler) futureAwait(L *lua.LState) int {
 	// Substrato de cancelación (S07): un awaiter de future cancelado mientras
 	// espera aborta igual que en `suspend`/`Task:await`. Misma frontera S07/S08.
 	self, hasSelf := s.taskOf(L)
+	// Watchdog (S09): si el watchdog ya disparó para el awaiter, aborta aquí (este
+	// `await` es un punto de suspensión), igual que en `suspend`/`Task:await`.
+	if hasSelf && s.claimBudgetAbort(self) {
+		s.abort(self)
+	}
 	if hasSelf && isClosed(self.cancelCh) {
 		s.abort(self)
 	}
 	if !f.resolved {
+		// El awaiter suelta el token: su slice termina, desarma el watchdog; al
+		// re-adquirir abajo arranca uno nuevo.
+		if hasSelf {
+			s.disarmWatchdog(self)
+		}
 		s.release()
 		if hasSelf {
 			select {
 			case <-f.resolvedCh:
 				s.acquire()
+				s.armWatchdog(self)
 			case <-self.cancelCh:
 				s.acquire()
 				s.abort(self)

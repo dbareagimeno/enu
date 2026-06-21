@@ -1,7 +1,10 @@
 package runtime
 
 import (
+	"context"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -83,6 +86,35 @@ type task struct {
 	// primero). Solo la goroutine de la task la toca (registro y ejecución), bajo
 	// el token: sin candado.
 	cleanups []*lua.LFunction
+
+	// --- Watchdog de slice (S09, api.md §1.3) ---
+	//
+	// ctxCancel cancela el `context.Context` que `co` vigila en cada instrucción
+	// del intérprete (gopher-lua `mainLoopWithContext`): es el ÚNICO modo de
+	// romper un slice de **CPU puro** que nunca suspende (`while true do end`), que
+	// no tiene punto de chequeo cooperativo como `suspend`/`await`. Lo dispara el
+	// watchdog desde su propia goroutine cuando el slice excede el presupuesto.
+	// Una vez cancelado el contexto queda cancelado para siempre: como exceder el
+	// presupuesto aborta la task ENTERA, no hay que re-armarlo entre slices.
+	ctxCancel context.CancelFunc
+
+	// budgetTimer es el temporizador del slice en curso (`time.AfterFunc`). Se
+	// **arma** cuando la task toma el token para correr Lua (inicio de `runTask`,
+	// y tras re-adquirir en `suspend`/`Task:await`/`Future:await`) y se **desarma**
+	// justo antes de soltar el token (al suspender o terminar). Si dispara antes de
+	// desarmarse, el slice excedió el presupuesto. Solo lo toca la goroutine de la
+	// task (arm/disarm), bajo el token: sin candado sobre el campo en sí.
+	budgetTimer *time.Timer
+
+	// budgetExceeded lo pone a true el watchdog (en otra goroutine) al disparar,
+	// **antes** de cancelar el contexto. La goroutine de la task lo lee al
+	// detectar el error de contexto (en los wrappers de `pcall`/`xpcall` y en
+	// `runTask`) para reconocer que el desenlace fue por presupuesto y no un error
+	// Lua normal. Es `atomic.Bool` porque cruza goroutines sin el token (el
+	// watchdog no lo tiene); el resto de campos de aborto (`aborting`/`reason`/
+	// `canceled`) los sigue escribiendo SOLO la goroutine de la task bajo el token
+	// —invariante de S08 intacto—, una vez ha leído este flag.
+	budgetExceeded atomic.Bool
 }
 
 // abortReason distingue por qué se desenrolla una task de forma no capturable
@@ -144,15 +176,24 @@ type scheduler struct {
 	// puebla en `runTask` y se limpia al terminar. `sync.Map` porque se escribe
 	// desde la goroutine de cada task y se lee desde `suspend` sin el token.
 	coToTask sync.Map // *lua.LState -> *task
+
+	// budget es el **presupuesto por slice** del watchdog (api.md §1.3): el tiempo
+	// máximo que una task puede correr Lua de forma continua sin suspender. Por
+	// defecto 100 ms; configurable vía `WithSliceBudget` (el gancho que S11/S12
+	// cablearán a `nu.toml`). Inmutable tras construir el runtime, así que se lee
+	// sin candado desde las goroutines de las tasks.
+	budget time.Duration
 }
 
-// newScheduler prepara el scheduler con el token libre (sembrado en el canal).
-func newScheduler(rt *Runtime) *scheduler {
+// newScheduler prepara el scheduler con el token libre (sembrado en el canal) y
+// el presupuesto de slice del watchdog (S09).
+func newScheduler(rt *Runtime, budget time.Duration) *scheduler {
 	s := &scheduler{
 		rt:     rt,
 		host:   rt.L,
 		gil:    make(chan struct{}, 1),
 		timers: make(map[*luaTimer]struct{}),
+		budget: budget,
 	}
 	s.cond = sync.NewCond(&s.mu)
 	s.gil <- struct{}{} // token disponible: el primero que lo pida corre Lua
@@ -273,7 +314,24 @@ func (s *scheduler) stopAllTimers() {
 // llama desde el chunk principal como desde dentro de otra task.
 func (s *scheduler) spawn(fn *lua.LFunction, args []lua.LValue) *task {
 	co, _ := s.host.NewThread()
-	t := &task{co: co, fn: fn, args: args, doneCh: make(chan struct{}), cancelCh: make(chan struct{})}
+
+	// Watchdog (S09): dota al thread de la task de un contexto cancelable que el
+	// intérprete vigila en cada instrucción (`mainLoopWithContext`). Es lo que
+	// permite romper un slice de CPU puro que no suspende; el watchdog lo cancela
+	// al exceder el presupuesto. Contexto **propio por task** (raíz
+	// `Background`), no hijo del de `host`, para que cancelar a una no afecte a
+	// otras —el aislamiento es por tarea (ADR-008)—.
+	ctx, cancel := context.WithCancel(context.Background())
+	co.SetContext(ctx)
+
+	t := &task{
+		co:        co,
+		fn:        fn,
+		args:      args,
+		doneCh:    make(chan struct{}),
+		cancelCh:  make(chan struct{}),
+		ctxCancel: cancel,
+	}
 	s.mu.Lock()
 	s.live++
 	s.mu.Unlock()
@@ -290,9 +348,25 @@ func (s *scheduler) runTask(t *task) {
 
 	s.coToTask.Store(t.co, t) // para que `suspend` halle el `cancelCh` de esta task
 
+	// Watchdog (S09): arma el presupuesto del **primer slice** —desde que la task
+	// toma el token hasta su primer ⏸—; `suspend`/`await` lo re-arman en cada slice
+	// posterior. El desarmado del último slice lo hace el propio `CallByParam` al
+	// volver (vía `disarmWatchdog` más abajo) o el punto de suspensión que cedió.
+	s.armWatchdog(t)
 	err := t.co.CallByParam(lua.P{Fn: t.fn, NRet: lua.MultRet, Protect: true}, t.args...)
+	s.disarmWatchdog(t)
 
 	s.coToTask.Delete(t.co)
+
+	// El watchdog pudo disparar **sin** que ningún `pcall` de usuario reconvirtiera
+	// el error de contexto en aborto (caso de un bucle de CPU puro sin `pcall`
+	// envolvente): entonces `err` trae el "context canceled" de gopher-lua pero
+	// `t.canceled` sigue false. Aquí, ya bajo el token, la goroutine de la task
+	// reconoce el exceso de presupuesto y lo equipara a un aborto por
+	// `abortBudget` —descarta el desenlace y, abajo, emite `core:plugin.misbehaved`.
+	// (Si SÍ hubo un `pcall` de usuario, los wrappers ya re-lanzaron `abortSignal`
+	// y `t.canceled` llega true; este claim es idempotente.)
+	budget := s.claimBudgetAbort(t)
 
 	switch {
 	case t.canceled:
@@ -328,6 +402,18 @@ func (s *scheduler) runTask(t *task) {
 	t.done = true
 	close(t.doneCh)
 
+	// Watchdog (S09): si la task se abortó por **exceder el presupuesto** de un
+	// slice, emite `core:plugin.misbehaved` (api.md §1.3, §4). A diferencia de la
+	// cancelación —deliberada, silenciosa—, un slice excedido es un mal
+	// comportamiento del plugin que el resto del sistema debe poder observar.
+	// La emisión va por un **gancho interno** (`rt.emitMisbehaved`): el bus
+	// `nu.events` es S10; hasta entonces el gancho solo loguea best-effort (como el
+	// resto de errores de task). S10 lo cableará a
+	// `nu.events.emit("core:plugin.misbehaved", ...)`.
+	if budget {
+		s.rt.emitMisbehaved(s.rt.owner, "una task excedió el presupuesto de slice del watchdog (EBUDGET)")
+	}
+
 	// Error fire-and-forget: si la task lanzó y nadie la espera, déjalo en el
 	// log (best-effort de S04; el evento `core:plugin.error` llega en S10).
 	// `awaited` ya es true si un `await` se registró antes de terminar, así que
@@ -335,6 +421,14 @@ func (s *scheduler) runTask(t *task) {
 	if t.errValue != nil && !t.awaited {
 		_ = s.rt.log.write(levelError, s.rt.owner,
 			"una task terminó con error y nadie hizo await: "+errString(t.errValue))
+	}
+
+	// Watchdog (S09): libera los recursos del contexto del thread de la task. Si la
+	// mató el watchdog ya estará cancelado; si terminó normal, cancelarlo aquí
+	// evita la fuga que `context.WithCancel` provoca cuando su cancel nunca se
+	// llama. Tras esto el thread `co` queda para el GC de gopher-lua, como siempre.
+	if t.ctxCancel != nil {
+		t.ctxCancel()
 	}
 
 	s.release()
@@ -363,8 +457,20 @@ func (s *scheduler) suspend(L *lua.LState, work func() deliverFn) []lua.LValue {
 	// cancela *mientras* está suspendida, el `select` de abajo la despierta por
 	// `cancelCh` en vez de por el resultado.
 	t, hasTask := s.taskOf(L)
-	if hasTask && isClosed(t.cancelCh) {
-		s.abort(t)
+
+	// Watchdog (S09): este ⏸ **cierra el slice** en curso —la task va a soltar el
+	// token—, así que se desarma su temporizador. Antes, si el watchdog ya disparó
+	// (un slice anterior justo en el límite), se reclama el aborto por presupuesto
+	// igual que la cancelación: el ⏸ es el punto natural donde el aborto cooperativo
+	// surte efecto. Y si la task fue cancelada (S07/S08), aborta también aquí.
+	if hasTask {
+		s.disarmWatchdog(t)
+		if s.claimBudgetAbort(t) {
+			s.abort(t)
+		}
+		if isClosed(t.cancelCh) {
+			s.abort(t)
+		}
 	}
 
 	ch := make(chan deliverFn, 1)
@@ -388,6 +494,14 @@ func (s *scheduler) suspend(L *lua.LState, work func() deliverFn) []lua.LValue {
 	}
 
 	s.acquire()
+	// Watchdog (S09): re-adquirido el token, arranca un **slice nuevo** —el código
+	// Lua que corre tras el ⏸ tiene su propio presupuesto—. Así un bucle de CPU
+	// puro intercalado con suspensiones no acumula tiempo entre slices: cada tramo
+	// continuo se mide aparte (sin falsos positivos para trabajo normal que cede a
+	// menudo).
+	if hasTask {
+		s.armWatchdog(t)
+	}
 	return d(L)
 }
 
@@ -535,15 +649,27 @@ func (s *scheduler) taskAwait(L *lua.LState) int {
 	// Substrato de cancelación (S07): si la task que espera (`self`) es cancelada
 	// mientras está bloqueada en este `await`, debe abortar igual que en `suspend`.
 	self, hasSelf := s.taskOf(L)
+	// Watchdog (S09): si el watchdog ya disparó para el awaiter, aborta aquí (este
+	// `await` es un punto de suspensión). El claim convierte el corte en aborto por
+	// presupuesto antes de bloquear.
+	if hasSelf && s.claimBudgetAbort(self) {
+		s.abort(self)
+	}
 	if hasSelf && isClosed(self.cancelCh) {
 		s.abort(self)
 	}
 	if !t.done {
+		// El awaiter va a soltar el token: su slice termina, desarma el watchdog;
+		// al re-adquirir abajo arranca uno nuevo.
+		if hasSelf {
+			s.disarmWatchdog(self)
+		}
 		s.release()
 		if hasSelf {
 			select {
 			case <-t.doneCh:
 				s.acquire()
+				s.armWatchdog(self)
 			case <-self.cancelCh:
 				s.acquire()
 				s.abort(self)
@@ -554,11 +680,19 @@ func (s *scheduler) taskAwait(L *lua.LState) int {
 		}
 	}
 
-	// Observación de la cancelación de la task esperada (§1.3): si fue cancelada,
-	// no entregó valor; el awaiter lo *observa* como `ECANCELED` capturable. Se
-	// comprueba antes que `errValue` porque una task cancelada nunca tiene
-	// `errValue` (su desenlace se descartó), pero el orden deja la intención clara.
+	// Observación del aborto de la task esperada (§1.3): si fue abortada (cancelada
+	// o por watchdog), no entregó valor; el awaiter lo *observa* como un error
+	// capturable. Se comprueba antes que `errValue` porque una task abortada nunca
+	// tiene `errValue` (su desenlace se descartó), pero el orden deja la intención
+	// clara. El **código** distingue el motivo (§1.4): `EBUDGET` si la mató el
+	// watchdog por exceder un slice (S09), `ECANCELED` si fue cancelación (S08).
+	// Ambos son *observación* de OTRA task —el awaiter SÍ los captura—, no el
+	// aborto del propio awaiter (que, si lo abortaran a él, sería inmune).
 	if t.canceled {
+		if t.reason == abortBudget {
+			raiseError(L, CodeEBUDGET, "la task esperada excedió el presupuesto de slice (watchdog)", lua.LNil)
+			return 0
+		}
 		raiseError(L, CodeECANCELED, "la task esperada fue cancelada", lua.LNil)
 		return 0
 	}

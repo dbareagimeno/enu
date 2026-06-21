@@ -64,8 +64,25 @@ func (s *scheduler) installCancelPcall() {
 // realidad un aborto en curso, no debe entregarse a Lua sino seguir
 // desenrollando. Si no hay task, o no está abortando, no hace nada (el error es
 // uno normal de §1.4 y se devuelve a Lua como siempre).
+//
+// Watchdog (S09): el corte por presupuesto entra por una vía distinta a la
+// cancelación. La cancelación (S08) ya viene con `t.aborting` puesto (lo hizo
+// `abort` en el punto de suspensión); el watchdog, en cambio, solo dejó el flag
+// atómico `budgetExceeded` y rompió el bucle por contexto —el error que el `pcall`
+// nativo acaba de capturar es el "context canceled" de gopher-lua, aún un error
+// normal—. Por eso aquí, si la task no está ya abortando pero el watchdog
+// disparó, se **reclama** el aborto (`claimBudgetAbort` pone `aborting`/`reason =
+// abortBudget`/`canceled`) para que el re-lanzado del centinela también lo cuele
+// no capturable por este `pcall`/`xpcall` y los de más afuera, hasta `runTask`.
 func (s *scheduler) reraiseIfAborting(L *lua.LState) {
-	if t, ok := s.taskOf(L); ok && t.aborting {
+	t, ok := s.taskOf(L)
+	if !ok {
+		return
+	}
+	if !t.aborting {
+		s.claimBudgetAbort(t) // watchdog: convierte el corte por contexto en aborto
+	}
+	if t.aborting {
 		panic(abortSignal{t: t})
 	}
 }
