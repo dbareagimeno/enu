@@ -1,0 +1,103 @@
+package runtime
+
+import (
+	"strings"
+	"testing"
+
+	lua "github.com/yuin/gopher-lua"
+)
+
+// Arnés de tests del runtime (S02): corre snippets Lua contra un Runtime real y
+// hace asserts. Es **reutilizable por todas las sesiones siguientes** —cada
+// submódulo nuevo de la API se prueba desde el lado del autor de extensiones,
+// escribiendo el Lua que lo usaría y comprobando el resultado o el error
+// estructurado que lanza (Definition of Done §2 del plan).
+//
+// Vive en un fichero `_test.go` a propósito: es andamiaje de pruebas, no
+// superficie del binario. Como las pruebas de las demás sesiones comparten el
+// paquete `runtime`, todas lo tienen a mano sin exportarlo.
+
+// harness envuelve un Runtime para una prueba concreta. El estado se cierra solo
+// al acabar la prueba (vía t.Cleanup), así que cada test arranca de un runtime
+// limpio sin fugas entre casos.
+type harness struct {
+	t  *testing.T
+	rt *Runtime
+}
+
+// newHarness construye un runtime sandboxeado y listo para snippets, con cierre
+// automático al terminar la prueba.
+func newHarness(t *testing.T) *harness {
+	t.Helper()
+	rt := New()
+	t.Cleanup(rt.Close)
+	return &harness{t: t, rt: rt}
+}
+
+// register instala `fn` como global `name` en el estado Lua, para que los
+// snippets la invoquen. Es la vía por la que una prueba inyecta una primitiva Go
+// de andamiaje (p. ej. una que lanza un error estructurado) sin contaminar la
+// superficie del runtime de producción.
+func (h *harness) register(name string, fn lua.LGFunction) {
+	h.t.Helper()
+	h.rt.L.SetGlobal(name, h.rt.L.NewFunction(fn))
+}
+
+// eval corre `code` exigiendo que termine sin error y devuelve sus valores de
+// retorno como strings. Falla la prueba si el snippet lanza: es el camino para
+// snippets que se autovalidan con `assert(...)` y devuelven, p. ej., `true`.
+func (h *harness) eval(code string) []string {
+	h.t.Helper()
+	res, err := h.rt.EvalString(code)
+	if err != nil {
+		h.t.Fatalf("el snippet falló inesperadamente: %v\n--- código ---\n%s", err, code)
+	}
+	return res
+}
+
+// evalErr corre `code` exigiendo que lance un **error estructurado** del core
+// (§1.4) y lo devuelve para que la prueba haga asserts sobre `code`/`message`/
+// `detail`. Falla si el snippet no lanza, o si lanza algo que no es estructurado
+// (un `error("string")` o un fallo de sintaxis): justo lo que blinda que el
+// puente no degrada un error estructurado a texto plano.
+func (h *harness) evalErr(code string) *StructuredError {
+	h.t.Helper()
+	_, err := h.rt.EvalString(code)
+	if err == nil {
+		h.t.Fatalf("se esperaba un error estructurado, pero el snippet terminó bien\n--- código ---\n%s", code)
+	}
+	se, ok := err.(*StructuredError)
+	if !ok {
+		h.t.Fatalf("se esperaba *StructuredError, llegó %T: %v\n--- código ---\n%s", err, err, code)
+	}
+	return se
+}
+
+// expectEval corre `code` y comprueba que sus valores de retorno (como strings)
+// son exactamente `want`. Azúcar para el caso más común de "este snippet debe
+// devolver esto".
+func (h *harness) expectEval(code string, want ...string) {
+	h.t.Helper()
+	got := h.eval(code)
+	if len(got) != len(want) {
+		h.t.Fatalf("nº de resultados: got %d %q, want %d %q\n--- código ---\n%s",
+			len(got), got, len(want), want, code)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			h.t.Fatalf("resultado %d: got %q, want %q\n--- código ---\n%s", i, got[i], want[i], code)
+		}
+	}
+}
+
+// sanity: el arnés es operativo cuando newHarness, eval, evalErr existen.
+// Una prueba de humo mínima del propio arnés (que sepa correr Lua y leer un
+// retorno) vive aquí para que un fallo del andamiaje se distinga de un fallo de
+// la feature bajo prueba.
+func TestHarnessSmoke(t *testing.T) {
+	h := newHarness(t)
+	h.expectEval(`return 1 + 1`, "2")
+	if got := h.eval(`return nu.version.api`); len(got) != 1 || strings.TrimSpace(got[0]) == "" {
+		t.Fatalf("nu.version.api inesperado: %q", got)
+	}
+}
