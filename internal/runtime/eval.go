@@ -6,9 +6,12 @@ import (
 
 // EvalString compila y ejecuta `code` como un chunk Lua y devuelve sus valores
 // de retorno convertidos a string (vía `tostring`), en orden. Es lo que respalda
-// `nu -e`: el chunk `return nu.version.api` produce `["1"]`. Un error de compilación
-// o de ejecución se devuelve tal cual (en sesiones futuras será una tabla de
-// error estructurada, §1.4; eso es S02).
+// `nu -e`: el chunk `return nu.version.api` produce `["1"]`.
+//
+// Si el chunk lanza un error estructurado del core (§1.4), se devuelve como
+// `*StructuredError` con su `code`/`message` intactos: el puente no traga ni
+// reescribe el error al cruzar la frontera Lua→Go (invariante 🔒 de S02). Un
+// error de sintaxis o un `error("string")` cualquiera se devuelve tal cual.
 func (rt *Runtime) EvalString(code string) ([]string, error) {
 	L := rt.L
 
@@ -20,6 +23,9 @@ func (rt *Runtime) EvalString(code string) ([]string, error) {
 	base := L.GetTop()
 	L.Push(fn)
 	if err := L.PCall(0, lua.MultRet, nil); err != nil {
+		if se, ok := structuredFromError(err); ok {
+			return nil, se
+		}
 		return nil, err
 	}
 

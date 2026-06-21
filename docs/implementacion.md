@@ -17,7 +17,7 @@ redundantes a propósito:
 
 1. **El puntero** (esta misma línea, la única imperativa del documento):
 
-   > **▶ Próxima sesión: `S02`** · Fase 0 · S01 cerrada (bootstrap + sandbox).
+   > **▶ Próxima sesión: `S03`** · Fase 0 · S02 cerrada (errores estructurados + arnés de tests).
 
 2. **El tablero por fases** (vista de pájaro; se marca al cerrar la última
    sesión de cada fase):
@@ -467,3 +467,4 @@ construirse.
 | Fecha | Sesión | Commit | Notas (hallazgos, desviaciones, lo que debe saber la siguiente) |
 |---|---|---|---|
 | 2026-06-20 | S01 | _(este commit)_ | Bootstrap del binario `nu` con gopher-lua v1.1.2 (puro Go, `CGO_ENABLED=0`). Estructura: `main.go` (CLI `-e`) + `internal/runtime/` (`runtime.go` constructor, `sandbox.go` baseline §1.2, `nu.go` version/has, `eval.go`). Módulo Go: `github.com/dbareagimeno/nu`. **Desviación menor:** el sandbox retira además `os.setenv` y `os.tmpname` (no listadas en §1.2 pero coherentes con su razón: env→`nu.sys.setenv` S17, temporales→`nu.fs.tmpdir` S14); es tightening, no amplía API. `print` va a stderr provisional (S03 lo cablea a `nu.log.info`). `package`/`require` aún sin abrir (loader = S11). Sin hallazgos. Arnés de tests llega en S02, así que S01 se validó con snippets `nu -e` manuales. |
+| 2026-06-21 | S02 | _(este commit)_ | Errores estructurados §1.4 + arnés de tests. `errors.go`: códigos reservados v1 como constantes + `reservedCodes`/`IsReservedCode`; `newErrorTable`/`raiseError` (puente Go→Lua vía `L.Error`, lanza la tabla `{code,message,detail?}`); `StructuredError` (cara Go) + `structuredFromError` (recupera la tabla del `*lua.ApiError` que devuelve `PCall`). `eval.go`: `EvalString` devuelve `*StructuredError` cuando el chunk lanza uno —el puente no traga ni reescribe el code (invariante 🔒). Arnés reutilizable en `harness_test.go` (`newHarness`/`register`/`eval`/`evalErr`/`expectEval`), lo compartirán todas las sesiones por estar en `package runtime`. Tests 🔒 en `errors_test.go`: forma de la tabla (detail presente/ausente), los 11 códigos reservados intactos ida y vuelta, round-trip de `detail`, code de extensión (`EPROVIDER`) pasa igual, `error("str")`/tabla-sin-code **no** se hacen pasar por estructurados, y `IsReservedCode` cuadra con §1.4. `go build ./...` y `go test ./...` verdes. Sin hallazgos. **Nota para S03+:** las primitivas Go que fallen usan `raiseError(L, CodeXXX, msg, detail)`; sus tests, el arnés (`h.evalErr(...).Code`). |
