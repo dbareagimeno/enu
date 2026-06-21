@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -34,6 +35,17 @@ func newHarness(t *testing.T) *harness {
 	// data_dir temporal: `nu.log` escribe en disco y no debe tocar el data_dir
 	// real del usuario. El TempDir se borra al acabar la prueba.
 	rt := New(WithDataDir(t.TempDir()))
+	t.Cleanup(rt.Close)
+	return &harness{t: t, rt: rt}
+}
+
+// newHarnessBudget es como newHarness pero fija un **presupuesto de slice**
+// pequeño para el watchdog (S09), de modo que un bucle de CPU puro se corte
+// rápido en los tests. Un `budget <= 0` desactiva el watchdog (lo usan los tests
+// que comprueban que el trabajo normal nunca se aborta sin necesidad de esperar).
+func newHarnessBudget(t *testing.T, budget time.Duration) *harness {
+	t.Helper()
+	rt := New(WithDataDir(t.TempDir()), WithSliceBudget(budget))
 	t.Cleanup(rt.Close)
 	return &harness{t: t, rt: rt}
 }

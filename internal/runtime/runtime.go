@@ -6,9 +6,16 @@ package runtime
 
 import (
 	"path/filepath"
+	"time"
 
 	lua "github.com/yuin/gopher-lua"
 )
+
+// defaultSliceBudget es el presupuesto por slice del watchdog (api.md §1.3, S09):
+// el tiempo máximo que una task puede correr Lua de forma continua sin suspender.
+// 100 ms por defecto; `WithSliceBudget` lo ajusta (el gancho que S11/S12
+// cablearán a la lectura de `nu.toml`).
+const defaultSliceBudget = 100 * time.Millisecond
 
 // Runtime envuelve un estado Lua ya sandboxeado y con el global `nu` inyectado.
 // El estado principal es single-threaded (ADR-004); un Runtime se usa desde una
@@ -34,6 +41,10 @@ type Runtime struct {
 // configura con Options.
 type config struct {
 	dataDir string
+	// sliceBudget es el presupuesto por slice del watchdog (S09). Cero o negativo
+	// **desactiva** el watchdog —útil para tests que no lo quieren—; el default de
+	// producción es `defaultSliceBudget` (100 ms).
+	sliceBudget time.Duration
 }
 
 // Option ajusta la construcción de un Runtime. El default sirve para producción
@@ -47,12 +58,21 @@ func WithDataDir(dir string) Option {
 	return func(c *config) { c.dataDir = dir }
 }
 
+// WithSliceBudget ajusta el presupuesto por slice del watchdog (S09, api.md
+// §1.3). Es el **gancho de configuración** que S11/S12 cablearán a `nu.toml`; por
+// ahora lo usan los tests para fijar un presupuesto pequeño (corte rápido) o
+// desactivar el watchdog (`<= 0`). En producción, sin opción, rige
+// `defaultSliceBudget` (100 ms).
+func WithSliceBudget(d time.Duration) Option {
+	return func(c *config) { c.sliceBudget = d }
+}
+
 // New construye un Runtime listo para ejecutar Lua: abre solo las librerías
 // permitidas por el baseline (§1.2), recorta `os`, elimina `io`/`dofile`/
 // `loadfile`, redirige `print` a `nu.log.info` e inyecta el global `nu` con sus
 // submódulos disponibles en esta sesión.
 func New(opts ...Option) *Runtime {
-	cfg := config{dataDir: defaultDataDir()}
+	cfg := config{dataDir: defaultDataDir(), sliceBudget: defaultSliceBudget}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -68,10 +88,21 @@ func New(opts ...Option) *Runtime {
 		log:   newLogger(filepath.Join(cfg.dataDir, logFileName)),
 		owner: "user",
 	}
-	rt.sched = newScheduler(rt)
+	rt.sched = newScheduler(rt, cfg.sliceBudget)
 	applySandbox(L)
 	registerNu(rt)
 	return rt
+}
+
+// emitMisbehaved es el **gancho interno** de `core:plugin.misbehaved` (api.md
+// §1.3, §4, S09). El watchdog (`runTask`) lo invoca cuando una task se abortó por
+// exceder el presupuesto de un slice. El bus de eventos `nu.events` llega en S10:
+// hasta entonces, esto solo deja constancia en el log (best-effort, como el resto
+// de fallos de task). **S10 lo cableará** a
+// `nu.events.emit("core:plugin.misbehaved", { plugin = owner, reason = ... })`,
+// sin cambiar la superficie pública —el watchdog ya llama a este punto único—.
+func (rt *Runtime) emitMisbehaved(owner, reason string) {
+	_ = rt.log.write(levelError, owner, "core:plugin.misbehaved: "+reason)
 }
 
 // Close libera el estado Lua subyacente, corta los timers periódicos activos
