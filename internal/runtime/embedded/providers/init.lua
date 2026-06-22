@@ -26,3 +26,10 @@ local providers = require("providers")
 -- resuelva contra él. Su única misión es probar el contrato (S36); S37 lo
 -- sustituye por el adaptador `anthropic` de verdad.
 providers.register_adapter("stub", require("providers.adapter_stub"))
+
+-- Adaptador `anthropic` REAL (S37): el primer dialecto sobre la red. Habla la
+-- Messages API de Anthropic vía `nu.http.stream` y traduce su SSE
+-- (`message_start`, `content_block_*`, `message_delta`, `message_stop`...) al
+-- stream de Eventos canónico de providers.md §2.3. Reusa el contrato §3 y
+-- `approx_tokens`/EPROVIDER de S36; se registra exactamente igual que el stub.
+providers.register_adapter("anthropic", require("providers.adapter_anthropic"))
