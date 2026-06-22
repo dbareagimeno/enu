@@ -46,6 +46,11 @@ func (rt *Runtime) registerText(nu *lua.LTable) {
 	// themable y streaming-safe. Vive en markdown.go (delega el parseo de
 	// CommonMark a goldmark y reusa el word-wrap/anchura de S22).
 	rt.registerMarkdown(textT)
+	// `nu.text.highlight` (§10, S24): syntax highlighting de un snippet a un
+	// Block. Vive en highlight.go (delega el léxico a chroma; lenguaje
+	// desconocido/vacío degrada a texto plano). Reusa el armazón "una línea → N
+	// spans" que S23 dejó preparado en renderCodeBlock.
+	rt.registerHighlight(textT)
 	nu.RawSetString("text", textT)
 }
 
