@@ -42,6 +42,10 @@ func (rt *Runtime) registerText(nu *lua.LTable) {
 	textT.RawSetString("width", L.NewFunction(rt.textWidth))
 	textT.RawSetString("wrap", L.NewFunction(rt.textWrap))
 	textT.RawSetString("truncate", L.NewFunction(rt.textTruncate))
+	// `nu.text.markdown` (§10, S23): render completo de markdown a un Block,
+	// themable y streaming-safe. Vive en markdown.go (delega el parseo de
+	// CommonMark a goldmark y reusa el word-wrap/anchura de S22).
+	rt.registerMarkdown(textT)
 	nu.RawSetString("text", textT)
 }
 
