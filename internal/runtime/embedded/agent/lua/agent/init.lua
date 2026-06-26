@@ -291,6 +291,35 @@ function M.permission.respond(id, granted)
   p.future:set(granted == true)
 end
 
+-- agent.permission.persist_allow(pattern) añade `pattern` a la política GLOBAL del
+-- usuario (`config.dir()/agent.toml`, sección [permissions].allow) — el destino
+-- de "permitir siempre con modificador" (chat.md §5, P29). NUNCA al agent.toml del
+-- repo: sus `allow` se ignoran por el modelo de confianza (agente.md §11). Lee,
+-- fusiona (sin duplicar) y reescribe el TOML; invalida la caché de config.
+function M.permission.persist_allow(pattern)
+  if type(pattern) ~= "string" or pattern == "" then
+    einval("agent.permission.persist_allow espera un patrón (string no vacío)")
+  end
+  local path = nu.config.dir() .. "/agent.toml"
+  local cfg = {}
+  local ok, raw = pcall(nu.fs.read, path)
+  if ok and type(raw) == "string" and raw ~= "" then
+    local okd, decoded = pcall(nu.toml.decode, raw)
+    if okd and type(decoded) == "table" then cfg = decoded end
+  end
+  cfg.permissions = cfg.permissions or {}
+  cfg.permissions.allow = cfg.permissions.allow or {}
+  for _, p in ipairs(cfg.permissions.allow) do
+    if p == pattern then
+      return -- ya estaba
+    end
+  end
+  cfg.permissions.allow[#cfg.permissions.allow + 1] = pattern
+  nu.fs.mkdir(nu.config.dir())
+  nu.fs.write(path, nu.toml.encode(cfg))
+  M.reload_config() -- la próxima sesión releerá la política global
+end
+
 -- check_permission(session, tool, args) decide si una tool call puede ejecutarse
 -- (agente.md §5). Pipeline:
 --   1. la tool de solo lectura con default="allow" se concede directa (amortig. 1);
@@ -1177,6 +1206,63 @@ function Session:set_model(model)
   if self.store then
     self.store:append({ t = "event", ns = "agent", data = { kind = "set_model", model = model } })
   end
+end
+
+-- Session:allow(pattern) añade `pattern` a la política `allow` de ESTA sesión en
+-- caliente (agente.md §5 / chat.md §5 "permitir siempre", P29). Aplica desde la
+-- siguiente comprobación de permiso. Idempotente (no duplica).
+function Session:allow(pattern)
+  if type(pattern) ~= "string" or pattern == "" then
+    einval("Session:allow espera un patrón (string no vacío)")
+  end
+  local allow = self.permissions.allow
+  for _, p in ipairs(allow) do
+    if p == pattern then return self end
+  end
+  allow[#allow + 1] = pattern
+  if self.store then
+    self.store:append({ t = "event", ns = "agent", data = { kind = "allow", pattern = pattern } })
+  end
+  return self
+end
+
+-- Session:deny(pattern) añade `pattern` a la política `deny` de la sesión en
+-- caliente (chat.md §4 `/permissions`, P28). El `deny` corta el pipeline (§5).
+function Session:deny(pattern)
+  if type(pattern) ~= "string" or pattern == "" then
+    einval("Session:deny espera un patrón (string no vacío)")
+  end
+  local deny = self.permissions.deny
+  for _, p in ipairs(deny) do
+    if p == pattern then return self end
+  end
+  deny[#deny + 1] = pattern
+  if self.store then
+    self.store:append({ t = "event", ns = "agent", data = { kind = "deny", pattern = pattern } })
+  end
+  return self
+end
+
+-- Session:set_permission_mode(mode) cambia el modo de permisos ("ask"|"auto") en
+-- caliente (chat.md §4 `/permissions`, P28).
+function Session:set_permission_mode(mode)
+  if mode ~= "ask" and mode ~= "auto" then
+    einval("Session:set_permission_mode espera \"ask\" o \"auto\"")
+  end
+  self.permissions.mode = mode
+  return self
+end
+
+-- Session:permissions_view() -> { mode, allow, deny } copia de la política de la
+-- sesión, para mostrarla (chat.md §4 `/permissions`, P28).
+function Session:permissions_view()
+  local p = self.permissions
+  local function copy(t)
+    local out = {}
+    for i, v in ipairs(t or {}) do out[i] = v end
+    return out
+  end
+  return { mode = p.mode, allow = copy(p.allow), deny = copy(p.deny) }
 end
 
 -- Session:close() libera la sesión de almacenamiento (suelta el lock, sesiones.md
