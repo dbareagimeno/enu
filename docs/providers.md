@@ -31,6 +31,10 @@ context    = 200000
 max_output = 32000
 cost       = { input = 5.0, output = 25.0 }   # USD por Mtok (informativo)
 aliases    = ["opus"]
+thinking   = "adaptive"                        # dialecto de razonamiento (ADR-016):
+                                               # "adaptive" (Opus 4.6+), "budget"
+                                               # (extended thinking legacy) o "none".
+                                               # Default "budget" si se omite.
 
 # El caso models.json: endpoint compatible-OpenAI, p. ej. Ollama local.
 [providers.local]

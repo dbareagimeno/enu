@@ -109,6 +109,56 @@ local function canon_block_to_wire(block)
   return out
 end
 
+-- Presupuesto por defecto para degradar `mode="adaptive"` a la forma legacy
+-- `budget_tokens` cuando el modelo es de dialecto "budget" (ADR-016). Anthropic
+-- exige `budget_tokens >= 1024` y `< max_tokens`.
+local DEFAULT_THINKING_BUDGET = 4096
+local MIN_THINKING_BUDGET = 1024
+
+-- thinking_to_wire(req, provider, max_tokens) -> tabla|nil. Traduce el `thinking`
+-- canónico (providers.md §2.1, ADR-016) a la forma del wire de Anthropic, según
+-- el DIALECTO del modelo (`provider.model.thinking`, dato del registro; default
+-- "budget"). El adaptador NO hardcodea qué familia usa qué forma (ADR-003/ADR-005):
+-- lee el dato y traduce.
+--   - `mode` ausente con `budget` numérico → "budget" (compat con la firma vieja);
+--     `mode` ausente sin budget, o "off" → nil (no se pide razonamiento).
+--   - dialecto "none" → nil (degradación declarada §3 ob.5: no se simula).
+--   - dialecto "adaptive" → `{type="adaptive"}` (el `budget` se ignora: Opus 4.6+
+--     retiró `budget_tokens`).
+--   - dialecto "budget" → `{type="enabled", budget_tokens=N}` (N del request, o el
+--     default; acotado a [1024, max_tokens) como exige Anthropic).
+local function thinking_to_wire(req, provider, max_tokens)
+  local t = req.thinking
+  if type(t) ~= "table" then
+    return nil
+  end
+  local mode = t.mode
+  if mode == nil then
+    mode = (type(t.budget) == "number") and "budget" or nil
+  end
+  if mode == nil or mode == "off" then
+    return nil
+  end
+
+  local dialect = (provider.model and provider.model.thinking) or "budget"
+  if dialect == "none" then
+    return nil
+  end
+  if dialect == "adaptive" then
+    return { type = "adaptive" }
+  end
+
+  -- dialecto "budget" (extended thinking legacy).
+  local budget = (type(t.budget) == "number") and t.budget or DEFAULT_THINKING_BUDGET
+  if type(max_tokens) == "number" and max_tokens > MIN_THINKING_BUDGET and budget >= max_tokens then
+    budget = max_tokens - 1
+  end
+  if budget < MIN_THINKING_BUDGET then
+    budget = MIN_THINKING_BUDGET
+  end
+  return { type = "enabled", budget_tokens = budget }
+end
+
 -- add_cache_control(t) marca un objeto del wire (una tool, un bloque de
 -- contenido o un bloque de system) como breakpoint de caché de Anthropic
 -- (`cache_control = {type="ephemeral"}`), SIN pisar uno que ya viniera por la
@@ -169,27 +219,10 @@ local function to_wire(req, provider)
     body.temperature = req.temperature
   end
 
-  -- Extended thinking (providers.md §2.1 `thinking = {budget?}`). Anthropic:
-  -- `thinking = {type="enabled", budget_tokens=N}` para modelos que lo aceptan.
-  --
-  -- ⚠ PENDIENTE DE IMPLEMENTAR — ADR-016 / G34 (antes P21). La decisión YA está
-  -- tomada en el contrato (providers.md §2.1): el canónico pasa a
-  -- `thinking={ mode?, budget? }` y el dialecto de cada modelo es un DATO del
-  -- providers.toml (`thinking = "adaptive"|"budget"|"none"`, en `provider.model`),
-  -- que aquí habrá que leer para traducir POR-MODELO: `adaptive` →
-  -- `{type="adaptive"}` (lo que espera Opus 4.6+, que retiró `budget_tokens` y
-  -- 400ea con la forma legacy), `budget` → `{type="enabled", budget_tokens=N}`.
-  -- Mientras esa sesión de construcción no llegue, se mantiene la traducción
-  -- legacy (correcta para los modelos previos; sobre Opus 4.6+ daría 400, pero el
-  -- agente no rellena `thinking` por defecto, así que está latente). Se acepta
-  -- también `mode="budget"` como sinónimo de `budget` para no romper cuando el
-  -- canónico nuevo empiece a usarse.
-  if type(req.thinking) == "table" then
-    local budget = req.thinking.budget
-    if type(budget) == "number" then
-      body.thinking = { type = "enabled", budget_tokens = budget }
-    end
-  end
+  -- Razonamiento extendido (providers.md §2.1 `thinking = {mode?, budget?}`,
+  -- ADR-016): traducción POR-MODELO según el dialecto declarado en el registro.
+  -- nil → no se envía `thinking` (request sin razonamiento, lo de siempre).
+  body.thinking = thinking_to_wire(req, provider, body.max_tokens)
 
   -- Prompt caching automático e invisible (providers.md §3 obligación 6, P31).
   -- Coloca los breakpoints `cache_control` MECÁNICAMENTE, sin que el modelo

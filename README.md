@@ -276,6 +276,8 @@ context    = 200000
 max_output = 32000
 cost       = { input = 5.0, output = 25.0 }   # USD/Mtok, informativo
 aliases    = ["opus"]
+thinking   = "adaptive"                        # dialecto de razonamiento (ADR-016):
+                                               # "adaptive" (Opus 4.6+), "budget" o "none"
 
 # Un endpoint compatible-OpenAI, p. ej. Ollama local (sin clave). El adaptador
 # `openai-compat` va embebido (junto a `anthropic` y `gemini`).

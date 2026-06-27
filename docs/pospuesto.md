@@ -90,7 +90,11 @@ entiende cada modelo), no del adaptador. Estaba **latente** (el agente no rellen
    dialecto—. El adaptador no hardcodea tablas de versiones de modelos
    (ADR-003/ADR-005); se descartó la heurística por id del modelo.
 
-**Lo que queda.** Solo la **implementación** (sesión de construcción, por el
-protocolo "el contrato lidera, el código sigue"): el nuevo `to_wire` del adaptador,
-leer `model.thinking` en `resolve`, y mapear la opción de razonamiento del agente
-cuando exista. La nota `⚠` del adaptador apunta ya a ADR-016.
+**Estado: IMPLEMENTADA.** Tras decidirse en el ADR, la sesión de construcción
+aplicó el contrato: `thinking_to_wire` en `adapter_anthropic.lua` traduce el
+`thinking` canónico por dialecto del modelo, `resolve` lleva `model.thinking` al
+`ModelInfo`, y `providers_p21_test.go` cubre las ocho combinaciones (dialecto ×
+modo). Lo único que falta es **cablear el control de razonamiento desde el
+agente** (hoy `req.thinking` solo se puebla por un hook `request.pre`): cuando el
+agente exponga esa opción, mapeará a `thinking` — pero el contrato y el adaptador
+ya lo soportan.
