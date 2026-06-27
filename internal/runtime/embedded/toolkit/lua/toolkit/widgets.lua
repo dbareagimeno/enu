@@ -485,15 +485,27 @@ function RichText:compose(w, _h)
       used = used + tw
     end
   end
+  -- Alineación: por defecto a la izquierda. Con `align == "right"` se antepone un
+  -- relleno (con `fill_bg` si se dio) que empuja el contenido al borde derecho —lo
+  -- que una statusline necesita para su lado derecho—.
+  if self.align == "right" and used < w then
+    local pad = string.rep(" ", w - used)
+    local fill = self.fill_bg and th:style({ bg = self.fill_bg }) or nil
+    table.insert(out, 1, { text = pad, style = fill })
+  end
   if #out == 0 then out = { { text = "" } } end
   return nu.ui.block({ out })
 end
 
--- toolkit.widgets.richtext{spans?, id?, pref_h?} -> RichText.
+-- toolkit.widgets.richtext{spans?, align?, fill_bg?, id?, pref_h?} -> RichText.
+-- `align`: "left" (default) | "right". `fill_bg`: nombre semántico del relleno de
+-- alineación (para que la barra mantenga su fondo bajo el padding).
 function M.richtext(opts)
   opts = opts or {}
   local r = setmetatable(widget.new({ id = opts.id, focusable = false }), RichText)
   r.spans = opts.spans or {}
+  r.align = opts.align
+  r.fill_bg = opts.fill_bg
   r.pref_h = opts.pref_h or 1
   return r
 end
