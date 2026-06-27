@@ -509,6 +509,14 @@ func TestCLIDefaultConfigPersistent(t *testing.T) {
 	if !strings.Contains(stdout, "nu.toml") || !strings.Contains(stdout, "nu -p") {
 		t.Fatalf("stdout debería nombrar el fichero y el siguiente paso; got %q", stdout)
 	}
+	// G35/ADR-017: el mensaje es honesto sobre la API key (no la promesa engañosa
+	// "ya puedes ejecutar el agente"), y reporta las plantillas creadas.
+	if !strings.Contains(stdout, "API key") {
+		t.Fatalf("stdout debería recordar la API key (mensaje honesto, G35); got %q", stdout)
+	}
+	if !strings.Contains(stdout, "agent.toml") || !strings.Contains(stdout, "providers.toml") {
+		t.Fatalf("stdout debería reportar las plantillas creadas; got %q", stdout)
+	}
 	// El `nu.toml` quedó con el conjunto de producto (sonda providers) y SIN example.
 	data, err := os.ReadFile(filepath.Join(cfg, "nu.toml"))
 	if err != nil {
@@ -519,6 +527,17 @@ func TestCLIDefaultConfigPersistent(t *testing.T) {
 	}
 	if strings.Contains(string(data), "example") {
 		t.Fatalf("el conjunto persistido no debe incluir example; nu.toml:\n%s", data)
+	}
+	// G35: las plantillas de config de agente quedaron en disco y son usables.
+	agentData, err := os.ReadFile(filepath.Join(cfg, "agent.toml"))
+	if err != nil {
+		t.Fatalf("agent.toml no se escribió: %v", err)
+	}
+	if !strings.Contains(string(agentData), "model") {
+		t.Fatalf("agent.toml debe traer un model; got:\n%s", agentData)
+	}
+	if _, err := os.ReadFile(filepath.Join(cfg, "providers.toml")); err != nil {
+		t.Fatalf("providers.toml no se escribió: %v", err)
 	}
 }
 

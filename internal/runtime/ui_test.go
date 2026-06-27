@@ -19,7 +19,7 @@ import (
 // forzarlo `nu.ui` no existiría.
 func newHarnessUI(t *testing.T, w, h int) *harness {
 	t.Helper()
-	rt := New(WithDataDir(t.TempDir()), WithUISize(w, h), WithForceUI(true))
+	rt := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()), WithUISize(w, h), WithForceUI(true))
 	t.Cleanup(rt.Close)
 	return &harness{t: t, rt: rt}
 }

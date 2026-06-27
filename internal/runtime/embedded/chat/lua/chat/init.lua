@@ -40,6 +40,14 @@ local picker_mod = require("chat.picker")
 
 local M = {}
 
+-- Códigos de error de CONFIGURACIÓN que justifican el ARRANQUE DEGRADADO (chat.md §8,
+-- ADR-017/G35): la sesión inicial no se pudo construir porque falta o está rota la
+-- config de modelo/provider. `EINVAL` (no hay `model`), `EPROVIDER` (modelo/provider
+-- no resoluble en `providers.toml`) o `EAGENT` (agent.toml mal formado). Cualquier otro
+-- error es INESPERADO y se propaga (lo registra el init como hoy): no queremos esconder
+-- un bug real tras una pantalla de "configura tu modelo".
+local CONFIG_ERROR_CODES = { EINVAL = true, EPROVIDER = true, EAGENT = true }
+
 -- Re-exporta los puntos de extensión (chat.md §9): comandos slash, segmentos de
 -- statusline, renderers de tool results (v1: stub, ver transcript). La tabla de
 -- atajos por defecto (chat.keys, chat.md §7) es pública y remapeable.
@@ -302,7 +310,9 @@ end
 -- Chat:cancel_turn() cancela el turno en curso (chat.md §3: esc cancela). Delega en
 -- Session:cancel (agente.md §2). No vacía la cola de reentrada (eso es aparte, G4).
 function Chat:cancel_turn()
-  if self.session.cancel then
+  -- En modo degradado (arranque sin sesión, chat.md §8/G35) no hay turno que
+  -- cancelar: `self.session` es nil. El guard lo tolera (lo invoca `quit`).
+  if self.session and self.session.cancel then
     pcall(self.session.cancel, self.session)
   end
 end
@@ -646,6 +656,73 @@ end
 -- chat.start (chat.md §8): el arranque.
 -- ---------------------------------------------------------------------------
 
+-- M._start_degraded(err, opts) monta el ARRANQUE DEGRADADO del chat (chat.md §8,
+-- ADR-017/G35): cuando la sesión inicial no es construible por falta o rotura de
+-- config, en vez de morir al log (donde el usuario no lo ve) se monta una UI MÍNIMA
+-- ACCIONABLE —explica cómo configurar el modelo/provider y la API key— y SALIBLE
+-- —esc/q/ctrl+c emiten `core:shutdown`, que el driver convierte en apagado (driver.go
+-- §4 endosa que una UI Lua mapee su tecla de salida a ese evento)—. Devuelve un handle
+-- de Chat en MODO DEGRADADO: sin sesión ni suscripciones a `agent:*`; `quit` lo
+-- desmonta igual (los guards toleran la sesión nil). No suspende.
+function M._start_degraded(err, opts)
+  opts = opts or {}
+  local msg = (type(err) == "table" and err.message) or tostring(err)
+  local dir = nu.config.dir()
+
+  local body = table.concat({
+    "# nu — configuración necesaria",
+    "",
+    "No se pudo abrir la sesión del agente:",
+    "",
+    "    " .. msg,
+    "",
+    "Para chatear necesitas un **modelo** y un **provider** configurados en `"
+      .. dir .. "`:",
+    "",
+    "1. `agent.toml` → `model = \"anthropic/opus\"`",
+    "2. `providers.toml` → el provider y su `api_key_env`",
+    "3. Exporta tu API key, p. ej. `export ANTHROPIC_API_KEY=...`",
+    "",
+    "Atajo: **`nu --default-config`** deja ambas plantillas listas.",
+    "",
+    "Pulsa `esc`, `q` o `ctrl+c` para salir.",
+  }, "\n")
+
+  local text = toolkit.text({ id = "config-help", markdown = true })
+  text.flex = 1
+  text:set_text(body)
+
+  local column = toolkit.vbox({ id = "config-column" })
+  column:add(text)
+
+  -- `toolkit.app` hace el primer layout y pide pintura sola (app.lua): no hay que
+  -- repintar a mano. Sin widget enfocable, su `on_input` deja pasar las teclas a los
+  -- keymaps de abajo.
+  local app = toolkit.app({ root = column, theme = opts.theme })
+
+  local self = setmetatable({
+    degraded    = true,
+    app         = app,
+    subs        = {},
+    global_subs = {},
+    keymaps     = {},
+    _closed     = false,
+  }, Chat)
+
+  -- Salida: esc/q/ctrl+c → core:shutdown. Apilados DESPUÉS de la app (más arriba en
+  -- la pila), así reciben la tecla que la app dejó pasar.
+  local function bye()
+    nu.events.emit("core:shutdown")
+    return true
+  end
+  for _, seq in ipairs({ "esc", "q", "ctrl+c" }) do
+    self.keymaps[#self.keymaps + 1] = nu.ui.keymap(seq, bye)
+  end
+
+  M._active = self
+  return self
+end
+
 -- chat.start(opts?) ⏸ -> Chat. Arranca el chat (chat.md §8). SUSPENDE: crea o
 -- reanuda la sesión del agente (lee disco). Exige `nu.ui` (TTY interactivo, G20):
 -- en headless es EINVAL accionable (chat.md §8). opts (todos opcionales):
@@ -669,8 +746,11 @@ function M.start(opts)
   commands.install_builtins({ agent = agent, providers = providers, sessions = sessions })
 
   -- la sesión del agente (chat.md §8): crea o reanuda. El chat consume la API
-  -- pública del agente igual que un tercero (agente.md §1).
-  local session = agent.session({
+  -- pública del agente igual que un tercero (agente.md §1). Si NO se puede construir
+  -- por falta o rotura de config (no hay modelo, provider/modelo no resoluble, TOML
+  -- roto), arranca DEGRADADO: una UI accionable y salible en vez de morir al log
+  -- (chat.md §8, ADR-017/G35). Un error inesperado (no de config) se propaga.
+  local ok, session_or_err = pcall(agent.session, {
     model       = opts.model,
     resume      = opts.resume,
     cwd         = opts.cwd,
@@ -679,6 +759,15 @@ function M.start(opts)
     max_turns   = opts.max_turns,
     no_store    = opts.no_store,
   })
+  if not ok then
+    local err = session_or_err
+    local code = type(err) == "table" and err.code or nil
+    if CONFIG_ERROR_CODES[code] then
+      return M._start_degraded(err, opts)
+    end
+    error(err) -- inesperado: que lo registre el init como hoy
+  end
+  local session = session_or_err
 
   local self = setmetatable({
     session       = session,

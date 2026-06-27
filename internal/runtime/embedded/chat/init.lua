@@ -35,8 +35,10 @@ local chat = require("chat")
 if nu.has("ui") then
   nu.events.once("core:ready", function()
     -- `chat.start` SUSPENDE (lee config, crea/reanuda la sesión), así que se lanza
-    -- como task (el handler de un evento es síncrono, api.md §4). Un fallo al
-    -- arrancar se loguea (no hay UI aún donde pintarlo).
+    -- como task (el handler de un evento es síncrono, api.md §4). Falta de config
+    -- (no hay modelo/provider) NO llega aquí: `chat.start` arranca DEGRADADO con una
+    -- UI accionable (chat.md §8, ADR-017/G35). Este `pcall` solo atrapa fallos
+    -- INESPERADOS, que se loguean (no hay UI donde pintarlos).
     nu.task.spawn(function()
       local ok, err = pcall(chat.start)
       if not ok then

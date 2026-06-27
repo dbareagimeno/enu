@@ -296,16 +296,41 @@ func (rt *Runtime) PrepareBareScreen() {
 	if rt.ui == nil || rt.ui.input == nil {
 		return
 	}
-	// Handler de salida del kernel: una `*lua.LFunction` que envuelve una closure Go
-	// (como el handler de `core:shutdown` del driver). Devuelve true (consumido) solo
-	// para las teclas de salida; el resto pasa.
-	fn := rt.L.NewFunction(func(L *lua.LState) int {
+	// Handler de salida del kernel ARRIBA de la pila (la pantalla desnuda no monta UI
+	// de producto que deba ganarle): q/esc/ctrl+c → `core:shutdown`.
+	h := &inputHandler{in: rt.ui.input, raw: rt.newKernelExitHandler(), ownerName: ownerUser, live: true}
+	rt.ui.input.push(h)
+}
+
+// InstallEmergencyExit instala la RED DE SALIDA DE EMERGENCIA del kernel (ADR-017, G35)
+// al FONDO de la pila de input: `q`/`esc`/`ctrl+c` emiten `core:shutdown` —que el driver
+// convierte en apagado—. Al estar en el fondo, CUALQUIER app de producto (que apila sus
+// handlers encima) la tapa: en el chat normal, esc cancela el turno y ctrl+c cierra como
+// siempre. Solo dispara cuando NADA encima consume la tecla —el caso patológico de una
+// UI que no llegó a montarse (p. ej. un fallo inesperado de arranque)—, de modo que
+// NINGUNA ruta interactiva deje la terminal en raw mode sin forma de salir con teclado.
+// Se instala ANTES de `Boot` (con la pila vacía) para quedar debajo de todo. Bajo el
+// token (toca input). Tolera la ausencia de UI (`rt.ui == nil`): no-op.
+func (rt *Runtime) InstallEmergencyExit() {
+	s := rt.sched
+	s.acquire()
+	defer s.release()
+	if rt.ui == nil || rt.ui.input == nil {
+		return
+	}
+	h := &inputHandler{in: rt.ui.input, raw: rt.newKernelExitHandler(), ownerName: ownerUser, live: true}
+	rt.ui.input.pushBottom(h)
+}
+
+// newKernelExitHandler fabrica la `*lua.LFunction` del handler de SALIDA del kernel: una
+// closure Go que, ante `q`/`esc`/`ctrl+c`, emite `core:shutdown` y devuelve true
+// (consumida); cualquier otra tecla pasa (false). Lo comparten la pantalla desnuda
+// (`PrepareBareScreen`, arriba de su pila vacía) y la red de emergencia
+// (`InstallEmergencyExit`, al fondo bajo la UI de producto). **Presupone el token tomado.**
+func (rt *Runtime) newKernelExitHandler() *lua.LFunction {
+	return rt.L.NewFunction(func(L *lua.LState) int {
 		ev := L.OptTable(1, nil)
-		if ev == nil {
-			L.Push(lua.LFalse)
-			return 1
-		}
-		if ev.RawGetString("type").String() != "key" {
+		if ev == nil || ev.RawGetString("type").String() != "key" {
 			L.Push(lua.LFalse)
 			return 1
 		}
@@ -322,8 +347,6 @@ func (rt *Runtime) PrepareBareScreen() {
 		L.Push(lua.LFalse)
 		return 1
 	})
-	h := &inputHandler{in: rt.ui.input, raw: fn, ownerName: ownerUser, live: true}
-	rt.ui.input.push(h)
 }
 
 // handleSignals atiende las señales del terminal en su propia goroutine. Un `SIGWINCH`

@@ -40,9 +40,12 @@ type harness struct {
 // `WithForceUI(false)` a mano (ver `gating_test.go`).
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	// data_dir temporal: `nu.log` escribe en disco y no debe tocar el data_dir
-	// real del usuario. El TempDir se borra al acabar la prueba.
-	rt := New(WithDataDir(t.TempDir()), WithForceUI(true))
+	// data_dir y config_dir temporales: `nu.log` escribe en disco y el arranque LEE
+	// `nu.toml` de config_dir; ninguno debe tocar el directorio real del usuario (que,
+	// con el conjunto de producto activado, arrancaría el chat y demás). El TempDir se
+	// borra al acabar la prueba. (Hermeticidad del config — necesaria desde G35, en que
+	// un chat sin modelo arranca una UI degradada que rompería tests ajenos.)
+	rt := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()), WithForceUI(true))
 	t.Cleanup(rt.Close)
 	return &harness{t: t, rt: rt}
 }
@@ -54,7 +57,7 @@ func newHarness(t *testing.T) *harness {
 // Fuerza la UI (G20, como `newHarness`).
 func newHarnessBudget(t *testing.T, budget time.Duration) *harness {
 	t.Helper()
-	rt := New(WithDataDir(t.TempDir()), WithSliceBudget(budget), WithForceUI(true))
+	rt := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()), WithSliceBudget(budget), WithForceUI(true))
 	t.Cleanup(rt.Close)
 	return &harness{t: t, rt: rt}
 }

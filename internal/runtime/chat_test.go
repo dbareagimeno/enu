@@ -152,6 +152,36 @@ func TestChatStartRequiereUI(t *testing.T) {
 	}
 }
 
+// TestChatDegradedStart (chat.md §8, ADR-017/G35): SIN modelo ni provider configurados,
+// el arranque del chat NO muere al log dejando la terminal en blanco —monta una UI
+// degradada ACCIONABLE (explica cómo configurar y cómo salir) y SALIBLE—. Ejercita la
+// ruta REAL: el auto-arranque en `core:ready` (chat/init.lua) sin config disponible.
+// bootChat NO escribe providers.toml ni agent.toml, así que agent.session lanza EINVAL.
+func TestChatDegradedStart(t *testing.T) {
+	h, _ := bootChat(t, "", 50, 14)
+	// Pumpea el scheduler a idle para que el spawn pendiente del `core:ready`
+	// (el auto-arranque del chat) corra hasta montar la UI degradada.
+	h.eval(`nu.task.spawn(function() end)`)
+
+	// El chat activo quedó en modo DEGRADADO, sin sesión (no se pudo construir).
+	h.expectEval(`return tostring(require("chat")._active ~= nil)`, "true")
+	h.expectEval(`return tostring(require("chat")._active.degraded == true)`, "true")
+	h.expectEval(`return tostring(require("chat")._active.session == nil)`, "true")
+	// Tiene atajos de salida instalados (esc/q/ctrl+c → core:shutdown).
+	h.expectEval(`return tostring(#require("chat")._active.keymaps >= 1)`, "true")
+
+	// La pantalla explica, accionable, cómo configurar y cómo salir.
+	if !screenContains(h, "configuración necesaria") {
+		t.Fatalf("la pantalla degradada no muestra la ayuda; pantalla:\n%s", dumpScreen(h))
+	}
+	if !screenContains(h, "default-config") {
+		t.Fatalf("la pantalla degradada no menciona el atajo --default-config; pantalla:\n%s", dumpScreen(h))
+	}
+
+	// quit() desmonta sin error pese a la sesión nil (los guards lo toleran, G35).
+	h.eval(`require("chat")._active:quit()`)
+}
+
 // TestChatLayout (chat.md §1): chat.start monta la app con el vbox
 // transcript/input/statusline. Verificamos que los tres widgets existen, tienen
 // área (el layout les dio geometría) y el foco arranca en el editor.

@@ -86,19 +86,38 @@ func OfficialProductSet() ([]string, error) { return officialProductSet() }
 // WriteDefaultConfig respalda el modo PERSISTENTE de `nu --default-config` (ADR-015,
 // G33): escribe el conjunto oficial de producto en `plugins.enabled` de
 // `config.dir()/nu.toml` —preservando el resto del fichero, atómico, idempotente; un
-// `nu.toml` mal formado NO se sobrescribe (error accionable)— y devuelve `(configDir,
-// names, err)` para que `main` informe qué escribió y dónde. NO arranca nada (a
-// diferencia de `ActivateOfficial`, la acción TTY que escribe Y continúa el `Boot`):
-// el modo persistente escribe y sale. Sin red (ADR-010).
-func (rt *Runtime) WriteDefaultConfig() (configDir string, names []string, err error) {
+// `nu.toml` mal formado NO se sobrescribe (error accionable)— Y deja config de agente
+// USABLE (ADR-017, G35): plantillas ACTIVAS de `agent.toml` (con un `model` por
+// defecto) y `providers.toml` (provider `anthropic` con `api_key_env`), escritas SOLO
+// si no existen (nunca pisan config del usuario). Sin esas plantillas, el primer `nu`
+// arrancaría el chat sin modelo y moriría (G35). Devuelve `(configDir, names,
+// createdTemplates, err)` para que `main` informe qué escribió y dónde —incluida la
+// lista de plantillas creadas, para no afirmar que escribió algo que ya existía—. NO
+// arranca nada (a diferencia de `ActivateOfficial`, la acción TTY que escribe Y
+// continúa el `Boot`): el modo persistente escribe y sale. Sin red (ADR-010).
+func (rt *Runtime) WriteDefaultConfig() (configDir string, names []string, createdTemplates []string, err error) {
 	names, err = officialProductSet()
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	if err = writeEnabledPlugins(rt.ldr.configDir, names); err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
-	return rt.ldr.configDir, names, nil
+	// Plantillas activas de config de agente (ADR-017, G35): solo si no existen, para
+	// que el onramp deje el harness usable de un comando (con la API key en el entorno).
+	for _, tpl := range []struct{ name, content string }{
+		{agentTomlName, defaultAgentToml},
+		{providersTomlName, defaultProvidersToml},
+	} {
+		created, werr := writeTemplateIfAbsent(rt.ldr.configDir, tpl.name, tpl.content)
+		if werr != nil {
+			return "", nil, nil, werr
+		}
+		if created {
+			createdTemplates = append(createdTemplates, tpl.name)
+		}
+	}
+	return rt.ldr.configDir, names, createdTemplates, nil
 }
 
 // bareScreenActive decide si toca pintar la pantalla de runtime desnudo (§14, G21):
@@ -350,4 +369,74 @@ func writeEnabledPlugins(configDir string, names []string) error {
 			Message: fmt.Sprintf("no se pudo escribir %q: %v", path, err)}
 	}
 	return nil
+}
+
+// Nombres de los ficheros de config de las extensiones oficiales que el onramp
+// siembra (ADR-017, G35). El core no los entiende (son de `agent`/`providers`),
+// pero el binario los escribe como plantilla del primer arranque; cada extensión los
+// lee desde `config.dir()` (agente.md §10, providers.md).
+const (
+	agentTomlName     = "agent.toml"
+	providersTomlName = "providers.toml"
+)
+
+// defaultAgentToml es la plantilla ACTIVA de `agent.toml` (ADR-017, G35): trae un
+// `model` por defecto para que `agent.session` no falle con `EINVAL` en el primer
+// arranque (agente.md §10). Opinada a Anthropic (la identidad del producto y el modelo
+// por defecto del proyecto, ADR-016). El usuario la edita; el onramp no la pisa si ya
+// existe.
+const defaultAgentToml = `# agent.toml — configuración del agente (agente.md §10).
+# Generado por 'nu --default-config' (ADR-017). Edítalo a tu gusto.
+
+# Modelo por defecto: "proveedor/modelo", resoluble en providers.toml.
+model = "anthropic/opus"
+
+# Tope de turnos por sesión (protección contra loops).
+max_turns = 32
+`
+
+// defaultProvidersToml es la plantilla ACTIVA de `providers.toml` (ADR-017, G35):
+// declara el provider `anthropic` y el modelo por defecto. La API key NUNCA va al
+// fichero (providers.md §1): se lee de la variable de entorno `api_key_env`. Si esa
+// variable no está, `providers.resolve` no falla (deja la clave ausente): el chat
+// monta igual y el error sale al primer turno. El onramp no la pisa si ya existe.
+const defaultProvidersToml = `# providers.toml — proveedores y modelos (providers.md).
+# Generado por 'nu --default-config' (ADR-017).
+# La API key NUNCA va aquí: se lee de la variable de entorno de api_key_env.
+
+[providers.anthropic]
+adapter     = "anthropic"
+base_url    = "https://api.anthropic.com"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[[providers.anthropic.models]]
+id       = "claude-opus-4-8"
+context  = 200000
+aliases  = ["opus"]
+thinking = "adaptive"
+`
+
+// writeTemplateIfAbsent escribe `content` en `configDir/name` SOLO si el fichero no
+// existe: nunca pisa configuración del usuario (ADR-017, G35). Devuelve `created=true`
+// si lo creó, `false` si ya existía. Atómico (temporal + rename, `writeAtomic` de
+// S14); crea `config.dir()` si falta. Un error de stat distinto de "no existe" o de
+// escritura es `EIO` accionable. Es la pieza del onramp que siembra `agent.toml` y
+// `providers.toml` sin riesgo de sobrescribir un fichero que el usuario ya editó.
+func writeTemplateIfAbsent(configDir, name, content string) (created bool, err error) {
+	path := filepath.Join(configDir, name)
+	if _, statErr := os.Stat(path); statErr == nil {
+		return false, nil // ya existe: no lo tocamos
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return false, &StructuredError{Code: CodeEIO,
+			Message: fmt.Sprintf("no se pudo comprobar %q: %v", path, statErr)}
+	}
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return false, &StructuredError{Code: CodeEIO,
+			Message: fmt.Sprintf("no se pudo crear el directorio de configuración %q: %v", configDir, err)}
+	}
+	if err := writeAtomic(path, []byte(content)); err != nil {
+		return false, &StructuredError{Code: CodeEIO,
+			Message: fmt.Sprintf("no se pudo escribir %q: %v", path, err)}
+	}
+	return true, nil
 }

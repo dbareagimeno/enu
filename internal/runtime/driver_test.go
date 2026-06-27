@@ -287,3 +287,47 @@ func TestDriverShutdownFromBus(t *testing.T) {
 	}
 	_ = inW.Close()
 }
+
+// TestDriverEmergencyExit (ADR-017, G35): la RED DE SALIDA DE EMERGENCIA del kernel
+// garantiza que, aunque NADA monte UI ni instale atajos (el caso patológico de un
+// arranque que falla y deja la terminal en raw mode), el usuario puede salir con
+// q/esc/ctrl+c. Sin app ni keymaps, `InstallEmergencyExit` basta para apagar el bucle.
+func TestDriverEmergencyExit(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		keys string
+	}{
+		{"q", "q"},
+		{"esc", "\x1b"},
+		{"ctrl+c", "\x03"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarnessUI(t, 10, 1)
+			if err := h.rt.Boot(); err != nil {
+				t.Fatalf("Boot falló: %v", err)
+			}
+			// Sin montar NINGUNA UI ni keymap: solo la red de emergencia del kernel.
+			h.rt.InstallEmergencyExit()
+
+			inR, inW := io.Pipe()
+			out := &syncBuf{}
+			d := newDriver(h.rt, inR, out)
+			d.installShutdownHandler()
+			d.attachOutput()
+
+			done := make(chan struct{})
+			go func() { d.drive(); close(done) }()
+
+			if _, err := inW.Write([]byte(tc.keys)); err != nil {
+				t.Fatalf("write %q: %v", tc.name, err)
+			}
+			select {
+			case <-done:
+				// la red de emergencia emitió core:shutdown → bucle apagado.
+			case <-time.After(2 * time.Second):
+				t.Fatalf("%s no apagó el bucle vía la red de emergencia", tc.name)
+			}
+			_ = inW.Close()
+		})
+	}
+}
