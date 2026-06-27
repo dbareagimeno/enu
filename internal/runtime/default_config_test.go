@@ -8,7 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 // TestOfficialProductSetExcludeExample blinda la pieza 2 de G33: el conjunto oficial
@@ -108,7 +111,7 @@ func TestWithEnabledPluginsOverridesToml(t *testing.T) {
 func TestWriteDefaultConfigPersistent(t *testing.T) {
 	rt, cfg := newBareRuntime(t)
 
-	dir, names, err := rt.WriteDefaultConfig()
+	dir, names, createdTemplates, err := rt.WriteDefaultConfig()
 	if err != nil {
 		t.Fatalf("WriteDefaultConfig: %v", err)
 	}
@@ -117,6 +120,11 @@ func TestWriteDefaultConfigPersistent(t *testing.T) {
 	}
 	if contains(names, "example") {
 		t.Fatalf("el conjunto escrito no debe incluir example; got %v", names)
+	}
+	// G35/ADR-017: en un config virgen, el onramp siembra ambas plantillas.
+	if !contains(createdTemplates, agentTomlName) || !contains(createdTemplates, providersTomlName) {
+		t.Fatalf("se esperaban %s y %s entre las plantillas creadas; got %v",
+			agentTomlName, providersTomlName, createdTemplates)
 	}
 
 	// Lo escrito coincide con `plugins.enabled` del fichero.
@@ -137,14 +145,24 @@ func TestWriteDefaultConfigPersistent(t *testing.T) {
 		}
 	}
 
-	// Idempotente: una segunda escritura deja el fichero igual.
+	// Idempotente: una segunda escritura deja los ficheros igual y NO reporta
+	// plantillas creadas (ya existen).
 	before, _ := os.ReadFile(filepath.Join(cfg, nuTomlName))
-	if _, _, err := rt.WriteDefaultConfig(); err != nil {
+	beforeAgent, _ := os.ReadFile(filepath.Join(cfg, agentTomlName))
+	_, _, created2, err := rt.WriteDefaultConfig()
+	if err != nil {
 		t.Fatalf("segunda WriteDefaultConfig: %v", err)
+	}
+	if len(created2) != 0 {
+		t.Fatalf("la segunda llamada no debe crear plantillas (ya existen); got %v", created2)
 	}
 	after, _ := os.ReadFile(filepath.Join(cfg, nuTomlName))
 	if string(before) != string(after) {
 		t.Fatalf("WriteDefaultConfig no es idempotente:\nantes:\n%s\ndespués:\n%s", before, after)
+	}
+	afterAgent, _ := os.ReadFile(filepath.Join(cfg, agentTomlName))
+	if string(beforeAgent) != string(afterAgent) {
+		t.Fatalf("agent.toml no debe reescribirse en la segunda llamada")
 	}
 }
 
@@ -160,7 +178,7 @@ func TestWriteDefaultConfigPreservesAndRejectsMalformed(t *testing.T) {
 		}
 		rt := New(WithDataDir(t.TempDir()), WithConfigDir(cfg))
 		t.Cleanup(rt.Close)
-		if _, _, err := rt.WriteDefaultConfig(); err != nil {
+		if _, _, _, err := rt.WriteDefaultConfig(); err != nil {
 			t.Fatalf("WriteDefaultConfig: %v", err)
 		}
 		cfgData, err := loadNuTomlForTest(cfg)
@@ -183,7 +201,7 @@ func TestWriteDefaultConfigPreservesAndRejectsMalformed(t *testing.T) {
 		}
 		rt := New(WithDataDir(t.TempDir()), WithConfigDir(cfg))
 		t.Cleanup(rt.Close)
-		_, _, err := rt.WriteDefaultConfig()
+		_, _, _, err := rt.WriteDefaultConfig()
 		if err == nil {
 			t.Fatal("WriteDefaultConfig debería fallar ante un nu.toml mal formado")
 		}
@@ -191,6 +209,76 @@ func TestWriteDefaultConfigPreservesAndRejectsMalformed(t *testing.T) {
 		data, _ := os.ReadFile(filepath.Join(cfg, nuTomlName))
 		if string(data) != bad {
 			t.Fatalf("el nu.toml mal formado NO debe sobrescribirse; quedó:\n%s", data)
+		}
+	})
+}
+
+// TestWriteDefaultConfigSeedsAgentTemplates blinda G35/ADR-017: el onramp deja config
+// de agente USABLE —`agent.toml` con `model`, `providers.toml` con `api_key_env`—,
+// escrita SOLO si no existe y sin pisar jamás un fichero del usuario.
+func TestWriteDefaultConfigSeedsAgentTemplates(t *testing.T) {
+	t.Run("siembra plantillas válidas en config virgen", func(t *testing.T) {
+		rt, cfg := newBareRuntime(t)
+		_, _, created, err := rt.WriteDefaultConfig()
+		if err != nil {
+			t.Fatalf("WriteDefaultConfig: %v", err)
+		}
+		if !contains(created, agentTomlName) || !contains(created, providersTomlName) {
+			t.Fatalf("plantillas creadas inesperadas: %v", created)
+		}
+
+		// agent.toml: TOML VÁLIDO con un `model` no vacío (lo que agent.session exige, G35).
+		var agentCfg struct {
+			Model    string `toml:"model"`
+			MaxTurns int    `toml:"max_turns"`
+		}
+		if _, err := toml.DecodeFile(filepath.Join(cfg, agentTomlName), &agentCfg); err != nil {
+			t.Fatalf("agent.toml no es TOML válido: %v", err)
+		}
+		if agentCfg.Model == "" {
+			t.Fatal("agent.toml debe traer un model no vacío (G35)")
+		}
+
+		// providers.toml: TOML VÁLIDO que declara un provider con api_key_env. La clave
+		// NUNCA va al fichero (providers.md §1): solo el NOMBRE de la variable de entorno.
+		raw, err := os.ReadFile(filepath.Join(cfg, providersTomlName))
+		if err != nil {
+			t.Fatalf("leer providers.toml: %v", err)
+		}
+		var providersCfg map[string]any
+		if err := toml.Unmarshal(raw, &providersCfg); err != nil {
+			t.Fatalf("providers.toml no es TOML válido: %v", err)
+		}
+		s := string(raw)
+		if !strings.Contains(s, "api_key_env") {
+			t.Fatalf("providers.toml debe declarar api_key_env; got:\n%s", s)
+		}
+		if strings.Contains(s, "api_key =") || strings.Contains(s, "api_key=") {
+			t.Fatalf("providers.toml NO debe llevar la clave, solo api_key_env; got:\n%s", s)
+		}
+	})
+
+	t.Run("no pisa un agent.toml del usuario", func(t *testing.T) {
+		rt, cfg := newBareRuntime(t)
+		userAgent := "model = \"local/qwen3:32b\"\n"
+		if err := os.WriteFile(filepath.Join(cfg, agentTomlName), []byte(userAgent), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, _, created, err := rt.WriteDefaultConfig()
+		if err != nil {
+			t.Fatalf("WriteDefaultConfig: %v", err)
+		}
+		// El agent.toml existente no se reporta como creado y queda intacto...
+		if contains(created, agentTomlName) {
+			t.Fatalf("agent.toml existente no debe reportarse como creado; got %v", created)
+		}
+		got, _ := os.ReadFile(filepath.Join(cfg, agentTomlName))
+		if string(got) != userAgent {
+			t.Fatalf("agent.toml del usuario fue pisado; quedó:\n%s", got)
+		}
+		// ...mientras que providers.toml sí se crea (no existía).
+		if !contains(created, providersTomlName) {
+			t.Fatalf("providers.toml debería crearse; got %v", created)
 		}
 	})
 }

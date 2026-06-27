@@ -182,6 +182,14 @@ func (in *inputState) push(h *inputHandler) {
 	in.stack = append(in.stack, h)
 }
 
+// pushBottom inserta un handler en el FONDO de la pila (recibe el input el ÚLTIMO):
+// cualquier handler ya presente —o que se apile después— lo tapa. Lo usa la red de
+// SALIDA DE EMERGENCIA del kernel (driver.InstallEmergencyExit, ADR-017/G35), que debe
+// ceder ante toda UI de producto y solo actuar si nada encima consume la tecla.
+func (in *inputState) pushBottom(h *inputHandler) {
+	in.stack = append([]*inputHandler{h}, in.stack...)
+}
+
 // purge compacta la pila quitando los handlers muertos (pop/unmap/release). Se
 // llama al inicio de cada dispatch: no se borra a media iteración (un handler puede
 // `pop()` a otro durante su ejecución), sino entre despachos.

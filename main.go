@@ -181,6 +181,11 @@ func runInteractive(rt *runtime.Runtime) int {
 		// Sin plugins ni init.lua activo: la pantalla desnuda, con salida por teclado.
 		rt.PrepareBareScreen()
 	} else {
+		// Red de salida de emergencia del kernel (ADR-017, G35) al FONDO de la pila,
+		// ANTES de montar la UI de producto: cualquier app la tapa, pero si el arranque
+		// no llega a montar UI (p. ej. un init.lua que falla) el usuario puede salir con
+		// q/esc/ctrl+c en vez de quedar atrapado en raw mode.
+		rt.InstallEmergencyExit()
 		// Hay plugins/usuario que montan UI: arranque canónico (corre sus init.lua).
 		if err := rt.Boot(); err != nil {
 			fmt.Fprintln(os.Stderr, "error de arranque:", err)
@@ -214,14 +219,24 @@ func runWith(rt *runtime.Runtime, opts cliOptions) int {
 // con código 1 y mensaje accionable a stderr. Construye un Runtime mínimo solo para
 // resolver `config.dir()` y escribir; no hace `Boot` (no carga ni una extensión).
 func runDefaultConfig(rt *runtime.Runtime) int {
-	dir, names, err := rt.WriteDefaultConfig()
+	dir, names, createdTemplates, err := rt.WriteDefaultConfig()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return exitError
 	}
 	fmt.Printf("conjunto oficial de producto activado en %s/nu.toml: %s\n",
 		dir, strings.Join(names, ", "))
-	fmt.Println("ya puedes ejecutar el agente: nu -p '<prompt>'")
+	// Plantillas de config de agente (ADR-017, G35): informamos solo de las que
+	// CREAMOS este comando; las que ya existían se respetan y no se nombran como si
+	// las hubiéramos escrito.
+	if len(createdTemplates) > 0 {
+		fmt.Printf("plantillas de config creadas: %s\n", strings.Join(createdTemplates, ", "))
+	}
+	// Mensaje honesto: el harness aún necesita una API key para hablar con el modelo
+	// (la plantilla usa anthropic/opus con ANTHROPIC_API_KEY). Sin ella, el chat
+	// abre igual pero el primer turno dará un error accionable; con ella, ya funciona.
+	fmt.Printf("exporta tu API key (p. ej. ANTHROPIC_API_KEY) o edita %s/providers.toml; "+
+		"luego ejecuta `nu` (chat) o `nu -p '<prompt>'` (headless)\n", dir)
 	return exitOK
 }
 
