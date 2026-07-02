@@ -9,7 +9,12 @@ resolución se aplica a los documentos afectados y la entrada pasa a
 aquello es lo que decidimos no decidir; esto son agujeros que la v1 sí
 necesita cerrados.
 
-**Estado: 35 registradas, resueltas** (G36 y G37 añadidas 2026-06-28 al pulir la
+**Estado: 38 registradas, 35 resueltas — 3 PENDIENTES (G38-G40)** (G38-G40
+añadidas 2026-07-02 desde la ronda 8 de pseudocódigo — una malla distribuida de
+agentes sobre git, con specs Role+Job y fork-como-replicación: G38, el slug de
+`sessions/<proyecto>/` sin especificar; G39, `Session:fork` sin `opts` y con
+`at` sin unidad; G40, denegaciones de permisos no observables como dato;
+G36 y G37 añadidas 2026-06-28 al pulir la
 UI/UX de las extensiones oficiales para que parezcan producto: G36, el doble
 auto-montaje de chat+repl; G37, un bug latente del eje X de `blitBlock`; G35 añadida
 2026-06-27 al usar el binario tras el onramp de ADR-015; G34 añadida 2026-06-27 al
@@ -938,3 +943,27 @@ propio, no con el yield aquí descartado.
 **Problema.** [api.md](api.md) §9.1 documenta `Region:blit(x, y, block)` como un viewport simétrico: "`x/y` pueden ser **negativos** y recortan el borde *inicial* del bloque (`blit(0,-3,doc)` muestra `doc` desde su cuarta fila)". El eje Y lo cumplía; el X estaba **invertido** (`lx = col - ox`: era el *positivo* el que recortaba el inicio). Nunca se notó porque **ningún widget se blitteaba en x>0**: el chat, la pantalla desnuda y el repl apilaban todo contra el margen izquierdo. Al introducir `padding`/alineación en el toolkit (G36), un widget colocado en x=1 perdía su primera columna (el borde izquierdo de una caja, la viñeta de una línea), porque la app llama `region:blit(ax, ay)` esperando *posicionar* y en X obtenía un *scroll*.
 
 **Impacto.** Latente pero real: bloquea cualquier layout con margen/padding/centrado horizontal —es decir, casi toda la UI de producto (cajas, modales centrados, statusline con padding)—. Se descubrió al construir el primer widget de borde. La corrección alinea la implementación con el contrato; no amplía ni cambia la API (`nu.version.api` no se mueve).
+
+## G38 · El slug de proyecto de `sessions/<proyecto>/` no está especificado — `sesiones.md` §2/§7 — **PENDIENTE**
+
+**Problema.** [sesiones.md](sesiones.md) §1 se documenta como convención pública ("cualquier extensión o herramienta externa puede leer sesiones sin pasar por el agente") y §2 ubica los transcripts en `sessions/<proyecto>/`, con "`<proyecto>` = cwd codificado como slug" — pero el algoritmo cwd→slug no está escrito en ningún documento. La promesa de lectura por terceros no se puede ejercer: quien quiera *localizar* el fichero de una sesión conociendo el `cwd` y el id tiene que adivinar (o ingeniería-inversear) la codificación. Aflorada en la ronda 8 de pseudocódigo ([pseudocodigo.md](pseudocodigo.md), escenarios 33-35), donde una malla distribuida lo necesita tres veces: comitear el transcript dentro de la rama-resultado, leer el transcript para elegir el punto de un `fork(at)`, e importar una sesión ajena copiando el JSONL a su sitio.
+
+**Impacto.** Cualquier consumidor externo del formato: orquestadores, exportadores, estadísticas de coste, pickers de terceros. También muerde *dentro* del proceso: un plugin que quiera leer el transcript de una sesión que él mismo abrió no tiene forma contractual de encontrar el fichero. Barato de cerrar (es especificar lo que la implementación ya hace, o exponer un helper); caro de cambiar después, cuando haya herramientas externas dependiendo de una codificación adivinada.
+
+**Opciones.** (a) Especificar el algoritmo del slug en sesiones.md §2 (determinista, sin estado, documentado como parte del formato); (b) no especificarlo y exponer un helper de la extensión (`agent.sessions.dir(cwd) -> string` o `agent.sessions.path(cwd, id)`), dejando la codificación como detalle interno — pero entonces las herramientas *externas* (fuera de nu) siguen sin poder resolver rutas; (c) ambas: el algoritmo especificado es la verdad para herramientas externas y el helper es la comodidad para plugins.
+
+## G39 · `Session:fork` no re-aloja: sin `opts` (cwd/permisos/modelo) y con `at` sin unidad definida — `agente.md` §2 / `sesiones.md` §5 — **PENDIENTE**
+
+**Problema.** Fork-como-replicación —K variantes que comparten el prefijo exacto del transcript (y su caché de prompt) y compiten en un torneo— exige que cada variante corra en su propio worktree (`cwd` distinto: el remedio de G16 para escrituras paralelas) y a veces con permisos recortados o modelo alternativo. Pero `Session:fork(at?) -> Session` no acepta `opts`, y qué hereda la sesión hija del padre no está escrito. El rodeo natural (cerrar el fork y reabrirlo con `agent.session{ resume = id, cwd = ... }`, opts efímeros de G18) *casi* funciona, pero se apoya en `Session:close()`, que la nota de estado de §2 da por implementado y la **firma del contrato omite**. Además `at` no define qué indexa (¿entrada del JSONL, mensaje, turno?) — `meta.parent = {id, entry}` de sesiones.md §5 sugiere entradas, pero la correspondencia es implícita. Aflorada en la ronda 8 ([pseudocodigo.md](pseudocodigo.md), escenarios 34-35).
+
+**Impacto.** El torneo de forks (local y distribuido) se queda a un paso de ser expresable con fidelidad; el plan B (subagentes frescos con el plan re-inyectado por prompt) pierde justo el valor del fork — el prefijo compartido y su caché. También afecta al flujo de conflicto de locks de sesiones.md §6, cuya salida por defecto es «fork»: si el fork no puede re-alojarse, hereda el mismo cwd que causó el conflicto.
+
+**Opciones.** (a) `fork(at?, opts?)` con la misma semántica efímera que `resume` (los opts son estado del proceso: no se persisten ni reescriben historia; los permisos solo recortan, como en `spawn`); (b) bendecir el rodeo: añadir `Session:close()` a la firma del contrato y documentar el patrón fork→close→resume-con-opts; (c) ambas — `fork(at?, opts?)` como camino directo y `close` en el contrato porque ya existe de facto y otros flujos lo necesitan. En cualquier caso: especificar que `at` indexa **entradas del transcript** (la unidad de `meta.parent.entry`) y qué hereda el fork en ausencia de opts.
+
+## G40 · Las denegaciones de permisos no son observables como dato — `agente.md` §4/§5 — **PENDIENTE**
+
+**Problema.** En headless con default deny (§5) la denegación de una tool call solo existe como **prosa**: el `tool_result` con `is_error` lleva el error accionable ("denegado `bash:npm install`; añade `allow = [\"bash:npm *\"]`") — perfecto para un humano, inservible para un programa. Las tres vías de observación estructurada fallan: el pipeline es deny → allow → hooks, así que un deny de política **corta antes** de llegar a los hooks `permission` (invisible para ellos); `agent:permission.asked` es solo del flujo interactivo (un deny de política no pregunta); y no está especificado siquiera si `agent:tool.end` se emite para una call denegada cuyo handler nunca corrió (ni su payload llevaría el patrón). Aflorada en la ronda 8 ([pseudocodigo.md](pseudocodigo.md), escenario 36): el bucle de escalado asíncrono —denegación → enmienda del Role por un humano → re-run idempotente— convierte el default deny de fricción en mecanismo, pero necesita el patrón denegado **como dato** y hoy tendría que parsearlo de la prosa.
+
+**Impacto.** Todo orquestador headless que quiera convertir denegaciones en enmiendas de política; también auditoría y telemetría de permisos ("¿qué denegó esta sesión y por qué vía?") y cualquier UI que quiera agregar denegaciones sin re-derivarlas. La capa de permisos es de las más sensibles del contrato: mejor cerrar la observabilidad antes de congelarlo.
+
+**Opciones.** (a) Evento de notificación `agent:permission.denied` con payload estructurado (`{ session, tool, args?, pattern, source: "deny"|"headless"|"hook" }`), simétrico de `permission.asked`; (b) `detail` estructurado en el error/`tool_result` de denegación (el patrón exacto como campo, la prosa como `message`), coherente con los errores estructurados de api.md §1.4; (c) ambas — el evento para observadores (orquestadores, UIs, telemetría) y el `detail` para el llamante que tiene el error en la mano; (d) especificar además si `tool.end` se emite en denegaciones (probablemente no: nada empezó — el evento nuevo cubre ese hueco sin ambigüedad).
