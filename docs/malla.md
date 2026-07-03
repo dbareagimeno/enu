@@ -229,7 +229,7 @@ end
 | D6 | El controlador que estampa jobs queda fuera de v0.1 (los escribe un humano/script) | ¿Merece `mesh.job.emit(spec)` que valide y comitee el TOML? |
 | D7 | `source = "user"` añadido al enum de G40 (el rechazo interactivo también es dato) | Ya aplicado en agente.md §5; revertir si se prefiere el enum original |
 | D8 | La clave del meta del tool_result denegado es `denied` | Ya aplicado en agente.md §5 |
-| D9 | Candidato a grieta del kernel (aflorado construyendo): un handler de eventos que escribe en un **upvalue local** de una task suspendida al otro lado del puente pcall-suspensión no es visible al reanudar (ADR-011/G31); los globales sí | ¿Registrarlo como G## y documentar la limitación en api.md §1.3, o arreglar el puente? |
+| D9 | ~~Candidato a grieta del kernel: escrituras de handlers a upvalues locales de tasks suspendidas se perdían~~ | **DECIDIDA Y RESUELTA como [G41](problemas.md#g41)**: era un bug de gopher-lua (el desenrollado de `pcall` cerraba upvalues de frames vivos), blindado en el kernel — la semántica de Lua vuelve a ser la estándar, sin limitación que documentar |
 
 ## 12. Relación con lo pospuesto
 
