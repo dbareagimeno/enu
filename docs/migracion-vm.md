@@ -6,9 +6,9 @@ Evidencia técnica y números: [spike/lua-wasm/INFORME.md](../spike/lua-wasm/INF
 Rama de la migración: **`claude/migracion-vm-wasm`**.
 
 > **▶ Próxima sesión: `M13b` (en curso)** — catálogo real de primitivas. Ya están
-> probados TODOS los mecanismos del backend (M05-M12), el loader curado (M13a) y el
-> **primer módulo del catálogo: los codecs** (nu.json/toml/yaml, hecho — ver
-> bitácora M13b). Faltan: fs/proc/sys/http/ws/search/text/re/log. El patrón está
+> probados TODOS los mecanismos del backend (M05-M12), el loader curado (M13a) y
+> **tres módulos del catálogo: codecs, re, fs** (ver bitácora M13b). Faltan:
+> sys/text/log (puras) y proc/http/ws/search (⏸ con estado). El patrón está
 > fijado (ver M13b): el catálogo wasm vive en `internal/runtime` (junto a sus
 > gemelos gopher, reusando las mismas librerías Go), en ficheros con **prefijo**
 > `vmwasm_<módulo>.go` — NUNCA sufijo `_wasm.go` (ver el ⚠️ de abajo).
