@@ -46,9 +46,10 @@ func TestBaselineLibs(t *testing.T) {
 		`return type(string.format)`: "function",
 		`return type(math.floor)`:    "function",
 		`return type(utf8.char)`:     "function",
-		`return type(io)`:            "nil", // no abierta
-		`return type(os)`:            "nil", // no abierta (M04 abre y recorta)
-		`return type(require)`:       "nil", // loader curado, M13
+		`return type(io)`:            "nil",      // no abierta
+		`return type(os)`:            "nil",      // no abierta (M04 abre y recorta)
+		`return type(package)`:       "nil",      // la lib package de PUC NO se abre (DM5)
+		`return type(require)`:       "function", // pero SÍ el require curado del loader (M13, DM5)
 	}
 	for chunk, want := range cases {
 		out, lerr, err := inst.Eval(chunk)

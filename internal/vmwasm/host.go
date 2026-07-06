@@ -151,6 +151,7 @@ func (p *Pool) preludio() string {
 	b.WriteString(preludioMonta)
 	b.WriteString(preludioSched)
 	b.WriteString(preludioTask)
+	b.WriteString(preludioLoader)
 	b.WriteString(preludioWorkerCommon)
 	if p.isWorker {
 		// Un worker (M12) es un mini-runtime: su propio scheduler (nu.task) y su
@@ -836,4 +837,48 @@ end
 function nu.worker.parent.recv()
   return nu.worker.parent._recv()
 end
+`
+
+// preludioLoader: el require curado (M13, DM5, api.md §14). La lib `package` de
+// PUC no se abre; este require resuelve por nombre contra el registro Go
+// (nu.loader._source), cachea la primera carga, detecta ciclos y ofrece reload
+// best-effort (G2). Presente en el estado principal y en los workers.
+const preludioLoader = `
+local __loaded = {}   -- name -> resultado del módulo (caché de una sola carga)
+local __loading = {}  -- name -> true mientras se carga (detección de ciclos)
+
+function require(name)
+  local hit = __loaded[name]
+  if hit ~= nil then return hit end
+  if __loading[name] then
+    error({ code = "EINVAL", message = "require: ciclo de dependencias con " .. tostring(name) })
+  end
+  local src = nu.loader._source(name)
+  if src == nil then
+    error({ code = "ENOENT", message = "require: módulo no encontrado: " .. tostring(name) })
+  end
+  __loading[name] = true
+  local chunk, cerr = load(src, "@" .. name)
+  if not chunk then
+    __loading[name] = nil
+    error({ code = "EINVAL", message = "require: error de compilación en " .. name .. ": " .. tostring(cerr) })
+  end
+  local ok, result = pcall(chunk)
+  __loading[name] = nil
+  if not ok then error(result) end
+  if result == nil then result = true end   -- módulos sin return: se marcan cargados
+  __loaded[name] = result
+  return result
+end
+
+-- __loader_reload(name): reload best-effort (G2). Limpia la caché y re-require;
+-- las referencias viejas al módulo persisten (por eso "best-effort"). El
+-- nu.plugin.reload de la integración lo envuelve (M13).
+_G.__loader_reload = function(name)
+  __loaded[name] = nil
+  return require(name)
+end
+
+-- __loader_loaded(name): ¿está cargado? (para tests y para el orden de init).
+_G.__loader_loaded = function(name) return __loaded[name] ~= nil end
 `

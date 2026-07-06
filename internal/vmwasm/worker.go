@@ -141,6 +141,11 @@ func (inst *Instance) spawnWorker(source string, caps map[string]bool, capsGiven
 	}
 	wp.isWorker = true
 	wp.registerHandleDispatch() // los handles funcionan dentro del worker
+	// Las rutas de require del loader están disponibles en el worker (api.md §13):
+	// comparte los módulos del padre.
+	for name, src := range inst.pool.modules {
+		wp.modules[name] = src
+	}
 
 	// Copia las primitivas CONCEDIDAS del registro del padre al del worker.
 	parent := inst.pool.reg
@@ -179,8 +184,10 @@ func (inst *Instance) spawnWorker(source string, caps map[string]bool, capsGiven
 // el propio Pool del worker). Sin caps → toda la API [W]. Con caps: concede el
 // módulo entero ("fs") o la función exacta ("fs.read"), deny-by-default.
 func workerGrants(name string, caps map[string]bool, capsGiven bool) bool {
-	if hasPrefix(name, "ui.") || hasPrefix(name, "worker.") ||
+	if hasPrefix(name, "ui.") || hasPrefix(name, "worker.") || hasPrefix(name, "loader.") ||
 		name == "__handle_call" || name == "__handle_call_s" {
+		// ui/worker no cruzan; loader._source ya lo registra el Pool del worker; las
+		// primitivas de despacho de handles las re-registra registerHandleDispatch.
 		return false
 	}
 	if !capsGiven {

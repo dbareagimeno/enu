@@ -46,7 +46,8 @@ type Pool struct {
 	reg      *hostRegistry
 	ui       UIBackend // backend de compositor (M11); nil = headless (G20)
 
-	isWorker bool // true en el Pool de un worker (M12): preludio sin ui/events/spawn
+	isWorker bool              // true en el Pool de un worker (M12): preludio sin ui/events/spawn
+	modules  map[string]string // fuentes de módulo por nombre para require (M13, DM5)
 
 	// Registro de workers vivos de este Pool (M12), para _send/_recv/_terminate y
 	// para el apagado ordenado. Sólo lo usa el Pool principal.
@@ -105,7 +106,9 @@ func newBarePool() (*Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Pool{rt: rt, compiled: compiled, reg: newHostRegistry(), workers: make(map[int64]*worker)}, nil
+	p := &Pool{rt: rt, compiled: compiled, reg: newHostRegistry(), workers: make(map[int64]*worker), modules: make(map[string]string)}
+	p.registerLoader() // require curado (M13): presente en todo Pool, también en workers
+	return p, nil
 }
 
 // NewPool prepara el Pool PRINCIPAL: despacho de handles (M10) y el host de
