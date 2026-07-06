@@ -5,7 +5,8 @@ Evidencia técnica y números: [spike/lua-wasm/INFORME.md](../spike/lua-wasm/INF
 (el spike es la semilla de las sesiones M02-M03 y el detector anti-caducidad).
 Rama de la migración: **`claude/migracion-vm-wasm`**.
 
-> **▶ Próxima sesión: `M01`.** · Bitácora al final del documento.
+> **▶ Próxima sesión: `M02`.** · Bitácora al final del documento.
+> Censo de la frontera (M01, cerrado): [migracion-vm-censo.md](migracion-vm-censo.md).
 
 ---
 
@@ -173,3 +174,4 @@ queda detrás del selector), se registra, y decide el humano.
 | Fecha | Sesión | Resumen |
 |---|---|---|
 | 2026-07-03 | — (plan) | Nace este plan (ejecuta ADR-019; rama `claude/migracion-vm-wasm`). Puntero en M01. |
+| 2026-07-03 | **M01** | Censo de la frontera VM cerrado: `tools/censo-vm.sh` (resumen/`--files`/`--check`) + [migracion-vm-censo.md](migracion-vm-censo.md) con las 6 categorías (C1 valores/marshaling, C2 host functions, C3 puente ⏸, C4 errores/desenrollado, C5 userdata/handles, C6 libs/baseline) y el mapa fichero→categoría→sesión. La guardia `--check` cableada en CI (trinquete: ningún símbolo gopher-lua nuevo). Hallazgo confirmado del censo: C4 no se traduce, se **borra** (cancel.go + blindaje G41 existen solo por defectos de gopher-lua). Sin código de producción. Puntero → M02. |

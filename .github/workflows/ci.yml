@@ -61,6 +61,13 @@ jobs:
       - name: Análisis estático (go vet)
         run: go vet ./...
 
+      - name: Censo de la frontera VM (trinquete de la migración)
+        # Guardia de la migración de la VM (docs/migracion-vm.md M01): falla si el
+        # kernel gana un símbolo de gopher-lua fuera de la allowlist del censo, para
+        # que ningún fichero introduzca acoplamiento nuevo mientras se migra a wasm.
+        # Se retira junto a gopher-lua en M17.
+        run: ./tools/censo-vm.sh --check
+
       - name: Módulos limpios (verify + tidy)
         # Materializa "cero dependency hell" (filosofía §6): `go mod verify` valida
         # las sumas, y `go mod tidy` + `git diff --exit-code` falla si alguien añadió
