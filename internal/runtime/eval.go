@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	lua "github.com/yuin/gopher-lua"
@@ -175,7 +176,14 @@ func (rt *Runtime) evalStringWasm(code string) ([]string, error) {
 	if rt.wasmErr != nil {
 		return nil, rt.wasmErr
 	}
-	result, luaErr, goErr := rt.wasm.Eval(code)
+	// El chunk se envuelve en una función cuyos retornos se capturan con table.pack
+	// en el global `__es`. Así se preserva el RECUENTO EXACTO de valores de retorno
+	// —como `L.GetTop()` en gopher—: un `return ""` da UN valor "" (no cero), y un
+	// `return a, b` da dos. Sin esto, la Eval cruda sólo devuelve el texto del
+	// resultado y no distingue "no devolvió" de `return ""` (ambos serían ""), lo que
+	// rompía `h.eval("... return out")[0]` cuando `out` era "". El chunk corre en el
+	// ESTADO PRINCIPAL (no task): puede lanzar tasks pero no usar ⏸ directo (§1.3).
+	_, luaErr, goErr := rt.wasm.Eval("__es = table.pack((function()\n" + code + "\nend)())")
 	if goErr != nil {
 		return nil, goErr // trap del motor wasm: fallo duro
 	}
@@ -187,10 +195,25 @@ func (rt *Runtime) evalStringWasm(code string) ([]string, error) {
 	if err := rt.wasm.RunTasks(context.Background()); err != nil {
 		return nil, err
 	}
-	if result == "" {
-		return nil, nil // el chunk no devolvió valor (o devolvió nil): slice vacío
+	// Lee el recuento y serializa cada valor con tostring (leído de uno en uno para
+	// no depender de un delimitador que un valor podría contener).
+	nStr, _, _ := rt.wasm.Eval("return tostring(__es.n)")
+	n, err := strconv.Atoi(nStr)
+	if err != nil || n < 0 {
+		return nil, nil
 	}
-	return []string{result}, nil
+	results := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		v, lerr, gerr := rt.wasm.Eval("return tostring(__es[" + strconv.Itoa(i) + "])")
+		if gerr != nil {
+			return nil, gerr
+		}
+		if lerr != "" {
+			return nil, wasmChunkError(lerr)
+		}
+		results = append(results, v)
+	}
+	return results, nil
 }
 
 // evalTaskStringWasm es la variante de EvalTaskString sobre el backend wasm (M13d).
