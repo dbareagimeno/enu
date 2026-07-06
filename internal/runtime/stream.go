@@ -300,7 +300,13 @@ func (st *httpStream) close() {
 		if st.body != nil {
 			_ = st.body.Close()
 		}
-		st.s.untrackStream(st)
+		// El rastreo del scheduler (para `Runtime.Close` → `stopAllStreams`) es del
+		// backend gopher; el backend wasm (M13b) reusa este handle VM-agnóstico con
+		// `s == nil` (su ciclo de vida a nivel de Runtime lo cablea M13d), así que se
+		// guarda el nil —igual que `luaWs.close`—.
+		if st.s != nil {
+			st.s.untrackStream(st)
+		}
 	})
 }
 
