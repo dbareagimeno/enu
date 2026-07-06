@@ -164,6 +164,11 @@ func (p *Pool) preludio() string {
 		b.WriteString(preludioInput)
 		b.WriteString(preludioWorkerHost)
 	}
+	// Snippets del catálogo (M13b): wrappers finos en Lua, con `nu` ya montado.
+	for _, s := range p.extraPreludio {
+		b.WriteString("\n")
+		b.WriteString(s)
+	}
 	return b.String()
 }
 

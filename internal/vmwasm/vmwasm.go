@@ -46,9 +46,10 @@ type Pool struct {
 	reg      *hostRegistry
 	ui       UIBackend // backend de compositor (M11); nil = headless (G20)
 
-	isWorker   bool              // true en el Pool de un worker (M12): preludio sin ui/events/spawn
-	modules    map[string]string // fuentes de módulo por nombre para require (M13, DM5)
-	apiVersion int               // nivel de nu.version.api que inyecta el preludio (M13, lo fija el Runtime)
+	isWorker      bool              // true en el Pool de un worker (M12): preludio sin ui/events/spawn
+	modules       map[string]string // fuentes de módulo por nombre para require (M13, DM5)
+	apiVersion    int               // nivel de nu.version.api que inyecta el preludio (M13, lo fija el Runtime)
+	extraPreludio []string          // snippets Lua que aporta el catálogo (M13b: wrappers finos)
 
 	// Registro de workers vivos de este Pool (M12), para _send/_recv/_terminate y
 	// para el apagado ordenado. Sólo lo usa el Pool principal.
@@ -129,6 +130,13 @@ func NewPool() (*Pool, error) {
 // el Runtime al construir el estado wasm (M13), con su APILevel. Debe llamarse
 // antes de NewInstance (el preludio se arma con él).
 func (p *Pool) SetAPIVersion(v int) { p.apiVersion = v }
+
+// AddPreludio añade un snippet Lua que se ejecuta al final del preludio, cuando la
+// tabla `nu` ya está montada. Es el punto de extensión con el que un módulo del
+// catálogo (M13b) aporta un wrapper fino en Lua —p. ej. nu.re.compile, que ensambla
+// la tabla mixta de capturas que el wire no puede cruzar de una pieza—. Debe
+// llamarse antes de NewInstance.
+func (p *Pool) AddPreludio(snippet string) { p.extraPreludio = append(p.extraPreludio, snippet) }
 
 // Close libera las instancias del Pool. El runtime wazero es compartido a nivel
 // de proceso y no se cierra aquí (vive lo que el proceso); las instancias se
