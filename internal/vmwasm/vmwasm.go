@@ -36,10 +36,14 @@ var nuWasm []byte
 type Dispatcher func(id int32, args []byte) ([]byte, error)
 
 // Pool compila nu.wasm una sola vez y fabrica instancias que comparten el
-// módulo compilado pero NO la memoria (cada Instance tiene su estado Lua).
+// módulo compilado pero NO la memoria (cada Instance tiene su estado Lua). El
+// registro de primitivas (reg) también se comparte: las primitivas nu.* son las
+// mismas para todas las instancias (el estado por-instancia lo lleva el *Instance
+// que el HostFn recibe).
 type Pool struct {
 	rt       wazero.Runtime
 	compiled wazero.CompiledModule
+	reg      *hostRegistry
 }
 
 // NewPool prepara el runtime wazero, registra el módulo host "nu" (el trampolín
@@ -65,7 +69,7 @@ func NewPool() (*Pool, error) {
 		_ = rt.Close(ctx)
 		return nil, fmt.Errorf("vmwasm: compilar nu.wasm: %w", err)
 	}
-	return &Pool{rt: rt, compiled: compiled}, nil
+	return &Pool{rt: rt, compiled: compiled, reg: newHostRegistry()}, nil
 }
 
 // Close libera el runtime y todas sus instancias.
@@ -110,7 +114,7 @@ type Instance struct {
 // libs del baseline. El dispatcher arranca en el que rechaza todo; SetDispatcher
 // lo sustituye (M05).
 func (p *Pool) NewInstance() (*Instance, error) {
-	inst := &Instance{pool: p, dispatch: rejectDispatcher}
+	inst := &Instance{pool: p}
 	// ctx con el snapshotter (lo exige el trampolín) y la propia instancia.
 	base := experimental.WithSnapshotter(context.Background())
 	inst.ctx = context.WithValue(base, instanceKey{}, inst)
@@ -139,6 +143,17 @@ func (p *Pool) NewInstance() (*Instance, error) {
 
 	if r, err = mod.ExportedFunction("nu_new").Call(inst.ctx); err != nil || r[0] != 0 {
 		return nil, fmt.Errorf("vmwasm: nu_new: r=%v err=%w", r, err)
+	}
+
+	// El dispatcher real es el registro de primitivas (M05): resuelve id→HostFn,
+	// (de)serializa el wire y cruza errores estructurados. SetDispatcher aún puede
+	// sustituirlo (lo usa algún test de la costura).
+	inst.dispatch = inst.dispatchPrimitive
+
+	// Preludio: construye la tabla `nu` (thunks sobre las primitivas registradas) y
+	// el codec de wire en Lua. Se corre una vez, con el catálogo ya completo.
+	if _, lerr, err := inst.Eval(p.preludio()); err != nil || lerr != "" {
+		return nil, fmt.Errorf("vmwasm: preludio: lerr=%q err=%w", lerr, err)
 	}
 	return inst, nil
 }
@@ -298,9 +313,4 @@ func hostDispatch(ctx context.Context, id, length int32) int32 {
 		return -1
 	}
 	return int32(len(out))
-}
-
-// rejectDispatcher es el dispatcher por defecto: no hay primitivas hasta M05.
-func rejectDispatcher(id int32, args []byte) ([]byte, error) {
-	return nil, fmt.Errorf("vmwasm: sin dispatcher de primitivas (id=%d); se instala en M05", id)
 }
