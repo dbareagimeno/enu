@@ -297,11 +297,11 @@ type Instance struct {
 	ctx    context.Context
 	cancel context.CancelFunc // cancela el ctx del Call (worker:terminate, M12)
 
-	tries       []tryFrame // pila LIFO de LUAI_TRY activos
+	tries       []tryFrame     // pila LIFO de LUAI_TRY activos
+	pfuncPool   []api.Function // nu_call_pfunc, UNA por nivel de anidamiento (ver hostTry)
 	dispatch    Dispatcher
 	bufPtr      uint32
 	bufCap      uint32
-	callPfunc   api.Function
 	evalFn      api.Function
 	coSpawnFn   api.Function
 	coResumeFn  api.Function
@@ -365,7 +365,6 @@ func (p *Pool) NewInstance() (*Instance, error) {
 		return nil, fmt.Errorf("vmwasm: instanciar: %w", err)
 	}
 	inst.mod = mod
-	inst.callPfunc = mod.ExportedFunction("nu_call_pfunc")
 	inst.evalFn = mod.ExportedFunction("nu_eval")
 	inst.coSpawnFn = mod.ExportedFunction("nu_co_spawn")
 	inst.coResumeFn = mod.ExportedFunction("nu_co_resume")
@@ -507,9 +506,22 @@ func hostTry(ctx context.Context, L, f, ud int32) int32 {
 		sp:   sp.Get(),
 	})
 	depth := len(inst.tries)
-	// Función FRESCA por llamada: api.Function no es reentrante (lección del
-	// spike; M03 lo blinda con un test).
-	_, callErr := inst.mod.ExportedFunction("nu_call_pfunc").
+	// api.Function no es reentrante (lección del spike; M03 lo blinda con
+	// TestTrampolinNoReentrancia): un mismo objeto Function NO puede tener dos Call
+	// vivos a la vez en la pila. Pero eso sólo pasa entre pcalls ANIDADOS, no entre
+	// HERMANOS. Antes se pedía una Function FRESCA por llamada —cada
+	// `ExportedFunction` crea un callEngine nuevo: en el perfil de asignaciones del
+	// turno de agente eso era el ~31% de TODA la memoria (callEngine.init), a la par
+	// del Snapshot—. En su lugar mantenemos UNA Function por NIVEL de anidamiento
+	// (indexada por `depth`): los pcalls hermanos (mismo nivel, secuenciales) reusan
+	// su callEngine —jamás hay dos Call vivos en el mismo slot— y sólo se crea una
+	// Function nueva al bajar a un nivel nunca antes alcanzado. La no-reentrancia se
+	// respeta (nivel N y N+1 usan slots distintos) y las asignaciones caen a O(max
+	// profundidad) en vez de O(nº de pcalls). M15: palanca de rendimiento del veto 2.
+	if depth > len(inst.pfuncPool) {
+		inst.pfuncPool = append(inst.pfuncPool, inst.mod.ExportedFunction("nu_call_pfunc"))
+	}
+	_, callErr := inst.pfuncPool[depth-1].
 		Call(ctx, uint64(uint32(L)), uint64(uint32(f)), uint64(uint32(ud)))
 	if callErr != nil {
 		panic(callErr)
