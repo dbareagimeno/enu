@@ -155,19 +155,16 @@ jobs:
 
   # Blob de la VM wasm (migracion-vm.md M02, DM1): reconstruye nu.wasm desde las
   # fuentes pineadas de Lua + el shim, y verifica que el artefacto comiteado no ha
-  # derivado. Sólo en Linux (la toolchain wasm de Ubuntu basta; el blob es
-  # portable). Guarda la reproducibilidad de la VM (DM1): permanente mientras wasm
+  # derivado. Guarda la reproducibilidad de la VM (DM1): permanente mientras wasm
   # sea la VM del kernel.
   vmblob:
     name: Blob de la VM (nu.wasm reproducible)
-    # Runner PINEADO (no `ubuntu-latest`): la reproducibilidad byte-a-byte del blob
-    # depende de las versiones exactas de wasi-libc/clang-rt del archivo de la
-    # distro, y una etiqueta móvil las cambia bajo los pies (visto en la PR de la
-    # migración: el runner saltó de imagen y el rebuild dejó de coincidir con el
-    # blob comiteado sin que ninguna fuente hubiera cambiado). El blob actual se
-    # construyó con el toolchain de noble: clang 18.1.3 + wasi-libc git20230113.
-    # Si algún día se sube de imagen, se regenera el blob en el mismo cambio.
-    runs-on: ubuntu-24.04
+    # El runner ya NO necesita pineo: build.sh es hermético (fix post-M17,
+    # migracion-vm.md) — descarga el wasi-sdk oficial pineado por sha256 y
+    # compila con su clang/sysroot, sin tocar la toolchain de la distro. La
+    # etiqueta móvil deja de poder cambiar el blob bajo los pies (lo hizo dos
+    # veces cuando el build usaba el clang/wasi-libc de apt).
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -177,16 +174,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Toolchain wasm (clang 18 + wasi-libc)
-        run: sudo apt-get update && sudo apt-get install -y clang-18 lld-18 wasi-libc libclang-rt-18-dev-wasm32
-
       - name: Reconstruir nu.wasm y verificar que el blob comiteado no derivó
-        # build.sh clona Lua pineado (v5.4.7) y recompila. Si el resultado difiere
-        # del nu.wasm comiteado, o fuentes o shim cambiaron sin regenerar el blob:
-        # el diff falla y hay que correr build.sh y comitear el nuevo artefacto.
+        # build.sh descarga el wasi-sdk pineado (sha256), clona Lua pineado
+        # (v5.4.7, commit verificado) y recompila. Si el resultado difiere del
+        # nu.wasm comiteado, fuentes o shim cambiaron sin regenerar el blob: el
+        # diff falla y hay que correr build.sh y comitear el nuevo artefacto.
         run: |
           hash_antes=$(sha256sum internal/vmwasm/nu.wasm | cut -d' ' -f1)
-          CC=clang-18 internal/vmwasm/build.sh
+          internal/vmwasm/build.sh
           hash_despues=$(sha256sum internal/vmwasm/nu.wasm | cut -d' ' -f1)
           echo "comiteado: $hash_antes"
           echo "rebuild:   $hash_despues"
