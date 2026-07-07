@@ -52,6 +52,14 @@ func withToken(rt *Runtime, fn func()) {
 // por tag (para que los handlers Lua registren que se dispararon, observable desde
 // Go). Devuelve el mapa de contadores.
 func registerGoCounter(h *harness) map[string]int {
+	// Estos tests son CAJA BLANCA del despacho de input GOPHER: inyectan por
+	// `h.rt.ui.input.feedInput` (un método Go del inputState) y observan con un `mark`
+	// que muta un mapa Go. En wasm el despacho de input vive en el preludio
+	// (preludioInput/__ui_dispatch_input) y se alimenta por inst.FeedInput; su lógica
+	// (pila, keymaps, secuencias, timeouts) se ejercita end-to-end por los tests de
+	// input del chat y por la suite M11 de vmwasm. No hay forma de alinear el feed
+	// gopher con los handlers registrados en el estado wasm, así que se saltan aquí.
+	h.skipIfWasm("caja blanca del inputState gopher (feedInput + mark sobre un mapa Go)")
 	counts := map[string]int{}
 	h.rt.L.SetGlobal("mark", h.rt.L.NewFunction(func(L *lua.LState) int {
 		counts[L.CheckString(1)]++
@@ -341,6 +349,9 @@ func TestInputHandlerErrorIsolated(t *testing.T) {
 // existe y contiene los bytes) y SIN `text`. Un paste de texto llega con `text`.
 func TestInputPasteImageG30(t *testing.T) {
 	h := newHarness(t)
+	// Caja blanca del inputState gopher (feedInput + capture sobre variables Go), como
+	// el resto del fichero; el despacho de input en wasm se cubre por otra vía.
+	h.skipIfWasm("caja blanca del inputState gopher (feedInput + capture Go)")
 
 	var gotPath, gotText string
 	var hadText, hadPath bool
