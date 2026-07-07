@@ -36,7 +36,7 @@ puro no puede hacer TLS ni pintar un terminal, así que el kernel se lo da.
 
 | Módulo | Responsabilidad |
 |---|---|
-| **scheduler** | Event loop, timers, puente ⏸ task-Lua ↔ goroutines (realizado como goroutine-por-task + token Lua, ADR-011), workers |
+| **scheduler** | Event loop, timers, puente ⏸ task-Lua ↔ goroutines (realizado con tasks como corrutinas Lua nativas sobre wazero, ADR-020, tras la retirada de gopher en M17; la realización previa goroutine-por-task + token Lua de ADR-011 quedó reemplazada), workers |
 | **io** | Filesystem, spawn de procesos con streams, entorno |
 | **net** | Cliente HTTP/HTTPS con respuesta en streaming (SSE), TCP/websocket |
 | **ui** | Celdas + regiones + compositor (z-order, blit de bloques, damage tracking, coalescing ~30 ms), eventos de input, keymaps |
@@ -86,9 +86,10 @@ Tres patas (ADR-004):
    todos los cores sin que Lua se entere. El rendimiento bruto nunca depende
    de la velocidad del intérprete.
 
-Restricción técnica que motiva el diseño: gopher-lua **no es thread-safe**; un
-estado Lua solo puede tocarse desde una goroutine. El patrón es el de
-Node/libuv/`vim.uv`, ya validado.
+Restricción técnica que motiva el diseño: el intérprete de Lua embebido **no es
+thread-safe** (ni la instancia PUC-Lua sobre wazero de hoy ni el gopher-lua
+legacy lo eran); un estado Lua solo puede tocarse desde una goroutine. El patrón
+es el de Node/libuv/`vim.uv`, ya validado.
 
 El aislamiento es **por tarea, no por plugin** (ADR-008): todos los plugins
 conviven en el estado principal — lo que permite que se `require` entre sí y

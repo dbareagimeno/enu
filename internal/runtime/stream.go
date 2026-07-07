@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.http.stream` — respuesta HTTP en streaming (api.md §8, sesión S20,
@@ -60,11 +58,6 @@ import (
 // El `Stream` NO es un `ownedHandle` por dueño como `Proc`: un stream es de la task
 // que lo consume (su vida es la del turno de IO), no del plugin —se ata con
 // `cleanup`, no con el registro de `reload`—; aun así se rastrea para `Close`.
-
-// streamTypeName identifica la metatabla del handle `Stream` (lo que devuelve
-// `nu.http.stream`), de la que cuelgan `chunks`/`events`/`close` y los campos
-// `status`/`headers`.
-const streamTypeName = "nu.http.Stream"
 
 // maxStreamBuffer es el tope de bytes del body **pendientes de consumir** en la
 // cola interna de un `Stream` (§8). Si la goroutine de fondo acumula más que esto
@@ -300,69 +293,17 @@ func (st *httpStream) close() {
 		if st.body != nil {
 			_ = st.body.Close()
 		}
-		st.s.untrackStream(st)
+		// El rastreo del scheduler (para `Runtime.Close` → `stopAllStreams`) es del
+		// backend gopher; el backend wasm (M13b) reusa este handle VM-agnóstico con
+		// `s == nil` (su ciclo de vida a nivel de Runtime lo cablea M13d), así que se
+		// guarda el nil —igual que `luaWs.close`—.
+		if st.s != nil {
+			st.s.untrackStream(st)
+		}
 	})
 }
 
 // --- nu.http.stream -----------------------------------------------------------
-
-// httpStreamStart implementa `nu.http.stream(opts) -> Stream` ⏸ (§8). Reusa el
-// parseo de `opts` y el modelo de cliente de S19; lo que cambia es que **no
-// bufferiza el body**: lee solo hasta las cabeceras y devuelve el `Stream`. El
-// `opts.timeout_ms` cubre hasta aquí; el `opts.idle_timeout_ms` protege el body.
-func (rt *Runtime) httpStream(L *lua.LState) int {
-	if !rt.requireTask(L, "nu.http.stream") {
-		return 0
-	}
-	opts, ok := parseReqOpts(L)
-	if !ok {
-		return 0 // parseReqOpts ya lanzó EINVAL
-	}
-	idle, ok := parseIdleTimeout(L)
-	if !ok {
-		return 0
-	}
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		// Fuera del token: arma y lanza la petición, lee SOLO hasta las cabeceras.
-		st, rerr := rt.http.openStream(rt.sched, opts, idle)
-		return func(L *lua.LState) []lua.LValue {
-			if rerr != nil {
-				raiseHTTPError(L, rerr)
-				return nil
-			}
-			rt.sched.trackStream(st)
-			ud := L.NewUserData()
-			ud.Value = st
-			L.SetMetatable(ud, L.GetTypeMetatable(streamTypeName))
-			return []lua.LValue{ud}
-		}
-	})
-	return pushAll(L, vals)
-}
-
-// parseIdleTimeout extrae `opts.idle_timeout_ms` (§8), validándolo igual que
-// `timeout_ms`: ausente → 0 (sin idle-timeout); presente debe ser un número
-// positivo, si no `EINVAL`. Corre bajo el token (toca Lua) tras `parseReqOpts`.
-func parseIdleTimeout(L *lua.LState) (time.Duration, bool) {
-	tbl, ok := L.Get(1).(*lua.LTable)
-	if !ok {
-		return 0, true // parseReqOpts ya validó que opts es tabla; defensivo
-	}
-	switch v := tbl.RawGetString("idle_timeout_ms").(type) {
-	case lua.LNumber:
-		if v <= 0 {
-			raiseError(L, CodeEINVAL, "nu.http.stream: opts.idle_timeout_ms debe ser positivo", lua.LNil)
-			return 0, false
-		}
-		return time.Duration(v) * time.Millisecond, true
-	case *lua.LNilType, nil:
-		return 0, true
-	default:
-		raiseError(L, CodeEINVAL, "nu.http.stream: opts.idle_timeout_ms debe ser un número", lua.LNil)
-		return 0, false
-	}
-}
 
 // openStream hace la petición **fuera del token** y devuelve un `httpStream` con
 // las cabeceras ya recibidas y la goroutine de fondo leyendo el body. NO lee el
@@ -431,187 +372,4 @@ func (st *httpState) openStream(sched *scheduler, o reqOpts, idle time.Duration)
 	// Cabeceras recibidas: el `Stream` toma posesión del body y del `cancel`. La
 	// goroutine de fondo (en `newHTTPStream`) empieza a leer el body de inmediato.
 	return newHTTPStream(sched, resp.StatusCode, flattenHeaders(resp.Header), resp.Body, cancel, idle), nil
-}
-
-// --- registro y métodos del tipo Stream ---------------------------------------
-
-// registerStreamType instala la metatabla del tipo `Stream` con `chunks`/`events`/
-// `close` y un `__index` que también resuelve los campos `status`/`headers` (§8).
-// Lo llama `registerHTTP` (http.go). Como `status`/`headers` son **campos** (no
-// métodos) en el contrato, el `__index` los devuelve directamente y delega el
-// resto en la tabla de métodos.
-func (rt *Runtime) registerStreamType() {
-	L := rt.L
-	mt := L.NewTypeMetatable(streamTypeName)
-
-	methods := L.NewTable()
-	methods.RawSetString("chunks", L.NewFunction(rt.streamChunks))
-	methods.RawSetString("events", L.NewFunction(rt.streamEvents))
-	methods.RawSetString("close", L.NewFunction(rt.streamClose))
-
-	// `__index` función: resuelve `status`/`headers` como campos y los métodos por
-	// nombre. Un acceso desconocido cae a nil (como una tabla normal).
-	L.SetField(mt, "__index", L.NewFunction(func(L *lua.LState) int {
-		st := checkStream(L)
-		if st == nil {
-			return 0
-		}
-		key := L.CheckString(2)
-		switch key {
-		case "status":
-			L.Push(lua.LNumber(st.status))
-			return 1
-		case "headers":
-			h := L.NewTable()
-			for name, value := range st.headers {
-				h.RawSetString(name, lua.LString(value))
-			}
-			L.Push(h)
-			return 1
-		default:
-			L.Push(methods.RawGetString(key))
-			return 1
-		}
-	}))
-}
-
-// checkStream recupera el `*httpStream` del userdata `self` del primer argumento.
-// Lanza `EINVAL` si no es un handle de `Stream`.
-func checkStream(L *lua.LState) *httpStream {
-	ud := L.CheckUserData(1)
-	st, ok := ud.Value.(*httpStream)
-	if !ok {
-		raiseError(L, CodeEINVAL, "Stream: se esperaba un handle de Stream", lua.LNil)
-		return nil
-	}
-	return st
-}
-
-// streamChunks implementa `Stream:chunks() -> iterator` ⏸ (§8). Devuelve una
-// **función iteradora** que, en cada llamada, suspende hasta el siguiente trozo
-// crudo del body y lo devuelve; `nil` al terminar el body (fin del stream). Un
-// error de transporte/backpressure/idle se **lanza** desde el `next` (capturable
-// con `pcall`).
-func (rt *Runtime) streamChunks(L *lua.LState) int {
-	st := checkStream(L)
-	if st == nil {
-		return 0
-	}
-	L.Push(L.NewFunction(func(L *lua.LState) int {
-		if !rt.requireTask(L, "Stream:chunks (next)") {
-			return 0
-		}
-		vals := rt.sched.suspend(L, func() deliverFn {
-			chunk, eof, rerr := st.nextChunk()
-			return func(L *lua.LState) []lua.LValue {
-				return deliverChunk(L, chunk, eof, rerr)
-			}
-		})
-		return pushAll(L, vals)
-	}))
-	return 1
-}
-
-// deliverChunk traduce el resultado de `nextChunk` a los valores que el iterador
-// devuelve a Lua: el string del trozo, `nil` en fin de stream, o el error mapeado.
-// Corre bajo el token (es la `deliverFn`).
-func deliverChunk(L *lua.LState, chunk []byte, eof bool, rerr error) []lua.LValue {
-	if rerr != nil {
-		raiseStreamError(L, rerr)
-		return nil
-	}
-	if eof {
-		return []lua.LValue{lua.LNil} // fin del body
-	}
-	return []lua.LValue{lua.LString(chunk)}
-}
-
-// raiseStreamError lanza el error de un `next` de stream hacia Lua: un cierre
-// (`ECLOSED`) o un `httpError` ya clasificado (`EIO`/`ETIMEOUT`/`ENET`).
-func raiseStreamError(L *lua.LState, err error) {
-	if errors.Is(err, errStreamClosed) {
-		raiseError(L, CodeECLOSED, "nu.http.stream: el stream fue cerrado", lua.LNil)
-		return
-	}
-	raiseHTTPError(L, err)
-}
-
-// streamEvents implementa `Stream:events() -> iterator` ⏸ (§8), la lógica 🔒.
-// Devuelve una función iteradora que, en cada llamada, suspende hasta tener un
-// **evento SSE completo** y devuelve una tabla `{event?, data, id?}`; `nil` al
-// terminar el body. El parser SSE es **incremental** (`sseParser`): un evento
-// puede llegar partido entre varios trozos de red, así que cada `next` consume
-// trozos crudos (vía `nextChunk`) hasta cerrar un evento o agotar el body.
-func (rt *Runtime) streamEvents(L *lua.LState) int {
-	st := checkStream(L)
-	if st == nil {
-		return 0
-	}
-	L.Push(L.NewFunction(func(L *lua.LState) int {
-		if !rt.requireTask(L, "Stream:events (next)") {
-			return 0
-		}
-		// El bucle puede suspender VARIAS veces (un evento partido en N trozos): cada
-		// `suspend` saca un trozo, lo mete en el parser y, si aún no hay evento
-		// completo, vuelve a suspender por el siguiente. El parser guarda su estado
-		// (`leftover`) entre trozos y entre llamadas a `next`.
-		for {
-			// 1) ¿El parser ya tiene un evento completo de un trozo anterior?
-			if ev, has := st.sse.next(); has {
-				return pushEvent(L, ev)
-			}
-			// 2) No: pide el siguiente trozo crudo (suspende).
-			var (
-				chunk []byte
-				eof   bool
-				rerr  error
-			)
-			rt.sched.suspend(L, func() deliverFn {
-				chunk, eof, rerr = st.nextChunk()
-				return func(L *lua.LState) []lua.LValue { return nil }
-			})
-			if rerr != nil {
-				raiseStreamError(L, rerr)
-				return 0
-			}
-			if eof {
-				// Fin del body: vacía el parser (un último evento sin línea en blanco
-				// final se despacha en EOF, semántica SSE); si no queda nada, fin.
-				if ev, has := st.sse.flush(); has {
-					return pushEvent(L, ev)
-				}
-				L.Push(lua.LNil)
-				return 1
-			}
-			st.sse.feed(chunk)
-		}
-	}))
-	return 1
-}
-
-// pushEvent empuja a Lua la tabla `{event?, data, id?}` de un evento SSE (§8). Los
-// campos opcionales (`event`, `id`) solo se ponen si el evento los traía —`data`
-// siempre está (un evento sin `data` no se despacha, ver `sseParser`)—.
-func pushEvent(L *lua.LState, ev sseEvent) int {
-	t := L.NewTable()
-	t.RawSetString("data", lua.LString(ev.data))
-	if ev.hasEvent {
-		t.RawSetString("event", lua.LString(ev.event))
-	}
-	if ev.hasID {
-		t.RawSetString("id", lua.LString(ev.id))
-	}
-	L.Push(t)
-	return 1
-}
-
-// streamClose implementa `Stream:close()` (§8): aborta la conexión y libera. **No
-// es ⏸** (cerrar es inmediato) e idempotente.
-func (rt *Runtime) streamClose(L *lua.LState) int {
-	st := checkStream(L)
-	if st == nil {
-		return 0
-	}
-	st.close()
-	return 0
 }

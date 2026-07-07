@@ -2,23 +2,20 @@ package runtime
 
 // Tests de G41: un error CAPTURADO no debe cerrar upvalues de frames vivos.
 //
-// El bug (aguas arriba, gopher-lua v1.1.2): `raiseError` con
-// `hasErrorFunc == false` ejecuta `closeAllUpvalues()` sobre TODA la pila del
-// thread — también los frames por debajo del pcall que captura, que siguen
-// vivos. Una closure que capturó un local vivo queda escribiendo/leyendo una
-// celda desanclada mientras el dueño usa el registry: las escrituras "se
-// pierden" en silencio. Lua estándar solo cierra los frames desenrollados.
-//
-// El blindaje (cancel.go, G41): `hasErrorFunc` se mantiene ARMADO mientras
-// haya un pcall/xpcall envuelto activo (contador de profundidad por thread),
-// de modo que el camino de raiseError sea el mismo que upstream usa con
-// message handler (que no sobre-cierra). Estos tests blindan:
+// HISTORIA. G41 nació de un bug de gopher-lua v1.1.2 (`raiseError` con
+// `hasErrorFunc == false` cerraba los upvalues de TODA la pila, también los de
+// frames vivos bajo el pcall que capturaba) y se tapó con un blindaje en el
+// desaparecido cancel.go. Con la retirada de gopher (M17) el blindaje murió: en
+// PUC-Lua sobre wasm la semántica correcta —solo se cierran los frames
+// desenrollados— la da el propio motor. Estos tests SOBREVIVEN como blindaje de
+// la SEMÁNTICA observable (son Lua puro, sin andamiaje de motor):
 //   - la repro mínima (síncrona, sin tasks);
-//   - pcalls ANIDADOS (el flag de upstream no es una pila; el contador sí);
-//   - el caso real que la destapó: un handler de eventos escribiendo en el
-//     upvalue de una task suspendida tras un error capturado previo;
-//   - que los abortos (§1.3) siguen siendo NO capturables (la inmunidad de
-//     S08 no se ve afectada por el re-armado del flag).
+//   - pcalls ANIDADOS;
+//   - el caso real que destapó la grieta: un handler de eventos escribiendo en
+//     el upvalue de una task suspendida tras un error capturado previo;
+//   - que los abortos (§1.3) siguen siendo NO capturables.
+// (La referencia gemela en el propio motor: TestG41SemanticaReferencia,
+// internal/vmwasm/vmwasm_test.go.)
 
 import (
 	"testing"

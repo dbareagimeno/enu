@@ -385,10 +385,13 @@ func TestWatchReloadReleasesHandle(t *testing.T) {
 
 	rt := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()), WithPluginDir(dir))
 	t.Cleanup(rt.Close)
+	h := &harness{t: t, rt: rt}
+	// El etiquetado de handles por dueño (G2) se sondea con `countOwnerHandles`, que
+	// consulta el registro del preludio de reload en wasm (`__count_owner`) —la misma
+	// vía que usan los TestReload*—.
 	if err := rt.Boot(); err != nil {
 		t.Fatalf("Boot: %v", err)
 	}
-	h := &harness{t: t, rt: rt}
 
 	// Tras el arranque, P tiene exactamente 1 handle (el watcher).
 	if got := countOwnerHandles(h, "P"); got != 1 {

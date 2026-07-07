@@ -15,7 +15,7 @@ package runtime
 //     repl (source="builtin") y evalúa Lua. Es la prueba de que el runtime sirve
 //     sin el agente.
 //   - **EVALÚA Lua arbitrario con la API pública**: `repl.eval` compila con
-//     `load`/`loadstring` (que el sandbox de S01 NO retiró —memoria, no disco—) y
+//     `load` (que el sandbox de S01 NO retiró —memoria, no disco—) y
 //     ejecuta: expresiones (`1+1`→2), sentencias (`x=5`), llamadas a la API
 //     (`nu.version.api`), errores (capturados, no tumban el repl) e incompletitud
 //     (multilínea). NO hizo falta una primitiva nueva (corolario de completitud
@@ -249,7 +249,7 @@ func TestReplEvalSintaxis(t *testing.T) {
 
 // TestReplEvalIncompleta (multilínea): una entrada con un bloque/función/string sin
 // cerrar se marca INCOMPLETA (incomplete=true), no como error: es la señal de "dame
-// otra línea". gopher-lua la distingue por "at EOF" en el mensaje.
+// otra línea". PUC-Lua 5.4 la distingue por "<eof>" en el mensaje.
 func TestReplEvalIncompleta(t *testing.T) {
 	h := bootRepl(t)
 	for _, src := range []string{

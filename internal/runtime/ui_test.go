@@ -248,47 +248,8 @@ func TestUIKeymapBadSeqEINVAL(t *testing.T) {
 	}
 }
 
-// S31, G2: los handlers de input son `ownedHandle`. Un `reload` (releaseOwnerHandles)
-// suelta los de un plugin —no deja handlers de input huérfanos—. Caja blanca: crea
-// los handlers bajo un dueño simulado y comprueba que tras la liberación dejan de
-// recibir input.
-func TestUIInputOwnedHandleG2(t *testing.T) {
-	h := newHarnessUI(t, 20, 5)
-	counts := registerGoCounter(h)
-
-	// Simula el contexto del plugin "P": un on_input y un keymap creados ahí.
-	h.rt.ownerStack = append(h.rt.ownerStack, &pluginInfo{Name: "P"})
-	h.eval(`
-		nu.ui.on_input(function(ev) mark("raw:"..ev.key); return true end)
-		nu.ui.keymap("x", function() mark("km") end)
-	`)
-	h.rt.ownerStack = h.rt.ownerStack[:0]
-
-	if got := len(h.rt.sched.ownerHandles["P"]); got != 2 {
-		t.Fatalf("P debería tener 2 handles de input trackeados, tiene %d", got)
-	}
-
-	// Antes del reload: el input llega a los handlers de P.
-	in := h.rt.ui.input
-	withToken(h.rt, func() { feedKey(in, "y"); feedKey(in, "x") })
-	if counts["raw:y"] != 1 || counts["km"] != 1 {
-		t.Fatalf("antes de reload, los handlers de P deben recibir: %v", counts)
-	}
-
-	// reload de P: libera sus handlers de input (G2).
-	h.rt.sched.releaseOwnerHandles("P")
-	if _, ok := h.rt.sched.ownerHandles["P"]; ok {
-		t.Fatal("G2: tras releaseOwnerHandles no debe quedar ningún handle de P")
-	}
-
-	// Tras el reload: el input ya no llega a ningún handler (la pila quedó vacía).
-	withToken(h.rt, func() {
-		if feedKey(in, "y") {
-			t.Fatal("G2: tras reload no debe quedar handler que consuma")
-		}
-		feedKey(in, "x")
-	})
-	if counts["raw:y"] != 1 || counts["km"] != 1 {
-		t.Fatalf("G2: tras reload los handlers de P NO deben recibir más: %v", counts)
-	}
-}
+// (El test de caja blanca TestUIInputOwnedHandleG2 —handlers de input soltados por
+// dueño en un reload, G2— se retiró con el inputState gopher en M17: la pila de
+// input vive en el preludio Lua de la Instance y su liberación por dueño la ejerce
+// el reload wasm (`__release_owner`, vmwasm_loader.go), cubierta por los tests de
+// reload de las extensiones sobre wasm.)

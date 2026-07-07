@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"github.com/rivo/uniseg"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.text` — render y procesado de texto (api.md §10, sesión S22, inventario
@@ -32,91 +31,6 @@ import (
 //     **dos** celdas; una familia "👨‍👩‍👧‍👦" son cuatro emojis unidos por
 //     ZWJ (U+200D) que el terminal pinta como **un** glifo —uniseg lo trata como
 //     **un** grapheme de anchura **2** (el ZWJ interno aporta 0)—.
-
-// registerText cuelga `nu.text` del global `nu` con la superficie de S22:
-// `width`/`wrap`/`truncate`. Lo llama `registerNu` (nu.go). El resto de §10
-// (markdown/highlight/diff/re) son sesiones posteriores.
-func (rt *Runtime) registerText(nu *lua.LTable) {
-	L := rt.L
-	textT := L.NewTable()
-	textT.RawSetString("width", L.NewFunction(rt.textWidth))
-	textT.RawSetString("wrap", L.NewFunction(rt.textWrap))
-	textT.RawSetString("truncate", L.NewFunction(rt.textTruncate))
-	// `nu.text.markdown` (§10, S23): render completo de markdown a un Block,
-	// themable y streaming-safe. Vive en markdown.go (delega el parseo de
-	// CommonMark a goldmark y reusa el word-wrap/anchura de S22).
-	rt.registerMarkdown(textT)
-	// `nu.text.highlight` (§10, S24): syntax highlighting de un snippet a un
-	// Block. Vive en highlight.go (delega el léxico a chroma; lenguaje
-	// desconocido/vacío degrada a texto plano). Reusa el armazón "una línea → N
-	// spans" que S23 dejó preparado en renderCodeBlock.
-	rt.registerHighlight(textT)
-	// `nu.text.diff` (§10, S25): diff estructurado de dos strings línea a línea
-	// (`{hunks, block?}`; `opts.render=true` añade el Block pintado). Vive en
-	// diff.go (LCS line-based puro-Go); reusa los helpers de Block de S22.
-	rt.registerDiff(textT)
-	nu.RawSetString("text", textT)
-}
-
-// textWidth implementa `nu.text.width(s) -> integer` (§10, la lógica 🔒): la
-// anchura de `s` en **celdas de terminal**, contemplando graphemes, east-asian
-// wide y emoji (incluidas las secuencias ZWJ). Delega en `uniseg.StringWidth`,
-// que itera los grapheme clusters y suma su anchura monospace. String vacío → 0.
-func (rt *Runtime) textWidth(L *lua.LState) int {
-	s := L.CheckString(1)
-	L.Push(lua.LNumber(uniseg.StringWidth(s)))
-	return 1
-}
-
-// textWrap implementa `nu.text.wrap(s, width, opts?) -> Block` (§10): word-wrap de
-// `s` a `width` celdas, devuelto como un Block (block.go) cuyas líneas son las
-// líneas envueltas. `opts` admite `style` (un `Style` por defecto aplicado a cada
-// span de texto producido). El Block resultante tiene `.width <= width` y
-// `.height` = número de líneas envueltas.
-//
-// ESTRATEGIA (documentada en claude_decisions.md S22). Word-wrap por **palabras**
-// separadas por espacios (los saltos de línea explícitos `\n` de `s` se respetan
-// como límites de párrafo). Una palabra que **no cabe** en `width` celdas (una URL
-// larga, una ruta) se **parte por grapheme** en trozos de a lo sumo `width` celdas
-// —partir es preferible a desbordar el viewport (el compositor recortaría y se
-// perdería texto sin avisar)—. `width <= 0` → `EINVAL` (no hay anchura donde
-// envolver).
-func (rt *Runtime) textWrap(L *lua.LState) int {
-	s := L.CheckString(1)
-	width := L.CheckInt(2)
-	if width <= 0 {
-		raiseError(L, CodeEINVAL, "nu.text.wrap: width debe ser un entero positivo", lua.LNil)
-		return 0
-	}
-
-	var defStyle *style
-	if opts := L.Get(3); opts != lua.LNil {
-		t, ok := opts.(*lua.LTable)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.text.wrap: opts debe ser una tabla", lua.LNil)
-			return 0
-		}
-		if styleVal := t.RawGetString("style"); styleVal != lua.LNil {
-			parsed, err := parseStyle(L, styleVal)
-			if err != "" {
-				raiseError(L, CodeEINVAL, "nu.text.wrap: opts."+err, lua.LNil)
-				return 0
-			}
-			defStyle = parsed
-		}
-	}
-
-	textLines := wrapText(s, width)
-
-	// Cada línea de texto se vuelve una línea de un solo span (con el estilo por
-	// defecto, si lo hay). Una línea vacía conserva su hueco (afecta a .height).
-	blockLines := make([][]span, len(textLines))
-	for i, ln := range textLines {
-		blockLines[i] = []span{{text: ln, st: defStyle}}
-	}
-	rt.pushBlock(L, newBlock(blockLines))
-	return 1
-}
 
 // wrapText es el algoritmo de word-wrap puro (sin Lua ni estilos): parte `s` en
 // líneas de a lo sumo `width` celdas. Respeta los `\n` explícitos como límites
@@ -251,36 +165,6 @@ func splitWide(word string, width int) []string {
 		parts = append(parts, cur)
 	}
 	return parts
-}
-
-// textTruncate implementa `nu.text.truncate(s, width, opts?) -> string` (§10):
-// recorta `s` a a lo sumo `width` celdas, opcionalmente con una elipsis
-// (`opts.ellipsis`, p. ej. "…" o "..."). El recorte es por **grapheme** —nunca
-// parte un grapheme ni un emoji ZWJ por la mitad—. Si `s` ya cabe en `width`, se
-// devuelve tal cual (sin elipsis). Si no cabe, se recorta dejando hueco para la
-// elipsis, de modo que `width(resultado) <= width`.
-func (rt *Runtime) textTruncate(L *lua.LState) int {
-	s := L.CheckString(1)
-	width := L.CheckInt(2)
-	if width < 0 {
-		raiseError(L, CodeEINVAL, "nu.text.truncate: width no puede ser negativo", lua.LNil)
-		return 0
-	}
-
-	ellipsis := ""
-	if opts := L.Get(3); opts != lua.LNil {
-		t, ok := opts.(*lua.LTable)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.text.truncate: opts debe ser una tabla", lua.LNil)
-			return 0
-		}
-		if e, ok := t.RawGetString("ellipsis").(lua.LString); ok {
-			ellipsis = string(e)
-		}
-	}
-
-	L.Push(lua.LString(truncateText(s, width, ellipsis)))
-	return 1
 }
 
 // truncateText es el algoritmo de recorte puro: devuelve `s` recortado a a lo sumo

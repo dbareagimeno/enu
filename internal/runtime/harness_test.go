@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Arnés de tests del runtime (S02): corre snippets Lua contra un Runtime real y
@@ -82,13 +80,36 @@ func (h *harness) logLines() []string {
 	return strings.Split(trimmed, "\n")
 }
 
-// register instala `fn` como global `name` en el estado Lua, para que los
-// snippets la invoquen. Es la vía por la que una prueba inyecta una primitiva Go
-// de andamiaje (p. ej. una que lanza un error estructurado) sin contaminar la
-// superficie del runtime de producción.
-func (h *harness) register(name string, fn lua.LGFunction) {
+// withToken corre `fn` con el token tomado: la vía de los tests que leen el
+// compositor (composeRow) serializados con el pintor (paintLocked, ui.go).
+func withToken(rt *Runtime, fn func()) {
+	rt.sched.acquire()
+	defer rt.sched.release()
+	fn()
+}
+
+// defWasmGlobal define un global Lua evaluando `code` en el ESTADO PRINCIPAL del
+// backend wasm. Es la vía por la que un test inyecta una primitiva de andamiaje
+// EXPRESABLE EN LUA (p. ej. un echo que suspende con nu.task.sleep). Falla la prueba
+// si el snippet de definición no evalúa limpio.
+func (h *harness) defWasmGlobal(code string) {
 	h.t.Helper()
-	h.rt.L.SetGlobal(name, h.rt.L.NewFunction(fn))
+	if _, luaErr, goErr := h.rt.wasm.Eval(code); goErr != nil {
+		h.t.Fatalf("defWasmGlobal: fallo del motor wasm: %v\n%s", goErr, code)
+	} else if luaErr != "" {
+		h.t.Fatalf("defWasmGlobal: error Lua: %s\n%s", luaErr, code)
+	}
+}
+
+// regStringFn instala una "constante" Lua `name()` que devuelve el string `value`,
+// inyectando el valor sin interpolar (SetStringGlobal) y definiendo el accesor sobre
+// el estado wasm. Es el idioma de withURL/BASE generalizado, para tests que pasan
+// varios blobs de texto (fuentes, markdown) a los snippets.
+func (h *harness) regStringFn(name, value string) {
+	h.t.Helper()
+	valName := "__" + name + "_val"
+	h.rt.SetStringGlobal(valName, value)
+	h.defWasmGlobal("function " + name + "() return " + valName + " end")
 }
 
 // eval corre `code` exigiendo que termine sin error y devuelve sus valores de

@@ -6,8 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // CP-5 · "El camino de red, incluido streaming" (checkpoint de integración tras
@@ -146,8 +144,9 @@ func TestCP5BackpressureEIO(t *testing.T) {
 // que `withURL`/`URL()`, pero permite varias URLs en el mismo runtime).
 func setURLGlobal(h *harness, name, s string) {
 	h.t.Helper()
-	h.rt.L.SetGlobal(name, h.rt.L.NewFunction(func(L *lua.LState) int {
-		L.Push(lua.LString(s))
-		return 1
-	}))
+	// El valor cruza sin interpolar (SetStringGlobal); el accesor `name()` se define
+	// con el nombre (identificador controlado del test).
+	valName := "__" + name + "_val"
+	h.rt.SetStringGlobal(valName, s)
+	h.defWasmGlobal("function " + name + "() return " + valName + " end")
 }

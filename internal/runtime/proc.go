@@ -11,8 +11,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.proc` — subprocesos (api.md §6, sesión S16, inventario 🔒). Lanza procesos
@@ -55,10 +53,6 @@ import (
 // `true` aunque sea otro proceso. Es la pieza para detectar locks de sesión
 // huérfanos (sesiones.md §6): un lock cuyo pid ya no existe es huérfano. NO es ⏸
 // (consulta inmediata, sin IO que esperar).
-
-// procTypeName identifica la metatabla del handle `Proc` (lo que devuelve `spawn`),
-// de la que cuelgan `write`/`close_stdin`/`read_line`/`read`/`wait`/`kill`.
-const procTypeName = "nu.proc.Proc"
 
 // luaProc es el handle Go detrás del userdata `Proc`. Envuelve el `*exec.Cmd` ya
 // arrancado y sus tres pipes (stdin escribible, stdout/stderr leíbles). El IO de
@@ -144,30 +138,6 @@ func (p *luaProc) release() {
 // owner devuelve el dueño con que se etiquetó el proc al crearse.
 func (p *luaProc) owner() string { return p.ownerName }
 
-// registerProc cuelga `nu.proc` del global `nu` con sus firmas de §6, e instala la
-// metatabla del tipo `Proc`. Lo llama `registerNu` (nu.go). Como el resto de IO,
-// `proc` es [W] (§16: disponible en workers; los workers son S34, así que hoy se
-// registra en el estado principal).
-func (rt *Runtime) registerProc(nu *lua.LTable) {
-	L := rt.L
-
-	mt := L.NewTypeMetatable(procTypeName)
-	index := L.NewTable()
-	index.RawSetString("write", L.NewFunction(rt.procWrite))
-	index.RawSetString("close_stdin", L.NewFunction(rt.procCloseStdin))
-	index.RawSetString("read_line", L.NewFunction(rt.procReadLine))
-	index.RawSetString("read", L.NewFunction(rt.procRead))
-	index.RawSetString("wait", L.NewFunction(rt.procWait))
-	index.RawSetString("kill", L.NewFunction(rt.procKill))
-	L.SetField(mt, "__index", index)
-
-	proc := L.NewTable()
-	proc.RawSetString("run", L.NewFunction(rt.procRun))
-	proc.RawSetString("spawn", L.NewFunction(rt.procSpawn))
-	proc.RawSetString("alive", L.NewFunction(rt.procAlive))
-	nu.RawSetString("proc", proc)
-}
-
 // procOpts recoge las opciones de `run`/`spawn` (§6): `cwd`, `env`, `stdin`,
 // `timeout_ms`. Se extraen del segundo argumento (una tabla) en el estado principal,
 // bajo el token; luego cruzan a la goroutine de fondo como datos Go puros.
@@ -185,62 +155,6 @@ type procOpts struct {
 	// goroutine de fondo— fija de forma determinista qué `setenv` ve este lanzado:
 	// los que ocurrieron ANTES de la llamada, no los de después. nil = sin overlay.
 	envOver map[string]string
-}
-
-// parseProcArgs valida y extrae `argv` (1.er arg, array no vacío de strings) y las
-// `opts` (2.º arg, tabla opcional) de una llamada a `run`/`spawn`. Lanza `EINVAL`
-// si `argv` no es un array de strings o está vacío: sin ejecutable no hay proceso.
-// Corre en el estado principal bajo el token (toca Lua), antes de cualquier IO.
-func parseProcArgs(L *lua.LState) ([]string, procOpts, bool) {
-	tbl := L.CheckTable(1)
-	n := tbl.Len()
-	if n == 0 {
-		raiseError(L, CodeEINVAL, "nu.proc: argv debe ser un array no vacío (argv[0] es el ejecutable)", lua.LNil)
-		return nil, procOpts{}, false
-	}
-	argv := make([]string, n)
-	for i := 1; i <= n; i++ {
-		s, ok := tbl.RawGetInt(i).(lua.LString)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.proc: cada elemento de argv debe ser un string", lua.LNil)
-			return nil, procOpts{}, false
-		}
-		argv[i-1] = string(s)
-	}
-
-	var opts procOpts
-	if o, ok := L.Get(2).(*lua.LTable); ok {
-		if v, ok := o.RawGetString("cwd").(lua.LString); ok {
-			opts.cwd = string(v)
-		}
-		// `env`: una tabla `{ K = V }` se traduce a `["K=V", ...]`. Presente (aunque
-		// vacía) REEMPLAZA el entorno heredado —env explícito = control total—; ausente
-		// lo hereda (env nil → exec.Cmd usa `os.Environ`). El overlay de `nu.sys.setenv`
-		// (S17) queda POR DEBAJO de un `env` explícito (ver `mergedEnv`): con `env`
-		// presente, el overlay no se aplica; sin él, el overlay pisa lo heredado.
-		if envTbl, ok := o.RawGetString("env").(*lua.LTable); ok {
-			opts.env = []string{}
-			envTbl.ForEach(func(k, val lua.LValue) {
-				ks, kok := k.(lua.LString)
-				vs, vok := val.(lua.LString)
-				if kok && vok {
-					opts.env = append(opts.env, string(ks)+"="+string(vs))
-				}
-			})
-		}
-		if v, ok := o.RawGetString("stdin").(lua.LString); ok {
-			opts.stdin = []byte(v)
-			opts.hasStdin = true
-		}
-		if v, ok := o.RawGetString("timeout_ms").(lua.LNumber); ok {
-			if v < 0 {
-				raiseError(L, CodeEINVAL, "nu.proc: timeout_ms no puede ser negativo", lua.LNil)
-				return nil, procOpts{}, false
-			}
-			opts.timeout = time.Duration(v) * time.Millisecond
-		}
-	}
-	return argv, opts, true
 }
 
 // newCmd construye un `*exec.Cmd` a partir de `argv` y `opts`, **sin arrancarlo**.
@@ -336,23 +250,6 @@ func splitEnv(kv string) (string, string, bool) {
 	return kv, "", false
 }
 
-// mapProcStartError traduce el error de arrancar un proceso (`cmd.Start`) a un
-// código §1.4 y lo lanza: ejecutable inexistente → `ENOENT`, sin permiso de
-// ejecución → `EACCES`, cualquier otro fallo → `EIO`. Cubre los dos modos en que
-// "no existe el ejecutable" se reporta: `os.ErrNotExist` (una ruta absoluta que no
-// está) y `exec.ErrNotFound` ("executable file not found in $PATH", cuando se busca
-// por nombre en el PATH) —ambos son, para el usuario, "ese binario no existe"—.
-func mapProcStartError(L *lua.LState, err error) {
-	switch {
-	case errors.Is(err, os.ErrNotExist), errors.Is(err, exec.ErrNotFound):
-		raiseError(L, CodeENOENT, err.Error(), lua.LNil)
-	case errors.Is(err, os.ErrPermission):
-		raiseError(L, CodeEACCES, err.Error(), lua.LNil)
-	default:
-		raiseError(L, CodeEIO, err.Error(), lua.LNil)
-	}
-}
-
 // exitCode extrae el código de salida del resultado de `cmd.Wait`. nil → 0 (salió
 // limpio); un `*exec.ExitError` lleva el código del SO; otro error (fallo al
 // esperar) se rinde como -1 (no debería ocurrir en la práctica). Un proceso matado
@@ -371,50 +268,6 @@ func exitCode(err error) int {
 }
 
 // --- nu.proc.run --------------------------------------------------------------
-
-// procRun implementa `nu.proc.run(argv, opts?) -> {code, stdout, stderr}` ⏸ (§6):
-// la conveniencia con buffers. Lanza el proceso, le alimenta `opts.stdin` (si lo
-// hay), recoge stdout/stderr **enteros** en memoria, espera a que termine y
-// devuelve `{code, stdout, stderr}`. TODO el ciclo (start + IO + wait) va en la
-// goroutine de fondo del puente ⏸: no toca Lua hasta la `deliverFn`.
-//
-// `code != 0` **no lanza** (es dato: un `grep` sin coincidencias sale con 1 y eso es
-// información, no un fallo del runtime). Lo que SÍ lanza: que el ejecutable no exista
-// o no se pueda arrancar (`ENOENT`/`EACCES`/`EIO`), o que `timeout_ms` se exceda
-// (`ETIMEOUT`, tras matar el proceso).
-func (rt *Runtime) procRun(L *lua.LState) int {
-	if !rt.requireTask(L, "nu.proc.run") {
-		return 0
-	}
-	argv, opts, ok := parseProcArgs(L)
-	if !ok {
-		return 0
-	}
-	// Foto del overlay de `nu.sys.setenv` (S17), tomada AQUÍ —estado principal, bajo
-	// el token— para fijar de forma determinista qué `setenv` ve este subproceso:
-	// los anteriores a la llamada (§7, "afecta solo a subprocesos futuros").
-	opts.envOver = rt.sys.envOverlay()
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		code, stdout, stderr, rerr := runBuffered(argv, opts)
-		return func(L *lua.LState) []lua.LValue {
-			if rerr != nil {
-				if errors.Is(rerr, errProcTimeout) {
-					raiseError(L, CodeETIMEOUT, "nu.proc.run: el proceso excedió timeout_ms y fue terminado", lua.LNil)
-				} else {
-					mapProcStartError(L, rerr)
-				}
-				return nil
-			}
-			res := L.NewTable()
-			res.RawSetString("code", lua.LNumber(code))
-			res.RawSetString("stdout", lua.LString(stdout))
-			res.RawSetString("stderr", lua.LString(stderr))
-			return []lua.LValue{res}
-		}
-	})
-	return pushAll(L, vals)
-}
 
 // errProcTimeout es el centinela interno que `runBuffered` devuelve cuando mató el
 // proceso por exceder `timeout_ms`. `procRun` lo distingue para lanzar `ETIMEOUT`
@@ -467,27 +320,23 @@ func runBuffered(argv []string, opts procOpts) (int, string, string, error) {
 
 // --- nu.proc.spawn ------------------------------------------------------------
 
-// procSpawn implementa `nu.proc.spawn(argv, opts?) -> Proc` (§6): control fino con
-// streams. **NO es ⏸**: arranca el proceso y devuelve el handle en el acto, sin
-// suspender —spawnear no bloquea—. El IO posterior (`write`/`read*`/`wait`) sí
-// suspende, sobre los pipes de este `Proc`.
-//
-// Se arranca con `cmd.Start()` (síncrono y barato: hace `fork`/`exec`, no espera al
-// proceso). Los pipes se montan ANTES de `Start`. Un fallo de arranque lanza
-// `ENOENT`/`EACCES`/`EIO` —no se devuelve un handle a medias—.
-//
-// `opts.stdin` (datos prefijados) no aplica a `spawn`: el streaming es vía
-// `Proc:write`; si se pasa, se ignora (el contrato de `spawn` es streams, no un
-// volcado inicial).
-func (rt *Runtime) procSpawn(L *lua.LState) int {
-	argv, opts, ok := parseProcArgs(L)
-	if !ok {
-		return 0
-	}
+// spawnProc arranca el subproceso descrito por `argv`/`opts` y monta su handle
+// `luaProc` —pipes, tracking, reaper y finalizer—, **sin tocar la VM**: es el
+// núcleo VM-agnóstico que comparten el backend gopher (`procSpawn`) y el wasm
+// (`registerProcWasm`). Toma aquí la foto del overlay de `nu.sys.setenv` (§7), como
+// el resto de `spawn`, en el estado principal. Devuelve o el handle ya arrancado o
+// el error **crudo** de arranque (`StdinPipe`/`os.Pipe`/`Start`), que cada backend
+// traduce a `ENOENT`/`EACCES`/`EIO` con su propio mapeador (`mapProcStartError` en
+// gopher, `mapProcStartErrorWasm` en wasm). No cambia el comportamiento observable
+// del backend gopher: allí `rt.sys` y `rt.sched` siempre existen, así que las
+// guardas de nil nunca se toman —solo permiten un `rt` mínimo en los tests de wasm—.
+func (rt *Runtime) spawnProc(argv []string, opts procOpts) (*luaProc, error) {
 	// Foto del overlay de `nu.sys.setenv` (S17): el subproceso ve los `setenv`
-	// previos a este `spawn` (§7). `spawn` corre en el estado principal bajo el
-	// token, así que esta lectura no compite con un `setenv` concurrente.
-	opts.envOver = rt.sys.envOverlay()
+	// previos a este `spawn` (§7). Corre en el estado principal, así que esta lectura
+	// no compite con un `setenv` concurrente.
+	if rt.sys != nil {
+		opts.envOver = rt.sys.envOverlay()
+	}
 
 	cmd := newCmd(argv, opts)
 
@@ -501,22 +350,19 @@ func (rt *Runtime) procSpawn(L *lua.LState) int {
 	// vale `StdinPipe` (es de escritura; `close_stdin` lo cierra a mano).
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		mapProcStartError(L, err)
-		return 0
+		return nil, err
 	}
 	rOut, wOut, err := os.Pipe()
 	if err != nil {
 		_ = stdin.Close()
-		mapProcStartError(L, err)
-		return 0
+		return nil, err
 	}
 	rErr, wErr, err := os.Pipe()
 	if err != nil {
 		_ = stdin.Close()
 		_ = rOut.Close()
 		_ = wOut.Close()
-		mapProcStartError(L, err)
-		return 0
+		return nil, err
 	}
 	cmd.Stdout = wOut
 	cmd.Stderr = wErr
@@ -527,8 +373,7 @@ func (rt *Runtime) procSpawn(L *lua.LState) int {
 		_ = wOut.Close()
 		_ = rErr.Close()
 		_ = wErr.Close()
-		mapProcStartError(L, err)
-		return 0
+		return nil, err
 	}
 	// Tras `Start`, el hijo ya tiene su copia de los extremos de escritura; cerramos
 	// los NUESTROS para que, cuando el hijo termine y cierre los suyos, los lectores
@@ -549,8 +394,10 @@ func (rt *Runtime) procSpawn(L *lua.LState) int {
 		ownerName: rt.currentOwner(),
 	}
 
-	rt.sched.trackProc(p)
-	rt.sched.track(p) // registro de handles por dueño (S13): que `reload` lo mate
+	if rt.sched != nil {
+		rt.sched.trackProc(p)
+		rt.sched.track(p) // registro de handles por dueño (S13): que `reload` lo mate
+	}
 
 	// Reaper de fondo: una goroutine que llama a `cmd.Wait` (vía `p.wait`, idempotente
 	// con `waitOnce`) en cuanto el proceso muera. SIN ella, un proceso al que se
@@ -567,54 +414,7 @@ func (rt *Runtime) procSpawn(L *lua.LState) int {
 	// contra una fuga, no la vía de vida del proceso (esa es `cleanup`)—.
 	runtime.SetFinalizer(p, func(p *luaProc) { p.killSignal(syscall.SIGKILL) })
 
-	ud := L.NewUserData()
-	ud.Value = p
-	L.SetMetatable(ud, L.GetTypeMetatable(procTypeName))
-	L.Push(ud)
-	return 1
-}
-
-// checkProc recupera el `*luaProc` del userdata `self` del primer argumento de un
-// método de `Proc`. Lanza `EINVAL` si no es un handle de `Proc`.
-func checkProc(L *lua.LState) *luaProc {
-	ud := L.CheckUserData(1)
-	p, ok := ud.Value.(*luaProc)
-	if !ok {
-		raiseError(L, CodeEINVAL, "Proc: se esperaba un handle de Proc", lua.LNil)
-		return nil
-	}
-	return p
-}
-
-// procWrite implementa `Proc:write(data)` ⏸ (§6): escribe `data` al stdin del
-// proceso en streaming. Es ⏸ porque escribir puede **bloquearse** (backpressure: si
-// el proceso no lee su stdin, el buffer del pipe se llena y el `Write` espera). La
-// escritura va en la goroutine de fondo; el token queda libre mientras tanto. Tras
-// `close_stdin` (o si nunca hubo stdin), escribir lanza `ECLOSED`.
-func (rt *Runtime) procWrite(L *lua.LState) int {
-	if !rt.requireTask(L, "Proc:write") {
-		return 0
-	}
-	p := checkProc(L)
-	if p == nil {
-		return 0
-	}
-	data := []byte(L.CheckString(2))
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		err := p.writeStdin(data)
-		return func(L *lua.LState) []lua.LValue {
-			if err != nil {
-				if errors.Is(err, errStdinClosed) {
-					raiseError(L, CodeECLOSED, "Proc:write: stdin cerrado", lua.LNil)
-				} else {
-					raiseError(L, CodeEIO, "Proc:write: "+err.Error(), lua.LNil)
-				}
-			}
-			return nil
-		}
-	})
-	return pushAll(L, vals)
+	return p, nil
 }
 
 // errStdinClosed lo devuelve `writeStdin` cuando stdin ya se cerró (o nunca existió):
@@ -640,100 +440,16 @@ func (p *luaProc) writeStdin(data []byte) error {
 	return err
 }
 
-// procCloseStdin implementa `Proc:close_stdin()` (§6): cierra el stdin del proceso,
-// señalándole EOF en su entrada (un `cat` que lee hasta EOF termina aquí). **NO es
-// ⏸** (cerrar un pipe es inmediato). Idempotente: cerrar dos veces es inocuo.
-func (rt *Runtime) procCloseStdin(L *lua.LState) int {
-	p := checkProc(L)
-	if p == nil {
-		return 0
-	}
+// closeStdin cierra el stdin del proceso (idempotente), señalándole EOF. Es la
+// parte VM-agnóstica de `close_stdin` (§6): la comparten el backend gopher
+// (`procCloseStdin`) y el wasm (`registerProcWasm`). Cerrar dos veces es inocuo.
+func (p *luaProc) closeStdin() {
 	p.stdinMu.Lock()
 	defer p.stdinMu.Unlock()
 	if p.stdin != nil && !p.stdinClosed {
 		_ = p.stdin.Close()
 		p.stdinClosed = true
 	}
-	return 0
-}
-
-// procReadLine implementa `Proc:read_line(which) -> string?` ⏸ (§6): lee una línea
-// (hasta `\n` incluido, o el resto antes de EOF) del stream `which`
-// (`"stdout"`/`"stderr"`). Devuelve `nil` en **EOF** (el stream se cerró sin más
-// datos): es la señal de "no hay más", con la que un bucle `while line do ... end`
-// termina limpio. El IO bloqueante va en la goroutine de fondo.
-func (rt *Runtime) procReadLine(L *lua.LState) int {
-	if !rt.requireTask(L, "Proc:read_line") {
-		return 0
-	}
-	p := checkProc(L)
-	if p == nil {
-		return 0
-	}
-	which := L.CheckString(2)
-	r, mu, err := p.reader(which)
-	if err != nil {
-		raiseError(L, CodeEINVAL, err.Error(), lua.LNil)
-		return 0
-	}
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		line, eof, rerr := readLineFrom(mu, r)
-		return func(L *lua.LState) []lua.LValue {
-			if rerr != nil {
-				raiseError(L, CodeEIO, "Proc:read_line: "+rerr.Error(), lua.LNil)
-				return nil
-			}
-			if eof && line == "" {
-				return []lua.LValue{lua.LNil} // EOF sin datos: nil (§6)
-			}
-			return []lua.LValue{lua.LString(line)}
-		}
-	})
-	return pushAll(L, vals)
-}
-
-// procRead implementa `Proc:read(which, n?) -> string?` ⏸ (§6): lectura **cruda** de
-// `which`. Con `n`, lee hasta `n` bytes (puede devolver menos: lo que haya
-// disponible). Sin `n`, lee **todo** hasta EOF. Devuelve `nil` en EOF (sin datos),
-// igual que `read_line`.
-func (rt *Runtime) procRead(L *lua.LState) int {
-	if !rt.requireTask(L, "Proc:read") {
-		return 0
-	}
-	p := checkProc(L)
-	if p == nil {
-		return 0
-	}
-	which := L.CheckString(2)
-	r, mu, err := p.reader(which)
-	if err != nil {
-		raiseError(L, CodeEINVAL, err.Error(), lua.LNil)
-		return 0
-	}
-	n := -1
-	if v, ok := L.Get(3).(lua.LNumber); ok {
-		n = int(v)
-		if n < 0 {
-			raiseError(L, CodeEINVAL, "Proc:read: n no puede ser negativo", lua.LNil)
-			return 0
-		}
-	}
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		data, eof, rerr := readFrom(mu, r, n)
-		return func(L *lua.LState) []lua.LValue {
-			if rerr != nil {
-				raiseError(L, CodeEIO, "Proc:read: "+rerr.Error(), lua.LNil)
-				return nil
-			}
-			if eof && len(data) == 0 {
-				return []lua.LValue{lua.LNil} // EOF sin datos: nil (§6)
-			}
-			return []lua.LValue{lua.LString(data)}
-		}
-	})
-	return pushAll(L, vals)
 }
 
 // reader devuelve el `*bufio.Reader` del stream `which` y el candado que lo
@@ -747,7 +463,7 @@ func (p *luaProc) reader(which string) (*bufio.Reader, *sync.Mutex, error) {
 	case "stderr":
 		return p.stderr, &p.stderrMu, nil
 	default:
-		return nil, nil, errors.New(`Proc:read*: "which" debe ser "stdout" o "stderr"`)
+		return nil, nil, errors.New(`el argumento "which" debe ser "stdout" o "stderr"`)
 	}
 }
 
@@ -796,36 +512,6 @@ func readFrom(mu *sync.Mutex, r *bufio.Reader, n int) ([]byte, bool, error) {
 	return buf[:got], false, nil
 }
 
-// procWait implementa `Proc:wait() -> {code}` ⏸ (§6): espera a que el proceso
-// termine y devuelve su código de salida. Es ⏸ (esperar bloquea). `cmd.Wait` solo
-// puede llamarse una vez —libera los recursos del proceso—, así que el resultado se
-// **memoiza** (`waited`/`waitErr`/`code`): varios `wait` ven el mismo desenlace.
-//
-// Importante para `spawn` con pipes: `Proc:wait` cierra los pipes del proceso. El
-// patrón normal es leer stdout/stderr hasta EOF y LUEGO `wait` (como cualquier
-// `cmd.Wait` tras drenar). Si se hace `wait` con datos sin leer, el SO bufferiza
-// hasta su límite; para volcados grandes, leer antes. El contrato no obliga a un
-// orden; este es el comportamiento de la stdlib.
-func (rt *Runtime) procWait(L *lua.LState) int {
-	if !rt.requireTask(L, "Proc:wait") {
-		return 0
-	}
-	p := checkProc(L)
-	if p == nil {
-		return 0
-	}
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		code := p.wait()
-		return func(L *lua.LState) []lua.LValue {
-			res := L.NewTable()
-			res.RawSetString("code", lua.LNumber(code))
-			return []lua.LValue{res}
-		}
-	})
-	return pushAll(L, vals)
-}
-
 // wait espera al proceso **fuera del token** (goroutine de fondo) y memoiza el
 // código. NO sostiene ningún candado durante la espera bloqueante —esa es la razón
 // de `sync.Once` + `chan` en vez de un `Mutex`—: `cmd.Wait` se llama una sola vez
@@ -859,24 +545,6 @@ func (p *luaProc) closeReadPipes() {
 	p.stderrMu.Unlock()
 }
 
-// procKill implementa `Proc:kill(signal?)` (§6): envía una señal al proceso.
-// **Señal por defecto TERM** (`SIGTERM`: terminación cortés que el proceso puede
-// atender). **NO es ⏸**: señalar es inmediato (no espera a que el proceso muera —eso
-// es `wait`—). `signal` puede ser un número (el de la señal del SO). Idempotente y
-// best-effort: matar un proceso ya muerto no es error (no se relanza).
-func (rt *Runtime) procKill(L *lua.LState) int {
-	p := checkProc(L)
-	if p == nil {
-		return 0
-	}
-	sig := syscall.SIGTERM // por defecto TERM (§6)
-	if v, ok := L.Get(2).(lua.LNumber); ok {
-		sig = syscall.Signal(int(v))
-	}
-	p.killSignal(sig)
-	return 0
-}
-
 // killSignal envía `sig` al proceso, una sola vez (idempotente vía `killed`).
 // Best-effort: un fallo (el proceso ya murió, pid reciclado) no se propaga —matar es
 // "asegúrate de que no siga vivo", y un proceso ya muerto cumple el objetivo—. El
@@ -899,18 +567,6 @@ func (p *luaProc) killSignal(sig syscall.Signal) {
 }
 
 // --- nu.proc.alive ------------------------------------------------------------
-
-// procAlive implementa `nu.proc.alive(pid) -> boolean` (§6, G17). **NO es ⏸**: es
-// una consulta inmediata al SO, sin IO que esperar. Informa de **existencia, no de
-// identidad**: devuelve true si hay ALGÚN proceso vivo con ese pid en esta máquina,
-// aunque sea uno distinto que reusó un pid reciclado. Es deliberado —para detectar
-// locks de sesión huérfanos (sesiones.md §6) basta saber si "alguien" tiene ese pid;
-// la identidad la da el contenido del lock (hostname, §7), no esta llamada—.
-func (rt *Runtime) procAlive(L *lua.LState) int {
-	pid := int(L.CheckNumber(1))
-	L.Push(lua.LBool(pidAlive(pid)))
-	return 1
-}
 
 // pidAlive comprueba si existe un proceso con `pid` enviándole la "señal 0": en
 // Unix, `kill(pid, 0)` no envía señal alguna pero falla si el proceso no existe

@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Tests de S14 (api.md §5): `nu.fs`. Sesión 🔒 —la lógica clave a blindar
@@ -154,10 +152,9 @@ func TestCopyFileMissingSource(t *testing.T) {
 // para que los snippets compongan rutas dentro de él sin tocar el disco real.
 func withFsDir(h *harness) string {
 	dir := h.t.TempDir()
-	h.register("BASE", func(L *lua.LState) int {
-		L.Push(lua.LString(dir))
-		return 1
-	})
+	// El path cruza sin interpolar (SetStringGlobal); BASE() lo devuelve.
+	h.rt.SetStringGlobal("__base_val", dir)
+	h.defWasmGlobal("function BASE() return __base_val end")
 	return dir
 }
 

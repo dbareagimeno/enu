@@ -8,7 +8,6 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.text.markdown` — render completo de markdown a un `Block` (api.md §10,
@@ -127,109 +126,6 @@ func defaultTheme() markdownTheme {
 	t.blockquote = italic
 	t.rule = nil
 	return t
-}
-
-// registerMarkdown añade `nu.text.markdown` a la tabla `nu.text` ya creada por
-// `registerText` (S22). Lo llama registerText (text.go) para mantener todo
-// `nu.text` registrado en un sitio.
-func (rt *Runtime) registerMarkdown(textT *lua.LTable) {
-	textT.RawSetString("markdown", rt.L.NewFunction(rt.textMarkdown))
-}
-
-// textMarkdown implementa `nu.text.markdown(s, opts) -> Block` (§10): render
-// completo de markdown a un Block de ancho `opts.width` (obligatorio: el ancho
-// de envoltura), themable por `opts.theme`, streaming-safe (entrada incompleta
-// no rompe). NINGUNA ⏸ (CPU puro). `width <= 0` → `EINVAL`.
-func (rt *Runtime) textMarkdown(L *lua.LState) int {
-	s := L.CheckString(1)
-
-	opts := L.Get(2)
-	if opts == lua.LNil {
-		raiseError(L, CodeEINVAL, "nu.text.markdown: opts.width es obligatorio", lua.LNil)
-		return 0
-	}
-	optsT, ok := opts.(*lua.LTable)
-	if !ok {
-		raiseError(L, CodeEINVAL, "nu.text.markdown: opts debe ser una tabla", lua.LNil)
-		return 0
-	}
-	widthV, ok := optsT.RawGetString("width").(lua.LNumber)
-	if !ok {
-		raiseError(L, CodeEINVAL, "nu.text.markdown: opts.width (entero positivo) es obligatorio", lua.LNil)
-		return 0
-	}
-	width := int(widthV)
-	if float64(widthV) != float64(width) || width <= 0 {
-		raiseError(L, CodeEINVAL, "nu.text.markdown: opts.width debe ser un entero positivo", lua.LNil)
-		return 0
-	}
-
-	theme := defaultTheme()
-	if themeV := optsT.RawGetString("theme"); themeV != lua.LNil {
-		if err := applyThemeOpts(L, &theme, themeV); err != "" {
-			raiseError(L, CodeEINVAL, "nu.text.markdown: opts.theme."+err, lua.LNil)
-			return 0
-		}
-	}
-
-	blocks := renderMarkdownBlocks(s, width, &theme)
-	// Aplana los bloques en líneas para el Block (el Block no conoce la frontera
-	// de bloque; esa partición solo importa al test de estabilidad).
-	var lines [][]span
-	for _, b := range blocks {
-		lines = append(lines, b...)
-	}
-	if len(lines) == 0 {
-		lines = [][]span{{}} // un Block siempre tiene al menos una línea (height >= 1)
-	}
-	rt.pushBlock(L, newBlock(lines))
-	return 1
-}
-
-// applyThemeOpts rellena `theme` con los Styles de `opts.theme` (una tabla con
-// claves por elemento). Cada clave es opcional; la ausente conserva el default.
-// Las claves de heading son "h1".."h6". Valida cada Style con parseStyle (G22).
-// Devuelve un mensaje de error (no vacío) en vez de lanzar, para componer el
-// contexto en el llamador.
-func applyThemeOpts(L *lua.LState, theme *markdownTheme, v lua.LValue) string {
-	t, ok := v.(*lua.LTable)
-	if !ok {
-		return "theme debe ser una tabla de Styles por elemento"
-	}
-	set := func(key string, dst **style) string {
-		sv := t.RawGetString(key)
-		if sv == lua.LNil {
-			return ""
-		}
-		parsed, err := parseStyle(L, sv)
-		if err != "" {
-			return key + ": " + err
-		}
-		*dst = parsed
-		return ""
-	}
-	for i := 0; i < 6; i++ {
-		if e := set("h"+strconv.Itoa(i+1), &theme.heading[i]); e != "" {
-			return e
-		}
-	}
-	for _, kv := range []struct {
-		key string
-		dst **style
-	}{
-		{"code", &theme.code},
-		{"emphasis", &theme.emphasis},
-		{"strong", &theme.strong},
-		{"link", &theme.link},
-		{"bullet", &theme.bullet},
-		{"blockquote", &theme.blockquote},
-		{"rule", &theme.rule},
-	} {
-		if e := set(kv.key, kv.dst); e != "" {
-			return e
-		}
-	}
-	return ""
 }
 
 // mdRenderer es el estado de un render: la fuente cruda (para extraer el texto de

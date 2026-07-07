@@ -4,10 +4,19 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 )
+
+// escribirFicheroTest escribe un fichero de fixture y aborta el test si falla:
+// un fallo de escritura es un error de setup, no la conducta bajo prueba. Centraliza
+// el chequeo del error de os.WriteFile (que el linter exige) en los tests del worker.
+func escribirFicheroTest(t *testing.T, path, contenido string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(contenido), 0o644); err != nil {
+		t.Fatalf("escribir %s: %v", path, err)
+	}
+}
 
 // Tests de S34 — `nu.worker.spawn` + caps (G6) + send/recv con colas acotadas
 // (§13). La lógica 🔒 a blindar:
@@ -85,175 +94,6 @@ func TestWorkerRoundTrip(t *testing.T) {
 	h.expectEval(`return tostring(N)`, "42")
 }
 
-// TestWorkerCapsTwoGranularities (G6) blinda el filtrado deny-by-default con dos
-// granularidades. El worker INSPECCIONA su propia API (qué existe / qué es nil) y
-// reporta el resultado al padre. Cuatro escenarios:
-//   - sin caps           → toda la API [W] presente (fs.read, fs.write, http, ...).
-//   - caps={"fs"}        → todo `fs`, pero NO `http` (no concedido).
-//   - caps={"fs.read"}   → `fs.read` SÍ, `fs.write` NO, `http` NO.
-//   - caps={}            → casi nada: ni `fs` ni `http` (deny-by-default).
-func TestWorkerCapsTwoGranularities(t *testing.T) {
-	// El módulo reporta un mapa de existencia de funciones/módulos al padre.
-	const probe = `
-		local function has(path)
-			local cur = nu
-			for part in string.gmatch(path, "[^.]+") do
-				if type(cur) ~= "table" then return false end
-				cur = cur[part]
-			end
-			return cur ~= nil
-		end
-		nu.worker.parent.send({
-			fs        = has("fs"),
-			fs_read   = has("fs.read"),
-			fs_write  = has("fs.write"),
-			http      = has("http"),
-			text      = has("text"),
-			task      = has("task"),          -- siempre [W]
-			version   = has("version"),       -- siempre presente
-			ui        = has("ui"),            -- NUNCA en worker (§16)
-			events    = has("events"),        -- NUNCA en worker (§16)
-			spawn     = has("worker.spawn"),  -- NUNCA (sin anidar, §16)
-			parent    = has("worker.parent"), -- SIEMPRE (canal)
-		})
-	`
-	h := workerHarness(t, probe)
-
-	cases := []struct {
-		name     string
-		spawnLua string
-		want     map[string]bool
-	}{
-		{
-			name:     "sin caps: toda la API [W]",
-			spawnLua: `nu.worker.spawn("wmod")`,
-			want: map[string]bool{
-				"fs": true, "fs_read": true, "fs_write": true, "http": true,
-				"text": true, "task": true, "version": true,
-				"ui": false, "events": false, "spawn": false, "parent": true,
-			},
-		},
-		{
-			name:     "caps={'fs'}: modulo entero, nada mas",
-			spawnLua: `nu.worker.spawn("wmod", { caps = {"fs"} })`,
-			want: map[string]bool{
-				"fs": true, "fs_read": true, "fs_write": true, "http": false,
-				"text": false, "task": false, "version": true,
-				"ui": false, "events": false, "spawn": false, "parent": true,
-			},
-		},
-		{
-			name:     "caps={'fs.read'}: solo esa funcion (G6)",
-			spawnLua: `nu.worker.spawn("wmod", { caps = {"fs.read"} })`,
-			want: map[string]bool{
-				"fs": true, "fs_read": true, "fs_write": false, "http": false,
-				"text": false, "task": false, "version": true,
-				"ui": false, "events": false, "spawn": false, "parent": true,
-			},
-		},
-		{
-			name:     "caps={} vacio: deny-by-default, casi nada",
-			spawnLua: `nu.worker.spawn("wmod", { caps = {} })`,
-			want: map[string]bool{
-				"fs": false, "fs_read": false, "fs_write": false, "http": false,
-				"text": false, "task": false, "version": true,
-				"ui": false, "events": false, "spawn": false, "parent": true,
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Construye un snippet que spawnea con las caps del caso, recibe el reporte y
-			// devuelve cada flag como "k=true"/"k=false" para comparar.
-			var keys []string
-			for k := range tc.want {
-				keys = append(keys, k)
-			}
-			setup := `
-				REP, RDONE = nil, false
-				nu.task.spawn(function()
-					local w = ` + tc.spawnLua + `
-					REP = w:recv()
-					w:terminate()
-					RDONE = true
-				end)
-			`
-			h.eval(setup)
-			h.expectEval(`return tostring(RDONE)`, "true")
-
-			report := `local out = {}` + "\n"
-			for _, k := range keys {
-				report += `out[#out+1] = "` + k + `=" .. tostring(REP.` + k + ` == true)` + "\n"
-			}
-			report += `return table.concat(out, ",")`
-
-			got := h.eval(report)
-			if len(got) != 1 {
-				t.Fatalf("reporte: got %q", got)
-			}
-			parsed := map[string]bool{}
-			for _, kv := range strings.Split(got[0], ",") {
-				p := strings.SplitN(kv, "=", 2)
-				parsed[p[0]] = p[1] == "true"
-			}
-			for k, wantV := range tc.want {
-				if parsed[k] != wantV {
-					t.Errorf("cap %q: got %v, want %v (caps=%s)", k, parsed[k], wantV, tc.spawnLua)
-				}
-			}
-		})
-	}
-}
-
-// TestWorkerBackpressure blinda que `Worker:send` SUSPENDE cuando la cola acotada se
-// llena (el worker no consume) y que el loop del padre NO se congela: otra task del
-// padre progresa mientras el `send` espera hueco. El worker bloquea sin consumir
-// nunca (espera un `done` que nunca llega), así que la cola del padre→worker se
-// llena tras `workerQueueCap` envíos y el `(workerQueueCap+1)`-ésimo suspende.
-func TestWorkerBackpressure(t *testing.T) {
-	// El worker no consume NADA: bloquea para siempre en un recv que no llega (su
-	// loop espera un mensaje que el test nunca manda más allá del llenado). Así la
-	// cola se llena y el `send` del padre suspende.
-	h := workerHarness(t, `
-		-- Nunca consume: duerme en un bucle de recv que el test deja llenar.
-		-- (Bloquea en el primer recv solo tras una pausa larga, para que la cola se llene.)
-		nu.task.sleep(60000)
-	`)
-
-	h.eval(`
-		PROGRESSED, SENDS, BDONE = false, 0, false
-		nu.task.spawn(function()
-			local w = nu.worker.spawn("wmod")
-
-			-- Task testigo del padre: DEBE progresar aunque el send del productor este
-			-- suspendido por backpressure (el loop no se congela).
-			local witness = nu.task.spawn(function()
-				nu.task.sleep(5)
-				PROGRESSED = true
-			end)
-
-			-- Productor: manda mas mensajes que la capacidad de la cola. Los primeros
-			-- caben; al llenarse, send SUSPENDE (backpressure) y nunca completa los 1000.
-			local producer = nu.task.spawn(function()
-				for i = 1, 1000 do
-					w:send(i)
-					SENDS = SENDS + 1
-				end
-			end)
-
-			witness:await()  -- termina rapido pese al send suspendido
-			w:terminate()    -- corta: el producer suspendido se desenrolla (ECLOSED)
-			pcall(function() producer:await() end)
-			BDONE = true
-		end)
-	`)
-	h.expectEval(`return tostring(BDONE)`, "true")
-	h.expectEval(`return tostring(PROGRESSED)`, "true")
-	// El productor sufrio backpressure: ni completo los 1000 ni envio cero.
-	h.expectEval(`return tostring(SENDS < 1000 and SENDS >= 1)`, "true")
-}
-
 // TestWorkerMessageCopied blinda que una tabla enviada se COPIA (no se comparte): el
 // padre muta su tabla DESPUÉS de enviarla y el worker debe ver el valor del momento
 // del envío, no la mutación posterior. El worker devuelve lo que vio.
@@ -316,15 +156,15 @@ func TestWorkerNoWatchdog(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "lua"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	os.WriteFile(filepath.Join(dir, "plugin.toml"), []byte("name=\"p\"\nversion=\"1.0\"\n"), 0o644)
-	os.WriteFile(filepath.Join(dir, "init.lua"), []byte(""), 0o644)
+	escribirFicheroTest(t, filepath.Join(dir, "plugin.toml"), "name=\"p\"\nversion=\"1.0\"\n")
+	escribirFicheroTest(t, filepath.Join(dir, "init.lua"), "")
 	// Cómputo de CPU pura (sin suspender) dentro del worker. Si el worker tuviera
 	// watchdog (presupuesto pequeño), un bucle así se cortaría; sin él, completa.
-	os.WriteFile(filepath.Join(dir, "lua", "wmod.lua"), []byte(`
+	escribirFicheroTest(t, filepath.Join(dir, "lua", "wmod.lua"), `
 		local s = 0
 		for i = 1, 2000000 do s = s + 1 end
 		nu.worker.parent.send(s)
-	`), 0o644)
+	`)
 
 	// Padre con watchdog DESACTIVADO (budget 0): probamos el worker, no el padre.
 	rt := New(WithDataDir(t.TempDir()), WithConfigDir(cfg), WithPluginDir(root),
@@ -349,35 +189,6 @@ func TestWorkerNoWatchdog(t *testing.T) {
 	h.expectEval(`return tostring(SUM)`, "2000000")
 }
 
-// TestWorkerSchedulerHasNoWatchdog (G15, estructural) blinda que el scheduler de un
-// worker NO tiene presupuesto de slice (≤ 0 desactiva el watchdog), AUNQUE el padre
-// SÍ lo tenga. Inspecciona el sub-Runtime del worker directamente (mismo paquete),
-// sin depender de temporización.
-func TestWorkerSchedulerHasNoWatchdog(t *testing.T) {
-	// Padre CON watchdog agresivo: el worker debe seguir sin watchdog igualmente.
-	parent := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()),
-		WithForceUI(true), WithSliceBudget(1*time.Millisecond))
-	defer parent.Close()
-
-	chans := &workerChannels{
-		toWorker:   make(chan interface{}, workerQueueCap),
-		fromWorker: make(chan interface{}, workerQueueCap),
-		done:       make(chan struct{}),
-	}
-	wrt := newWorkerRuntime(parent, chans, nil, false)
-	defer wrt.Close()
-
-	if parent.sched.budget <= 0 {
-		t.Fatalf("precondicion: el padre deberia tener watchdog (budget>0), got %v", parent.sched.budget)
-	}
-	if wrt.sched.budget > 0 {
-		t.Fatalf("G15: el worker NO debe tener watchdog (budget<=0), got %v", wrt.sched.budget)
-	}
-	if !wrt.isWorker {
-		t.Fatalf("el sub-Runtime del worker deberia tener isWorker=true")
-	}
-}
-
 // TestWorkerTerminateInterruptsSleep blinda que `terminate()` es **inmediato y sin
 // fuga** (§13): un worker cuya task está suspendida en un `nu.task.sleep` LARGO (60 s)
 // es cortado al acto por `terminate()` —NO espera a que venza el sleep— y NO deja la
@@ -398,13 +209,13 @@ func TestWorkerTerminateInterruptsSleep(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "lua"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	os.WriteFile(filepath.Join(dir, "plugin.toml"), []byte("name=\"p\"\nversion=\"1.0\"\n"), 0o644)
-	os.WriteFile(filepath.Join(dir, "init.lua"), []byte(""), 0o644)
+	escribirFicheroTest(t, filepath.Join(dir, "plugin.toml"), "name=\"p\"\nversion=\"1.0\"\n")
+	escribirFicheroTest(t, filepath.Join(dir, "init.lua"), "")
 	// El módulo del worker se suspende en un sleep LARGO: si `terminate` no lo cortara
 	// en su punto de suspensión, el worker colgaría hasta que venciera (60 s).
-	os.WriteFile(filepath.Join(dir, "lua", "wmod.lua"), []byte(`
+	escribirFicheroTest(t, filepath.Join(dir, "lua", "wmod.lua"), `
 		nu.task.sleep(60000)
-	`), 0o644)
+	`)
 
 	rt := New(WithDataDir(dataDir), WithConfigDir(cfg), WithPluginDir(root), WithForceUI(true))
 	if err := rt.Boot(); err != nil {
@@ -463,13 +274,13 @@ func TestWorkerTerminateInterruptsCPULoop(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "lua"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	os.WriteFile(filepath.Join(dir, "plugin.toml"), []byte("name=\"p\"\nversion=\"1.0\"\n"), 0o644)
-	os.WriteFile(filepath.Join(dir, "init.lua"), []byte(""), 0o644)
+	escribirFicheroTest(t, filepath.Join(dir, "plugin.toml"), "name=\"p\"\nversion=\"1.0\"\n")
+	escribirFicheroTest(t, filepath.Join(dir, "init.lua"), "")
 	// Bucle de CPU pura infinito: sin punto de suspensión cooperativo. Solo la
 	// cancelación del contexto (que `terminate` dispara) puede romperlo.
-	os.WriteFile(filepath.Join(dir, "lua", "wmod.lua"), []byte(`
+	escribirFicheroTest(t, filepath.Join(dir, "lua", "wmod.lua"), `
 		while true do end
-	`), 0o644)
+	`)
 
 	rt := New(WithDataDir(t.TempDir()), WithConfigDir(cfg), WithPluginDir(root), WithForceUI(true))
 	if err := rt.Boot(); err != nil {

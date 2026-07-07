@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.ws` — websockets (api.md §8, sesión S21). Una sola primitiva,
@@ -54,10 +53,6 @@ import (
 // quiescencia: su vida es la del turno de IO, atada con `cleanup`, no con el
 // registro de `reload`.
 
-// wsTypeName identifica la metatabla del handle `Ws` (lo que devuelve
-// `nu.ws.connect`), de la que cuelgan `send`/`recv`/`close`.
-const wsTypeName = "nu.ws.Ws"
-
 // wsReadLimit es el tope de bytes de un único mensaje entrante. `coder/websocket`
 // trae 32 KiB por defecto, que es poco para el caso de un provider que empuja un
 // turno grande en un solo mensaje; se sube a un límite holgado pero acotado (acota
@@ -88,140 +83,11 @@ type luaWs struct {
 	closed    bool
 }
 
-// registerWs cuelga `nu.ws` del global `nu` con su firma de §8 e instala la
-// metatabla del tipo `Ws`. Lo llama `registerNu` (nu.go).
-func (rt *Runtime) registerWs(nu *lua.LTable) {
-	L := rt.L
-	wsT := L.NewTable()
-	wsT.RawSetString("connect", L.NewFunction(rt.wsConnect))
-	nu.RawSetString("ws", wsT)
-
-	rt.registerWsType()
-}
-
-// registerWsType instala la metatabla del tipo `Ws` con `send`/`recv`/`close`.
-func (rt *Runtime) registerWsType() {
-	L := rt.L
-	mt := L.NewTypeMetatable(wsTypeName)
-	methods := L.NewTable()
-	methods.RawSetString("send", L.NewFunction(rt.wsSend))
-	methods.RawSetString("recv", L.NewFunction(rt.wsRecv))
-	methods.RawSetString("close", L.NewFunction(rt.wsClose))
-	L.SetField(mt, "__index", methods)
-}
-
-// checkWs recupera el `*luaWs` del userdata `self` del primer argumento. Lanza
-// `EINVAL` si no es un handle de `Ws`.
-func checkWs(L *lua.LState) *luaWs {
-	ud := L.CheckUserData(1)
-	w, ok := ud.Value.(*luaWs)
-	if !ok {
-		raiseError(L, CodeEINVAL, "Ws: se esperaba un handle de Ws", lua.LNil)
-		return nil
-	}
-	return w
-}
-
-// --- nu.ws.connect ------------------------------------------------------------
-
-// wsConnect implementa `nu.ws.connect(url, opts?) -> Ws` ⏸ (§8). El handshake va
-// **fuera del token** (en la goroutine de fondo del puente `suspend`), y la
-// función devuelve **al establecerse** la conexión. Un fallo de conexión (puerto
-// cerrado, DNS, handshake rechazado) → `ENET`; expirar `timeout_ms` → `ETIMEOUT`;
-// `url`/`opts` malos → `EINVAL` (antes de suspender).
-func (rt *Runtime) wsConnect(L *lua.LState) int {
-	if !rt.requireTask(L, "nu.ws.connect") {
-		return 0
-	}
-	url, opts, ok := parseWsOpts(L)
-	if !ok {
-		return 0 // parseWsOpts ya lanzó EINVAL
-	}
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		w, rerr := rt.dialWs(url, opts)
-		return func(L *lua.LState) []lua.LValue {
-			if rerr != nil {
-				raiseHTTPError(L, rerr)
-				return nil
-			}
-			rt.sched.trackWs(w)
-			ud := L.NewUserData()
-			ud.Value = w
-			L.SetMetatable(ud, L.GetTypeMetatable(wsTypeName))
-			return []lua.LValue{ud}
-		}
-	})
-	return pushAll(L, vals)
-}
-
 // wsOpts son las opciones de `connect` ya extraídas de Lua (bajo el token); el
 // dial las consume fuera del token.
 type wsOpts struct {
 	headers map[string]string
 	timeout time.Duration // plazo del handshake; 0 = el default
-}
-
-// parseWsOpts extrae `url` (arg 1, string no vacío) y la tabla `opts?` (arg 2):
-// `headers?` (string→string) y `timeout_ms?` (positivo). Valida en el estado
-// principal (bajo el token) y lanza `EINVAL` ante un uso malo —antes de suspender,
-// como el resto de primitivas ⏸—.
-func parseWsOpts(L *lua.LState) (string, wsOpts, bool) {
-	o := wsOpts{timeout: httpDefaultTimeout}
-
-	urlVal, ok := L.Get(1).(lua.LString)
-	if !ok || string(urlVal) == "" {
-		raiseError(L, CodeEINVAL, "nu.ws.connect: url es obligatoria (string no vacío)", lua.LNil)
-		return "", o, false
-	}
-
-	switch tbl := L.Get(2).(type) {
-	case *lua.LTable:
-		switch ht := tbl.RawGetString("headers").(type) {
-		case *lua.LTable:
-			o.headers = make(map[string]string)
-			bad := false
-			ht.ForEach(func(k, v lua.LValue) {
-				name, kok := k.(lua.LString)
-				value, vok := v.(lua.LString)
-				if !kok || !vok {
-					bad = true
-					return
-				}
-				o.headers[string(name)] = string(value)
-			})
-			if bad {
-				raiseError(L, CodeEINVAL, "nu.ws.connect: opts.headers debe ser una tabla de string→string", lua.LNil)
-				return "", o, false
-			}
-		case *lua.LNilType, nil:
-			// sin headers
-		default:
-			raiseError(L, CodeEINVAL, "nu.ws.connect: opts.headers debe ser una tabla", lua.LNil)
-			return "", o, false
-		}
-
-		switch tm := tbl.RawGetString("timeout_ms").(type) {
-		case lua.LNumber:
-			if tm <= 0 {
-				raiseError(L, CodeEINVAL, "nu.ws.connect: opts.timeout_ms debe ser positivo", lua.LNil)
-				return "", o, false
-			}
-			o.timeout = time.Duration(tm) * time.Millisecond
-		case *lua.LNilType, nil:
-			// default
-		default:
-			raiseError(L, CodeEINVAL, "nu.ws.connect: opts.timeout_ms debe ser un número", lua.LNil)
-			return "", o, false
-		}
-	case *lua.LNilType, nil:
-		// sin opts
-	default:
-		raiseError(L, CodeEINVAL, "nu.ws.connect: opts debe ser una tabla", lua.LNil)
-		return "", o, false
-	}
-
-	return string(urlVal), o, true
 }
 
 // dialWs hace el handshake **fuera del token** (lo llama la goroutine de fondo de
@@ -268,32 +134,6 @@ func (rt *Runtime) dialWs(url string, o wsOpts) (*luaWs, error) {
 
 // --- métodos del tipo Ws ------------------------------------------------------
 
-// wsSend implementa `Ws:send(data)` ⏸ (§8): envía `data` como un mensaje de
-// **texto** (el caso por defecto del contrato; el provider habla JSON sobre texto).
-// La escritura bloqueante (que puede esperar por backpressure de la red) va en la
-// goroutine de fondo del puente ⏸. Tras `close`, enviar lanza `ECLOSED`.
-func (rt *Runtime) wsSend(L *lua.LState) int {
-	if !rt.requireTask(L, "Ws:send") {
-		return 0
-	}
-	w := checkWs(L)
-	if w == nil {
-		return 0
-	}
-	data := []byte(L.CheckString(2))
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		err := w.send(data)
-		return func(L *lua.LState) []lua.LValue {
-			if err != nil {
-				raiseWsError(L, err, "Ws:send")
-			}
-			return nil
-		}
-	})
-	return pushAll(L, vals)
-}
-
 // send escribe un mensaje de texto **fuera del token** (lo llama la goroutine de
 // fondo de `wsSend`). Si el handle ya se cerró, devuelve `errWsClosed` (→ `ECLOSED`)
 // sin tocar la conexión. Un fallo del `Write` real (conexión rota) es transporte
@@ -317,35 +157,6 @@ func (w *luaWs) send(data []byte) error {
 		return classifyTransportError(w.ctx, err)
 	}
 	return nil
-}
-
-// wsRecv implementa `Ws:recv() -> string?` ⏸ (§8): recibe el siguiente mensaje y lo
-// devuelve como string; **`nil` cuando la conexión se cierra** (ordenadamente o por
-// `Ws:close()`). Un fallo de transporte real (conexión rota a media) lanza `ENET`.
-// La lectura bloqueante va en la goroutine de fondo del puente ⏸.
-func (rt *Runtime) wsRecv(L *lua.LState) int {
-	if !rt.requireTask(L, "Ws:recv") {
-		return 0
-	}
-	w := checkWs(L)
-	if w == nil {
-		return 0
-	}
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		data, closed, err := w.recv()
-		return func(L *lua.LState) []lua.LValue {
-			if err != nil {
-				raiseWsError(L, err, "Ws:recv")
-				return nil
-			}
-			if closed {
-				return []lua.LValue{lua.LNil} // conexión cerrada: fin del stream
-			}
-			return []lua.LValue{lua.LString(data)}
-		}
-	})
-	return pushAll(L, vals)
 }
 
 // recv lee el siguiente mensaje **fuera del token** (lo llama la goroutine de fondo
@@ -410,28 +221,6 @@ func isWsNormalClose(err error) bool {
 // como `ECLOSED`.
 var errWsClosed = errors.New("nu.ws: conexión cerrada")
 
-// raiseWsError lanza el error de un `send`/`recv` hacia Lua: un cierre (`ECLOSED`)
-// o un `httpError` ya clasificado (`ENET`/`ETIMEOUT`).
-func raiseWsError(L *lua.LState, err error, fn string) {
-	if errors.Is(err, errWsClosed) {
-		raiseError(L, CodeECLOSED, fn+": la conexión fue cerrada", lua.LNil)
-		return
-	}
-	raiseHTTPError(L, err)
-}
-
-// wsClose implementa `Ws:close()` (§8): cierra la conexión. **No es ⏸** (cerrar es
-// inmediato) e **idempotente** (`closeOnce`). Lo llaman `Ws:close`, el `cleanup` de
-// quien lo abrió y `Runtime.Close` (vía `stopAllWs`).
-func (rt *Runtime) wsClose(L *lua.LState) int {
-	w := checkWs(L)
-	if w == nil {
-		return 0
-	}
-	w.close()
-	return 0
-}
-
 // close cierra la conexión y libera recursos (§8). Idempotente. Marca `closed` (para
 // que un `send`/`recv` concurrente sepa que el cierre es a propósito), manda un frame
 // de cierre normal (best-effort) y cancela el contexto —lo que desbloquea cualquier
@@ -448,6 +237,11 @@ func (w *luaWs) close() {
 		if w.cancel != nil {
 			w.cancel()
 		}
-		w.s.untrackWs(w)
+		// El rastreo del scheduler (para `Runtime.Close` → `stopAllWs`) es del backend
+		// gopher; el backend wasm (M13b) reusa este handle VM-agnóstico con `s == nil`
+		// (su ciclo de vida a nivel de Runtime lo cablea M13d), así que se guarda el nil.
+		if w.s != nil {
+			w.s.untrackWs(w)
+		}
 	})
 }

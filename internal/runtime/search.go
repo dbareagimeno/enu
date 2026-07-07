@@ -9,12 +9,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
 	"sync"
 	"unicode"
 
 	ignore "github.com/sabhiram/go-gitignore"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.search` — búsqueda a escala de repo (api.md §11, sesión S27; inventario
@@ -53,17 +51,6 @@ import (
 // `nu.task.cleanup`, así ninguna goroutine queda colgada. Como red de seguridad,
 // `Runtime.Close` cancela todos los greps vivos (`stopAllGreps`).
 
-// registerSearch cuelga `nu.search` del global `nu` con `files`/`grep`/`fuzzy` e
-// instala la metatabla del iterador de `grep`. Lo llama `registerNu` (nu.go).
-func (rt *Runtime) registerSearch(nu *lua.LTable) {
-	L := rt.L
-	s := L.NewTable()
-	s.RawSetString("files", L.NewFunction(rt.searchFiles))
-	s.RawSetString("grep", L.NewFunction(rt.searchGrep))
-	s.RawSetString("fuzzy", L.NewFunction(rt.searchFuzzy))
-	nu.RawSetString("search", s)
-}
-
 // --- nu.search.files ----------------------------------------------------------
 
 // filesOpts son las opciones ya parseadas de `nu.search.files` (§11). `glob`
@@ -72,80 +59,6 @@ type filesOpts struct {
 	glob   string
 	hidden bool
 	max    int
-}
-
-// parseFilesOpts lee `opts` de `nu.search.files` bajo el token (toca Lua). Valida
-// los tipos a `EINVAL`; `opts` ausente → defaults (sin glob, sin ocultos, sin
-// tope). Un `glob` sintácticamente inválido se rechaza ya aquí (filepath.Match
-// lo valida sobre una cadena trivial) para que el error sea accionable antes de
-// suspender, no a mitad del recorrido.
-func parseFilesOpts(L *lua.LState) (filesOpts, bool) {
-	o := filesOpts{}
-	v := L.Get(2)
-	if v == lua.LNil {
-		return o, true
-	}
-	tbl, ok := v.(*lua.LTable)
-	if !ok {
-		raiseError(L, CodeEINVAL, "nu.search.files: opts debe ser una tabla", lua.LNil)
-		return o, false
-	}
-	if g := tbl.RawGetString("glob"); g != lua.LNil {
-		gs, ok := g.(lua.LString)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.search.files: opts.glob debe ser un string", lua.LNil)
-			return o, false
-		}
-		// Valida el patrón ya: `filepath.Match` solo falla por patrón malformado.
-		if _, err := filepath.Match(string(gs), ""); err != nil {
-			raiseError(L, CodeEINVAL, "nu.search.files: opts.glob inválido: "+err.Error(), lua.LNil)
-			return o, false
-		}
-		o.glob = string(gs)
-	}
-	if h := tbl.RawGetString("hidden"); h != lua.LNil {
-		o.hidden = lua.LVAsBool(h)
-	}
-	if m := tbl.RawGetString("max"); m != lua.LNil {
-		mn, ok := m.(lua.LNumber)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.search.files: opts.max debe ser un número", lua.LNil)
-			return o, false
-		}
-		o.max = int(mn)
-	}
-	return o, true
-}
-
-// searchFiles implementa `nu.search.files(root, opts?) -> string[]` ⏸ (§11):
-// listado **recursivo** de ficheros bajo `root`, respetando `.gitignore` (G7).
-// El recorrido del árbol (IO pesado) va en la goroutine de fondo; las rutas
-// cruzan a Lua como array en la `deliverFn`. `root` inexistente → `ENOENT`.
-func (rt *Runtime) searchFiles(L *lua.LState) int {
-	if !rt.requireTask(L, "nu.search.files") {
-		return 0
-	}
-	root := L.CheckString(1)
-	opts, ok := parseFilesOpts(L)
-	if !ok {
-		return 0 // parseFilesOpts ya lanzó EINVAL
-	}
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		paths, err := walkFiles(root, opts) // recorrido bloqueante, fuera del token
-		return func(L *lua.LState) []lua.LValue {
-			if err != nil {
-				mapFsError(L, err)
-				return nil
-			}
-			arr := L.NewTable()
-			for i, p := range paths {
-				arr.RawSetInt(i+1, lua.LString(p))
-			}
-			return []lua.LValue{arr}
-		}
-	})
-	return pushAll(L, vals)
 }
 
 // walkFiles recorre el árbol bajo `root` devolviendo las rutas de los ficheros
@@ -259,72 +172,6 @@ var errFilesMaxReached = errors.New("nu.search.files: max alcanzado")
 type fuzzyMatch struct {
 	index int // 1-based en candidates (lo que se devuelve a Lua)
 	score int
-}
-
-// searchFuzzy implementa `nu.search.fuzzy(query, candidates, opts?) -> {index,
-// score}[]` (§11). **SÍNCRONO y NO ⏸** (la primitiva caliente del picker, §11):
-// no usa el puente `suspend` —es CPU puro sobre datos ya en memoria, como `nu.re`
-// o los codecs—. Devuelve los candidatos que casan, **ordenados por score
-// descendente de forma estable** (empates → orden de entrada, inventario 🔒); los
-// que no casan se excluyen. `opts.max` recorta a los N mejores.
-func (rt *Runtime) searchFuzzy(L *lua.LState) int {
-	query := L.CheckString(1)
-	candTbl := L.CheckTable(2)
-	max := 0
-	if v := L.Get(3); v != lua.LNil {
-		tbl, ok := v.(*lua.LTable)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.search.fuzzy: opts debe ser una tabla", lua.LNil)
-			return 0
-		}
-		if m := tbl.RawGetString("max"); m != lua.LNil {
-			mn, ok := m.(lua.LNumber)
-			if !ok {
-				raiseError(L, CodeEINVAL, "nu.search.fuzzy: opts.max debe ser un número", lua.LNil)
-				return 0
-			}
-			max = int(mn)
-		}
-	}
-
-	// Materializa los candidatos en orden (1..n). Un elemento no-string en la parte
-	// array es un uso malo → `EINVAL` accionable (el picker pasa una lista de rutas).
-	n := candTbl.Len()
-	matches := make([]fuzzyMatch, 0, n)
-	for i := 1; i <= n; i++ {
-		cv := candTbl.RawGetInt(i)
-		cs, ok := cv.(lua.LString)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.search.fuzzy: candidates debe ser un array de strings", lua.LNil)
-			return 0
-		}
-		if score, ok := fuzzyScore(query, string(cs)); ok {
-			matches = append(matches, fuzzyMatch{index: i, score: score})
-		}
-	}
-
-	// Orden ESTABLE por score descendente: `sort.SliceStable` conserva el orden de
-	// entrada entre elementos de igual score (la estabilidad que el inventario 🔒
-	// exige; un picker con empates debe mostrar los candidatos en su orden natural,
-	// no barajados). Solo se compara por score, NUNCA por índice: si se rompieran
-	// empates por índice se perdería la estabilidad frente a un orden de entrada
-	// arbitrario.
-	sort.SliceStable(matches, func(a, b int) bool {
-		return matches[a].score > matches[b].score
-	})
-	if max > 0 && len(matches) > max {
-		matches = matches[:max]
-	}
-
-	out := L.NewTable()
-	for i, m := range matches {
-		t := L.NewTable()
-		t.RawSetString("index", lua.LNumber(m.index))
-		t.RawSetString("score", lua.LNumber(m.score))
-		out.RawSetInt(i+1, t)
-	}
-	L.Push(out)
-	return 1
 }
 
 // fuzzyScore calcula el score de `query` contra `cand` con un scorer de
@@ -487,163 +334,6 @@ type grepOpts struct {
 	max        int
 }
 
-// parseGrepOpts lee `opts` de `nu.search.grep` bajo el token. `opts.root` es
-// obligatorio (¿dónde buscar?); `glob`, `case`, `max` opcionales. `case`
-// (string "sensitive"|"insensitive") elige sensibilidad; default sensible. Todo
-// uso malo → `EINVAL` accionable antes de suspender.
-func parseGrepOpts(L *lua.LState) (grepOpts, bool) {
-	o := grepOpts{}
-	tbl, ok := L.Get(2).(*lua.LTable)
-	if !ok {
-		raiseError(L, CodeEINVAL, "nu.search.grep: opts (con root) es obligatorio", lua.LNil)
-		return o, false
-	}
-	root, ok := tbl.RawGetString("root").(lua.LString)
-	if !ok || string(root) == "" {
-		raiseError(L, CodeEINVAL, "nu.search.grep: opts.root es obligatorio", lua.LNil)
-		return o, false
-	}
-	o.root = string(root)
-	if g := tbl.RawGetString("glob"); g != lua.LNil {
-		gs, ok := g.(lua.LString)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.search.grep: opts.glob debe ser un string", lua.LNil)
-			return o, false
-		}
-		if _, err := filepath.Match(string(gs), ""); err != nil {
-			raiseError(L, CodeEINVAL, "nu.search.grep: opts.glob inválido: "+err.Error(), lua.LNil)
-			return o, false
-		}
-		o.glob = string(gs)
-	}
-	if cs := tbl.RawGetString("case"); cs != lua.LNil {
-		s, ok := cs.(lua.LString)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.search.grep: opts.case debe ser un string", lua.LNil)
-			return o, false
-		}
-		switch string(s) {
-		case "sensitive":
-			o.ignoreCase = false
-		case "insensitive":
-			o.ignoreCase = true
-		default:
-			raiseError(L, CodeEINVAL, `nu.search.grep: opts.case debe ser "sensitive" o "insensitive"`, lua.LNil)
-			return o, false
-		}
-	}
-	if m := tbl.RawGetString("max"); m != lua.LNil {
-		mn, ok := m.(lua.LNumber)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.search.grep: opts.max debe ser un número", lua.LNil)
-			return o, false
-		}
-		o.max = int(mn)
-	}
-	return o, true
-}
-
-// searchGrep implementa `nu.search.grep(pattern, opts) -> iterator` ⏸ (§11).
-// Compila el patrón (RE2, S26; `EINVAL` si inválido), arranca el pool de
-// goroutines de fondo que recorren el árbol y casan línea a línea, y devuelve una
-// **función iteradora** que en cada `next` suspende hasta el siguiente match
-// (`nil` al agotarse). La vida del pool se ata a la task vía `nu.task.cleanup`:
-// cancelar/terminar la task cancela el contexto y para las goroutines.
-func (rt *Runtime) searchGrep(L *lua.LState) int {
-	if !rt.requireTask(L, "nu.search.grep") {
-		return 0
-	}
-	pattern := L.CheckString(1)
-	opts, ok := parseGrepOpts(L)
-	if !ok {
-		return 0
-	}
-
-	// Compila el patrón bajo el token (CPU puro, no hace falta suspender). Con
-	// `case = insensitive` se antepone el flag `(?i)` de RE2. Patrón inválido (o
-	// backreference, que RE2 no admite) → `EINVAL` claro, igual que `nu.re.compile`.
-	pat := pattern
-	if opts.ignoreCase {
-		pat = "(?i)" + pat
-	}
-	re, err := regexp.Compile(pat)
-	if err != nil {
-		raiseError(L, CodeEINVAL, "nu.search.grep: patrón inválido: "+err.Error(), lua.LNil)
-		return 0
-	}
-
-	// El árbol de ficheros candidatos se enumera **antes** de arrancar el pool, en
-	// la goroutine de fondo (es IO): así un `root` inexistente da `ENOENT` en la
-	// creación del iterador, no a mitad del consumo. Reusa `walkFiles` con el glob
-	// (gitignore siempre, como `files`).
-	var (
-		files   []string
-		walkErr error
-	)
-	rt.sched.suspend(L, func() deliverFn {
-		files, walkErr = walkFiles(opts.root, filesOpts{glob: opts.glob})
-		return func(L *lua.LState) []lua.LValue { return nil }
-	})
-	if walkErr != nil {
-		mapFsError(L, walkErr)
-		return 0
-	}
-
-	it := newGrepIter(rt.sched, re, files, opts.max)
-	rt.sched.trackGrep(it)
-
-	// Vida del iterador (idioma de §6): se cierra al cancelar/terminar la task.
-	// Registrar el `cleanup` aquí (no en el `next`) garantiza que aunque la task no
-	// consuma el iterador hasta el final, las goroutines se cancelen al terminar.
-	rt.registerGrepCleanup(L, it)
-
-	// La función iteradora: cada `next` suspende hasta el siguiente match o EOF.
-	L.Push(L.NewFunction(func(L *lua.LState) int {
-		if !rt.requireTask(L, "nu.search.grep (next)") {
-			return 0
-		}
-		// Alcanzado `max`: corta sin suspender (cierra el pool y reporta fin).
-		if it.max > 0 && it.emitted >= it.max {
-			it.close()
-			L.Push(lua.LNil)
-			return 1
-		}
-		vals := rt.sched.suspend(L, func() deliverFn {
-			res, ok := <-it.results
-			return func(L *lua.LState) []lua.LValue {
-				if !ok {
-					it.close() // canal cerrado: pool agotado, fin del iterador
-					return []lua.LValue{lua.LNil}
-				}
-				it.emitted++
-				if it.max > 0 && it.emitted >= it.max {
-					it.close() // este es el último: para el resto del pool
-				}
-				return []lua.LValue{grepResultToLua(L, res)}
-			}
-		})
-		return pushAll(L, vals)
-	}))
-	// Devolvemos SOLO la función iteradora a Lua (el `for r in nu.search.grep(...)`
-	// toma el primer valor como iterador). El `cleanup` ya quedó registrado arriba.
-	return 1
-}
-
-// registerGrepCleanup registra en la task actual un `nu.task.cleanup` que cierra
-// el iterador `it` —para que cancelar/terminar la task pare el pool de grep sin
-// fuga de goroutines (S08, §6)—. Se hace en Go (no en Lua) porque el iterador es
-// un handle Go opaco; la pila LIFO de cleanups vive en la task y corre bajo el
-// token, así que añadirle un liberador aquí (estamos bajo el token) es seguro.
-func (rt *Runtime) registerGrepCleanup(L *lua.LState, it *grepIter) {
-	t, hasTask := rt.sched.taskOf(L)
-	if hasTask {
-		t.cleanups = append(t.cleanups, L.NewFunction(func(L *lua.LState) int {
-			it.close()
-			return 0
-		}))
-	}
-}
-
 // newGrepIter arranca el pool de goroutines de fondo que casan el patrón en los
 // ficheros y devuelve el iterador. El paralelismo: un número acotado de
 // goroutines (no una por fichero) toman ficheros de un canal de trabajo y casan
@@ -725,7 +415,7 @@ func grepFile(it *grepIter, re *regexp.Regexp, path string) {
 	if err != nil {
 		return // ilegible: se salta (como grep -r)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sc := bufio.NewScanner(f)
 	// Sube el tope de línea del Scanner (default 64 KiB) a un valor holgado: una
@@ -758,34 +448,23 @@ func grepFile(it *grepIter, re *regexp.Regexp, path string) {
 	}
 }
 
-// grepResultToLua construye la tabla `{path, line_no, line, ranges}` de un match
-// para entregarla a Lua. Corre bajo el token (es la `deliverFn` del `next`). Cada
-// rango es `{start, end}` (byte 1-based inclusive), coherente con `nu.re.find_all`
-// (S26): `line:sub(r[1], r[2])` reconstruye el tramo casado.
-func grepResultToLua(L *lua.LState, res grepResult) lua.LValue {
-	t := L.NewTable()
-	t.RawSetString("path", lua.LString(res.path))
-	t.RawSetString("line_no", lua.LNumber(res.lineNo))
-	t.RawSetString("line", lua.LString(res.line))
-	ranges := L.NewTable()
-	for i, r := range res.ranges {
-		rg := L.NewTable()
-		rg.RawSetInt(1, lua.LNumber(r[0]))
-		rg.RawSetInt(2, lua.LNumber(r[1]))
-		ranges.RawSetInt(i+1, rg)
-	}
-	t.RawSetString("ranges", ranges)
-	return t
-}
-
 // close cancela el pool de goroutines de fondo y deja de rastrear el iterador.
 // **Idempotente** (`closeOnce`): lo llaman el `next` (al alcanzar `max` o EOF),
 // el `cleanup` de la task (al cancelarse/terminar) y `Runtime.Close` (red de
 // seguridad). Cancelar el contexto desbloquea el repartidor y las goroutines, que
 // terminan; la cerradora cierra `results`.
+//
+// El rastreo (`untrackGrep`) sólo se deshace si hay scheduler: el backend gopher
+// siempre lo pasa (`newGrepIter(rt.sched, ...)`), pero el backend wasm (M13b,
+// vmwasm_search.go) reusa este mismo iterador con `s == nil` cuando el Runtime de
+// pruebas es mínimo — igual que `luaWs.close` sólo desregistra si hay scheduler.
+// Cancelar el contexto (el núcleo VM-agnóstico) siempre ocurre; sólo el rastreo
+// para `Runtime.Close` es opcional. Para gopher el comportamiento es idéntico.
 func (it *grepIter) close() {
 	it.closeOnce.Do(func() {
 		it.cancel()
-		it.s.untrackGrep(it)
+		if it.s != nil {
+			it.s.untrackGrep(it)
+		}
 	})
 }

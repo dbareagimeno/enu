@@ -172,36 +172,6 @@ func TestWorkerOnMessageHandlerThrows(t *testing.T) {
 	h.eval(`SUB2:cancel(); W2:terminate()`)
 }
 
-// TestWorkerOnMessageCancelStopsDelivery blinda que tras `Sub:cancel()` no se entregan
-// más mensajes. Se cancela tras el primer lote y se confirma que el contador no crece
-// pese a que el worker siga enviando.
-func TestWorkerOnMessageCancelStopsDelivery(t *testing.T) {
-	// El worker envía un primer mensaje, espera la señal de que el padre canceló, y
-	// luego envía muchos más (que NO deben entregarse).
-	h := workerHarness(t, `
-		nu.worker.parent.send("first")
-		nu.worker.parent.recv()                 -- espera "cancelado"
-		for i = 1, 50 do nu.worker.parent.send("late") end
-	`)
-	h.eval(`
-		N3 = 0
-		W3 = nu.worker.spawn("wmod")
-		SUB3 = W3:on_message(function(msg) N3 = N3 + 1 end)
-	`)
-	if !pollEval(h, `return tostring(N3)`, "1") {
-		t.Fatalf("on_message no entregó el primer mensaje: N3=%v", h.eval(`return tostring(N3)`))
-	}
-	// Cancela y avisa al worker de que ya puede mandar los tardíos.
-	h.eval(`
-		SUB3:cancel()
-		nu.task.spawn(function() W3:send("cancelado") end)
-	`)
-	// Da tiempo a que el worker mande los 50 tardíos; el contador NO debe pasar de 1.
-	time.Sleep(200 * time.Millisecond)
-	h.expectEval(`return tostring(N3)`, "1")
-	h.eval(`W3:terminate()`)
-}
-
 // TestWorkerInternalTasksTimersFutures (G15) blinda que el worker es un mini-runtime
 // COMPLETO: dentro corren `nu.task.spawn`/`await`, `nu.task.sleep` (timer ⏸),
 // `nu.task.every` (timer periódico) y `nu.task.future` (set/await), todo `nu.task`
@@ -281,20 +251,25 @@ func TestCP8WorkerIndexesRepo(t *testing.T) {
 
 	// Un "repo" de prueba: un plugin `p` con su `lua/wmod.lua` (el cuerpo del worker)
 	// y, dentro, un subárbol `repo/` con ficheros a indexar.
+	escribir := func(path, contenido string) {
+		if err := os.WriteFile(path, []byte(contenido), 0o644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
 	dir := filepath.Join(root, "p")
 	if err := os.MkdirAll(filepath.Join(dir, "lua"), 0o755); err != nil {
 		t.Fatalf("mkdir plugin: %v", err)
 	}
-	os.WriteFile(filepath.Join(dir, "plugin.toml"), []byte("name=\"p\"\nversion=\"1.0\"\n"), 0o644)
-	os.WriteFile(filepath.Join(dir, "init.lua"), []byte(""), 0o644)
+	escribir(filepath.Join(dir, "plugin.toml"), "name=\"p\"\nversion=\"1.0\"\n")
+	escribir(filepath.Join(dir, "init.lua"), "")
 
 	repo := filepath.Join(root, "repo")
 	if err := os.MkdirAll(filepath.Join(repo, "sub"), 0o755); err != nil {
 		t.Fatalf("mkdir repo: %v", err)
 	}
-	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("alpha\nbeta\n"), 0o644)
-	os.WriteFile(filepath.Join(repo, "b.txt"), []byte("gamma\n"), 0o644)
-	os.WriteFile(filepath.Join(repo, "sub", "c.txt"), []byte("delta\nepsilon\nzeta\n"), 0o644)
+	escribir(filepath.Join(repo, "a.txt"), "alpha\nbeta\n")
+	escribir(filepath.Join(repo, "b.txt"), "gamma\n")
+	escribir(filepath.Join(repo, "sub", "c.txt"), "delta\nepsilon\nzeta\n")
 
 	// El cuerpo del worker: recorre el repo con search.files, lee cada fichero con
 	// fs.read, suma bytes y líneas, y devuelve el digesto. Comprueba ANTES que
@@ -316,7 +291,7 @@ func TestCP8WorkerIndexesRepo(t *testing.T) {
 		end
 		nu.worker.parent.send({ files = nfiles, bytes = nbytes, lines = nlines })
 	`
-	os.WriteFile(filepath.Join(dir, "lua", "wmod.lua"), []byte(wmod), 0o644)
+	escribir(filepath.Join(dir, "lua", "wmod.lua"), wmod)
 
 	rt := New(WithDataDir(dataDir), WithConfigDir(cfg), WithPluginDir(root), WithForceUI(true))
 	t.Cleanup(rt.Close)

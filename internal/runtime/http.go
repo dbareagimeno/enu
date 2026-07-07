@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.http` — red (api.md §8, sesión S19). Por ahora solo `nu.http.request`: una
@@ -129,158 +127,6 @@ func (o *reqOpts) needsCustomClient(st *httpState) bool {
 	return false
 }
 
-// registerHTTP cuelga `nu.http` del global `nu` con su firma de §8. Lo llama
-// `registerNu` (nu.go). `request` (S19, buffereada) y `stream` (S20, streaming +
-// parser SSE) comparten el modelo de cliente y el mapeo de errores; `ws` (S21) se
-// suma luego sobre el mismo puente ⏸.
-func (rt *Runtime) registerHTTP(nu *lua.LTable) {
-	L := rt.L
-	httpT := L.NewTable()
-	httpT.RawSetString("request", L.NewFunction(rt.httpRequest))
-	httpT.RawSetString("stream", L.NewFunction(rt.httpStream))
-	nu.RawSetString("http", httpT)
-
-	// Metatabla del tipo `Stream` (S20): `chunks`/`events`/`close` + los campos
-	// `status`/`headers` (stream.go).
-	rt.registerStreamType()
-}
-
-// httpRequest implementa `nu.http.request(opts) -> {status, headers, body}` ⏸
-// (§8). Extrae las opciones en el estado principal (bajo el token), construye la
-// petición y la **ejecuta en la goroutine de fondo** del puente `suspend` (fuera
-// del token, sin tocar Lua); la respuesta buffereada o el error mapeado cruzan a
-// Lua en la `deliverFn`.
-func (rt *Runtime) httpRequest(L *lua.LState) int {
-	if !rt.requireTask(L, "nu.http.request") {
-		return 0
-	}
-	opts, ok := parseReqOpts(L)
-	if !ok {
-		return 0 // parseReqOpts ya lanzó EINVAL
-	}
-
-	vals := rt.sched.suspend(L, func() deliverFn {
-		// Todo lo de aquí corre FUERA del token, en la goroutine de fondo: nunca toca
-		// Lua. Construye el cliente (reutilizable o a medida), lanza la petición y
-		// bufferiza la respuesta. Los errores se guardan crudos y se mapean bajo el
-		// token, abajo.
-		status, headers, body, rerr := rt.http.do(opts)
-		return func(L *lua.LState) []lua.LValue {
-			if rerr != nil {
-				raiseHTTPError(L, rerr)
-				return nil
-			}
-			res := L.NewTable()
-			res.RawSetString("status", lua.LNumber(status))
-			h := L.NewTable()
-			for name, value := range headers {
-				h.RawSetString(name, lua.LString(value))
-			}
-			res.RawSetString("headers", h)
-			res.RawSetString("body", lua.LString(body))
-			return []lua.LValue{res}
-		}
-	})
-	return pushAll(L, vals)
-}
-
-// parseReqOpts extrae y valida los campos de la tabla `opts` de
-// `nu.http.request` en el estado principal (bajo el token). Devuelve
-// `(opts, false)` tras lanzar `EINVAL` si algo es inválido (sin `url`, `timeout_ms`
-// negativo, `opts.tls`/`opts.headers` de tipo equivocado): el llamante retorna sin
-// suspender. La URL no se valida a fondo aquí (sintaxis exacta, esquema soportado)
-// —eso lo hace `http.NewRequest` en la goroutine de fondo y un error suyo se rinde
-// como `EINVAL`—; aquí solo se exige que esté presente y sea un string no vacío.
-func parseReqOpts(L *lua.LState) (reqOpts, bool) {
-	o := reqOpts{method: http.MethodGet, timeout: httpDefaultTimeout}
-
-	tbl, ok := L.Get(1).(*lua.LTable)
-	if !ok {
-		raiseError(L, CodeEINVAL, "nu.http.request: opts debe ser una tabla", lua.LNil)
-		return o, false
-	}
-
-	urlVal, ok := tbl.RawGetString("url").(lua.LString)
-	if !ok || string(urlVal) == "" {
-		raiseError(L, CodeEINVAL, "nu.http.request: opts.url es obligatoria (string no vacío)", lua.LNil)
-		return o, false
-	}
-	o.rawURL = string(urlVal)
-
-	if m, ok := tbl.RawGetString("method").(lua.LString); ok && string(m) != "" {
-		o.method = strings.ToUpper(string(m))
-	}
-
-	if b, ok := tbl.RawGetString("body").(lua.LString); ok {
-		o.body = string(b)
-		o.hasBody = true
-	}
-
-	switch tm := tbl.RawGetString("timeout_ms").(type) {
-	case lua.LNumber:
-		if tm <= 0 {
-			raiseError(L, CodeEINVAL, "nu.http.request: opts.timeout_ms debe ser positivo", lua.LNil)
-			return o, false
-		}
-		o.timeout = time.Duration(tm) * time.Millisecond
-	case *lua.LNilType, nil:
-		// no especificado: rige el default
-	default:
-		raiseError(L, CodeEINVAL, "nu.http.request: opts.timeout_ms debe ser un número", lua.LNil)
-		return o, false
-	}
-
-	// Headers: tabla nombre→valor. Cada valor se convierte a string (un número o un
-	// booleano en un header es un error del autor, pero gopher-lua los stringifica;
-	// se exige string para no sorprender con coerciones implícitas).
-	switch ht := tbl.RawGetString("headers").(type) {
-	case *lua.LTable:
-		o.headers = make(map[string]string)
-		bad := false
-		ht.ForEach(func(k, v lua.LValue) {
-			name, kok := k.(lua.LString)
-			value, vok := v.(lua.LString)
-			if !kok || !vok {
-				bad = true
-				return
-			}
-			o.headers[string(name)] = string(value)
-		})
-		if bad {
-			raiseError(L, CodeEINVAL, "nu.http.request: opts.headers debe ser una tabla de string→string", lua.LNil)
-			return o, false
-		}
-	case *lua.LNilType, nil:
-		// sin headers
-	default:
-		raiseError(L, CodeEINVAL, "nu.http.request: opts.headers debe ser una tabla", lua.LNil)
-		return o, false
-	}
-
-	// TLS por petición (G12): `opts.tls = {ca_file?, insecure?}`.
-	switch tlsT := tbl.RawGetString("tls").(type) {
-	case *lua.LTable:
-		if ca, ok := tlsT.RawGetString("ca_file").(lua.LString); ok {
-			o.caFile = string(ca)
-			o.caFileSet = true
-		}
-		o.insecure = lua.LVAsBool(tlsT.RawGetString("insecure"))
-	case *lua.LNilType, nil:
-		// sin TLS a medida
-	default:
-		raiseError(L, CodeEINVAL, "nu.http.request: opts.tls debe ser una tabla", lua.LNil)
-		return o, false
-	}
-
-	// Proxy por petición (G12).
-	if px, ok := tbl.RawGetString("proxy").(lua.LString); ok {
-		o.proxy = string(px)
-		o.proxySet = true
-	}
-
-	return o, true
-}
-
 // errHTTPTimeout / errHTTPTransport son los centinelas internos que `do`
 // devuelve para que `raiseHTTPError` los mapee a `ETIMEOUT`/`ENET` sin reinspeccionar
 // el error original (que ya se clasificó fuera del token). Un fallo de
@@ -298,20 +144,6 @@ type httpError struct {
 }
 
 func (e *httpError) Error() string { return e.msg }
-
-// raiseHTTPError mapea el error que `do` produjo (ya clasificado) a un error
-// estructurado del core (§1.4) y lo lanza hacia Lua. Es el único punto donde un
-// fallo de red cruza la frontera.
-func raiseHTTPError(L *lua.LState, err error) {
-	var he *httpError
-	if errors.As(err, &he) {
-		raiseError(L, he.code, he.msg, lua.LNil)
-		return
-	}
-	// No debería ocurrir (do siempre envuelve), pero por robustez: trátalo como
-	// transporte.
-	raiseError(L, CodeENET, err.Error(), lua.LNil)
-}
 
 // do ejecuta la petición HTTP completa **fuera del token** (no toca Lua): elige
 // el cliente (reutilizable o a medida), arma la `*http.Request`, la lanza, lee el
@@ -349,7 +181,7 @@ func (st *httpState) do(o reqOpts) (int, map[string]string, string, error) {
 	if err != nil {
 		return 0, nil, "", classifyTransportError(ctx, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

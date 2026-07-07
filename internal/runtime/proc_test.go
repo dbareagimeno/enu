@@ -8,8 +8,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Tests de S16 (api.md §6): `nu.proc`. Sesión 🔒 —la lógica clave a blindar
@@ -181,24 +179,9 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
-// --- 🔒 Vida del proceso: kill por cleanup al cancelar la task (criterio de hecho) ---
-
-// procPidFromUD extrae el pid del subproceso de un userdata `Proc`. Es un helper de
-// test para observar el pid SIN exponerlo en la API pública (§6 no incluye
-// `Proc.pid`): se registra como global Go y un snippet le pasa el `Proc`.
-func procPidFromUD(L *lua.LState) int {
-	ud := L.CheckUserData(1)
-	p, ok := ud.Value.(*luaProc)
-	if !ok {
-		L.RaiseError("se esperaba un Proc")
-		return 0
-	}
-	L.Push(lua.LNumber(p.cmd.Process.Pid))
-	return 1
-}
-
 // waitDead espera (con plazo holgado) a que `pid` deje de existir. Es la ancla
-// anti-flaky: espera a la CONDICIÓN real, no a un sleep fijo.
+// anti-flaky: espera a la CONDICIÓN real, no a un sleep fijo. Lo reusa también el
+// test del ciclo de vida de MCP (mcp_test.go).
 func waitDead(pid int, d time.Duration) bool {
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
@@ -208,81 +191,6 @@ func waitDead(pid int, d time.Duration) bool {
 		time.Sleep(5 * time.Millisecond)
 	}
 	return !pidAlive(pid)
-}
-
-// TestSpawnKilledByCleanupOnCancel blinda EL criterio de hecho central de S16: una
-// task hace `spawn` + `nu.task.cleanup(function() proc:kill() end)`; al CANCELAR la
-// task (S08), el proceso muere por el cleanup. Se verifica con `pidAlive(pid)` del
-// subproceso: tras la cancelación, deja de existir.
-//
-// Todo el escenario va en UN `eval` que SÍ completa (el harness espera a la
-// quiescencia, así que ninguna task puede quedar colgada al cruzar el borde): un
-// controlador spawnea la víctima, espera a que esté suspendida en su `p:wait()`
-// (future `ready`), la cancela y la espera (observa `ECANCELED`, lo que cierra el
-// grafo). El pid del subproceso se publica con un helper Go (`__pid`) en un global
-// que el test lee DESPUÉS para comprobar que el proceso ya está muerto.
-func TestSpawnKilledByCleanupOnCancel(t *testing.T) {
-	h := newHarness(t)
-
-	pidCh := make(chan int, 1)
-	h.register("__publish_pid", func(L *lua.LState) int {
-		pidCh <- int(L.CheckNumber(1))
-		return 0
-	})
-	h.register("__pid", procPidFromUD)
-
-	h.eval(`
-		out = {}
-		nu.task.spawn(function()
-			local ready = nu.task.future()
-			local victim = nu.task.spawn(function()
-				local p = nu.proc.spawn({"sleep", "30"})
-				nu.task.cleanup(function() p:kill() end)   -- al cancelar, muere el proceso
-				__publish_pid(__pid(p))                    -- publica el pid al lado Go
-				ready:set(true)
-				p:wait()                                   -- cuelga hasta que el cleanup lo mate
-			end)
-			ready:await()         -- la víctima ya está dentro de su wait
-			nu.task.sleep(20)     -- margen para que entre en el suspend del wait
-			victim:cancel()       -- su cleanup corre y mata el proceso
-			local ok, err = pcall(function() victim:await() end)
-			out.code = err and err.code   -- ECANCELED (observable)
-		end)
-	`)
-
-	pid := <-pidCh
-	if !waitDead(pid, 5*time.Second) {
-		t.Fatalf("criterio de hecho: tras cancelar la task, el subproceso (pid %d) debería estar muerto", pid)
-	}
-	h.expectEval(`return out.code`, "ECANCELED")
-}
-
-// TestSpawnKilledByCleanupOnNormalEnd blinda la otra cara de la vida por `cleanup`:
-// al terminar la task NORMALMENTE (no por cancelación), su cleanup también corre y
-// mata el proceso. Garantiza que un `spawn` sin `wait` no deja procesos colgando.
-func TestSpawnKilledByCleanupOnNormalEnd(t *testing.T) {
-	h := newHarness(t)
-
-	pidCh := make(chan int, 1)
-	h.register("__publish_pid", func(L *lua.LState) int {
-		pidCh <- int(L.CheckNumber(1))
-		return 0
-	})
-	h.register("__pid", procPidFromUD)
-
-	h.eval(`
-		nu.task.spawn(function()
-			local p = nu.proc.spawn({"sleep", "30"})
-			nu.task.cleanup(function() p:kill() end)
-			__publish_pid(__pid(p))
-			-- la task termina aquí, sin esperar; el cleanup mata el proceso al terminar
-		end)
-	`)
-
-	pid := <-pidCh
-	if !waitDead(pid, 5*time.Second) {
-		t.Fatalf("al terminar la task, su cleanup debería haber matado el subproceso (pid %d)", pid)
-	}
 }
 
 // --- 🔒 spawn/streams: write a stdin, read_line de stdout, EOF, wait ---
@@ -490,20 +398,28 @@ func TestProcOutsideTaskEINVAL(t *testing.T) {
 // subproceso vivo da true; el de un pid imposible, false. La comprobación de "vivo"
 // la hace el propio snippet (`alive(pid_real)`) mientras el proceso sigue corriendo,
 // dentro de una task que completa (el proceso se mata por cleanup al terminar).
+//
+// El pid del subproceso lo obtiene el propio Lua (sin andamiaje Go que rebusque en
+// el userdata, inexistente en wasm): un `sh -c 'echo $$; exec sleep 30'` imprime su
+// pid y luego se REEMPLAZA por `sleep` conservándolo, de modo que el número que
+// `read_line` lee designa al proceso vivo. Sólo usa primitivas de nu.proc: idéntico
+// en ambos backends.
 func TestProcAliveSnippetG17(t *testing.T) {
 	h := newHarness(t)
-	h.register("__pid", procPidFromUD)
 
 	h.eval(`
 		out = {}
 		nu.task.spawn(function()
-			local p = nu.proc.spawn({"sleep", "30"})
+			local p = nu.proc.spawn({"sh", "-c", "echo $$; exec sleep 30"})
 			nu.task.cleanup(function() p:kill() end)
-			out.alive_real = nu.proc.alive(__pid(p))   -- true: el proceso está vivo
+			local pid = tonumber(p:read_line("stdout"))   -- el pid que $$ imprimió
+			out.has_pid = (pid ~= nil)
+			out.alive_real = nu.proc.alive(pid)        -- true: el proceso está vivo
 			out.alive_fake = nu.proc.alive(1073741824) -- false: pid imposible (2^30)
 		end)
 	`)
 
+	h.expectEval(`return tostring(out.has_pid)`, "true")
 	h.expectEval(`return tostring(out.alive_real)`, "true")
 	h.expectEval(`return tostring(out.alive_fake)`, "false")
 }

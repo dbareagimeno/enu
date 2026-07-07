@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"github.com/rivo/uniseg"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // El tipo `Block` y los estilos (api.md §9.2, sesión S22). Un **Block** es un
@@ -31,12 +30,6 @@ import (
 // (diff) y S23 (markdown) construir líneas concatenando tramos sin pensar en
 // celdas, y (b) mantiene el Block como descripción, no como pintura —blit es
 // copia, "nunca re-render" (§9.1)—.
-
-// blockTypeName identifica la metatabla del handle `Block`. De ella cuelga el
-// `__index` que resuelve los campos legibles `.width`/`.height`; el contenido
-// (las líneas de spans) es interno y NO se expone a Lua como tabla mutable —el
-// Block es opaco (§9.2)—, solo se inspecciona en Go (tests, S29 blit).
-const blockTypeName = "nu.ui.Block"
 
 // style es el estilo de un span (api.md §9.2). Todos los campos son opcionales:
 // `fg`/`bg` son colores **literales** (un "#rrggbb" o un índice 0-255), nunca
@@ -79,6 +72,12 @@ type block struct {
 	height int // número de líneas
 }
 
+// Dims devuelve las dimensiones cacheadas del Block en celdas (ancho, alto). Es lo
+// que exige `vmwasm.BlockObj` (M13c): el binding wasm expone el Block como handle
+// opaco cuyo objeto Go es este `*block`, y `Region:blit` lo resuelve para copiar su
+// ventana. Adición pura para el backend wasm; no toca el camino de gopher.
+func (b *block) Dims() (int, int) { return b.width, b.height }
+
 // lineWidth calcula el ancho en celdas de una línea (la suma de los anchos de sus
 // spans). Reusa la lógica de `text.width` (uniseg) span a span; concatenar los
 // textos y medir una vez daría el mismo resultado salvo en el borde patológico de
@@ -104,52 +103,4 @@ func newBlock(lines [][]span) *block {
 		}
 	}
 	return &block{lines: lines, width: maxW, height: len(lines)}
-}
-
-// pushBlock envuelve un `*block` en un userdata con la metatabla de `Block` y lo
-// empuja a la pila. Es el puente Go→Lua del tipo: lo usan `nu.ui.block`,
-// `nu.text.wrap` y (en adelante) toda primitiva que produzca un Block.
-func (rt *Runtime) pushBlock(L *lua.LState, b *block) {
-	ud := L.NewUserData()
-	ud.Value = b
-	L.SetMetatable(ud, L.GetTypeMetatable(blockTypeName))
-	L.Push(ud)
-}
-
-// checkBlock recupera el `*block` del userdata del argumento `idx`. Lanza
-// `EINVAL` si no es un handle de Block. Lo usarán las primitivas que consumen un
-// Block (S29 `Region:blit`); aquí lo usa el `__index` y los tests.
-func checkBlock(L *lua.LState, idx int) *block {
-	ud := L.CheckUserData(idx)
-	b, ok := ud.Value.(*block)
-	if !ok {
-		raiseError(L, CodeEINVAL, "Block: se esperaba un handle de Block", lua.LNil)
-		return nil
-	}
-	return b
-}
-
-// registerBlockType instala la metatabla del tipo `Block` con un `__index` que
-// resuelve los campos legibles `.width` y `.height` (§9.2). El Block es opaco: no
-// se expone el contenido (las líneas de spans) a Lua, solo sus dimensiones. Un
-// acceso a cualquier otra clave cae a nil (como una tabla normal). Lo llama
-// `registerUI` (ui.go).
-func (rt *Runtime) registerBlockType() {
-	L := rt.L
-	mt := L.NewTypeMetatable(blockTypeName)
-	L.SetField(mt, "__index", L.NewFunction(func(L *lua.LState) int {
-		b := checkBlock(L, 1)
-		if b == nil {
-			return 0
-		}
-		switch L.CheckString(2) {
-		case "width":
-			L.Push(lua.LNumber(b.width))
-		case "height":
-			L.Push(lua.LNumber(b.height))
-		default:
-			L.Push(lua.LNil)
-		}
-		return 1
-	}))
 }

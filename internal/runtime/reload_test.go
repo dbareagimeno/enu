@@ -20,6 +20,7 @@ package runtime
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -320,12 +321,22 @@ func TestReloadFueraDeTask(t *testing.T) {
 }
 
 // countOwnerHandles devuelve cuántos handles vivos hay registrados para `owner` en
-// el registro del scheduler (handles.go). Es una sonda de test sobre el estado
-// interno —el etiquetado por dueño es la lógica 🔒 de S13— que se lee bajo el token
-// para no carrear con las goroutines de timers.
+// el registro por dueño —la lógica 🔒 del etiquetado (S13, G2)—. El registro vive en
+// el preludio de reload (preludioReload) del estado wasm, así que se consulta con
+// `__count_owner(owner)` vía un eval.
 func countOwnerHandles(h *harness, owner string) int {
-	s := h.rt.sched
-	s.acquire()
-	defer s.release()
-	return len(s.ownerHandles[owner])
+	got := h.eval(`return __count_owner("` + owner + `")`)
+	if len(got) != 1 {
+		h.t.Fatalf("__count_owner(%q) devolvió %d valores, want 1", owner, len(got))
+	}
+	s := strings.TrimSpace(got[0])
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	// Por si el número cruza como float ("2.0").
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		h.t.Fatalf("__count_owner(%q) no devolvió un número: %q", owner, s)
+	}
+	return int(f)
 }

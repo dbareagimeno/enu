@@ -1,14 +1,15 @@
-// Package runtime levanta el intérprete Lua del core de nu: construye el estado
-// gopher-lua, aplica el baseline del sandbox (api.md §1.2), inyecta el global
-// `nu` y expone la evaluación de código. Es la quilla sobre la que las sesiones
-// posteriores cuelgan cada submódulo de la API (task, fs, http, ...).
+// Package runtime levanta el intérprete Lua del core de nu sobre el backend wasm
+// (PUC-Lua oficial en internal/vmwasm): construye el estado wasm con el sandbox
+// curado, cuelga el catálogo `nu.*` (registerWasmCatalog) y expone la evaluación
+// de código. Desde M17 wasm es la única VM (gopher-lua se retiró). Es la quilla
+// sobre la que las extensiones cuelgan cada submódulo de la API (task, fs, http…).
 package runtime
 
 import (
 	"path/filepath"
 	"time"
 
-	lua "github.com/yuin/gopher-lua"
+	"github.com/dbareagimeno/nu/internal/vmwasm"
 )
 
 // defaultSliceBudget es el presupuesto por slice del watchdog (api.md §1.3, S09):
@@ -21,11 +22,10 @@ const defaultSliceBudget = 100 * time.Millisecond
 // El estado principal es single-threaded (ADR-004); un Runtime se usa desde una
 // sola goroutine.
 type Runtime struct {
-	L *lua.LState
-
-	// sched es el event loop y el scheduler de tasks (§1.3, §3). Es la quilla:
-	// `nu.task`, los puntos de suspensión ⏸ y, en adelante, todo lo async cuelga
-	// de él. Una sola goroutine (la del loop) lo toca.
+	// sched conserva el token de ejecución y el presupuesto por slice del watchdog
+	// (scheduler.go). El scheduler de tasks real (corrutinas Lua) vive dentro del
+	// backend wasm (internal/vmwasm); aquí el token serializa el pintor del
+	// compositor con el driver de TTY y los tests que leen el compositor.
 	sched *scheduler
 
 	// log respalda `nu.log` (§15): un fichero append-only en data_dir.
@@ -57,13 +57,6 @@ type Runtime struct {
 	// específico construye un cliente por-petición; el resto reusa este.
 	http *httpState
 
-	// jsonNull es el sentinel `nu.json.NULL` (§12, S18): un userdata único del
-	// estado Lua que representa `null` de JSON sin colisionar con ningún valor Lua.
-	// `decode` lo entrega en lugar de `nil` (que borraría la clave de una tabla,
-	// rompiendo el round-trip) y `encode` lo reconoce por identidad para emitir
-	// `null`. Se crea una sola vez en `registerCodecs` y nunca cambia.
-	jsonNull *lua.LUserData
-
 	// ui es el estado de sesión de `nu.ui` (§9.1, S29): el **compositor** (rejilla
 	// de pantalla, regiones con z-order, diff→ANSI, coalescing). Vive en el estado
 	// principal bajo el token (ADR-008: `nu.ui` es solo estado principal). Las
@@ -89,6 +82,20 @@ type Runtime struct {
 	// recortada por `caps` (G6). Lo construye `newWorkerRuntime` (worker_registry.go);
 	// el estado principal lo deja en false. Inmutable tras la construcción.
 	isWorker bool
+
+	// wasmPool / wasm son el estado del backend wasm: el Pool que compila el catálogo
+	// de primitivas nu.* y la Instance —el estado Lua aislado— sobre la que corren
+	// `EvalString`/`EvalTaskString`. Los construye `buildWasmState` (siempre, desde
+	// M17); `Close` los libera. El estado de sesión (fs, http, sys, ui, log) lo
+	// reusa el catálogo wasm (rt.fs/rt.http/...).
+	wasmPool *vmwasm.Pool
+	wasm     *vmwasm.Instance
+	// wasmErr guarda un fallo de construcción del estado wasm (`buildWasmState`).
+	// La firma de `New` es sagrada (no devuelve error), así que un fallo del backend
+	// wasm no puede propagarse ahí: se aparca aquí y lo devuelven `EvalString`/
+	// `EvalTaskString` al primer intento de evaluar (como el `configErr` aplazado a
+	// `Boot`).
+	wasmErr error
 
 	// ownerStack es la pila de contextos de plugin activos (§14). El tope es el
 	// plugin "en cuyo contexto corre el código" que devuelve `nu.plugin.current`;
@@ -231,6 +238,16 @@ func WithEnabledPlugins(names []string) Option {
 	}
 }
 
+// WithVMBackend existía para forzar un backend de VM (patrón estrangulador). Desde
+// M17 sólo hay wasm, así que es un **no-op** que se conserva para no romper la firma
+// de los tests que aún la pasan (`WithVMBackend(VMWasm)`).
+func WithVMBackend(VMBackend) Option {
+	return func(*config) {}
+}
+
+// VMBackend devuelve el motor de VM de este Runtime: desde M17, siempre wasm.
+func (rt *Runtime) VMBackend() VMBackend { return VMWasm }
+
 // New construye un Runtime listo para ejecutar Lua: abre solo las librerías
 // permitidas por el baseline (§1.2), recorta `os`, elimina `io`/`dofile`/
 // `loadfile`, redirige `print` a `nu.log.info` e inyecta el global `nu` con sus
@@ -271,12 +288,6 @@ func New(opts ...Option) *Runtime {
 		pluginDirs = append(pluginDirs, nuCfg.Plugins.Dirs...)
 	}
 
-	// SkipOpenLibs: abrimos a mano solo lo que el baseline permite, en vez de
-	// abrir todo y desactivar después; así una librería peligrosa nueva de
-	// gopher-lua no entra por defecto (deny-by-default, coherente con las caps
-	// de los workers, §13).
-	L := lua.NewState(lua.Options{SkipOpenLibs: true})
-
 	// GATING HEADLESS de `nu.ui` (G20, §9, S32): decide si hay superficie de UI. La
 	// Option `WithForceUI` manda (la usan los tests); sin ella, lo decide la detección
 	// de un TTY interactivo (`detectTTY`). En headless (`nu -e`, CI, salida
@@ -288,7 +299,6 @@ func New(opts ...Option) *Runtime {
 	}
 
 	rt := &Runtime{
-		L:        L,
 		log:      newLogger(filepath.Join(cfg.dataDir, logFileName)),
 		fs:       &fsState{},
 		sys:      &sysState{},
@@ -318,10 +328,83 @@ func New(opts ...Option) *Runtime {
 	if cfg.enabledOverrideSet {
 		rt.ldr.enabled = cfg.enabledOverride
 	}
+
+	// Tolerancia de la retirada (M17): si el entorno (`NU_VM`) o `nu.toml [vm] backend`
+	// piden todavía el backend `gopher`, ya eliminado, se avisa por stderr y se sigue
+	// sobre wasm —nu no rompe el arranque por una config/script legacy—.
+	warnIfGopherRequested(nuCfg.VM.Backend)
+
 	rt.sched = newScheduler(rt, cfg.sliceBudget)
-	applySandbox(L)
-	registerNu(rt)
+
+	// Arranque del backend wasm (la única VM desde M17): construye el Pool con el
+	// catálogo completo de primitivas nu.* y la Instance. Reusa el estado de sesión
+	// ya armado (rt.fs/rt.http/rt.sys/rt.ui/rt.log/rt.sched). Un fallo se aparca en
+	// rt.wasmErr (la firma de New no devuelve error).
+	rt.buildWasmState()
 	return rt
+}
+
+// buildWasmState construye el estado del backend wasm (M13d): un Pool con el
+// CATÁLOGO COMPLETO ya portado (registerWasmCatalog) y una Instance —el estado
+// Lua aislado— lista para evaluar. Se llama desde `New` sólo cuando el backend
+// resuelto es `VMWasm`, DESPUÉS de armar el `rt` gopher (patrón estrangulador: el
+// catálogo reusa rt.fs/rt.http/rt.sys/rt.ui/rt.log/rt.sched, que `New` ya construyó).
+// Un fallo aquí NO rompe la firma de `New` (que no devuelve error): se guarda en
+// `rt.wasmErr` y lo propagan `EvalString`/`EvalTaskString` al primer eval. El
+// watchdog por slice (DM4) ya está cableado (`SetSliceBudget`); la carga de las 8
+// extensiones oficiales (M13d-ext) es sesión aparte: aquí se cablea el arranque, el
+// catálogo síncrono/⏸ y el presupuesto del watchdog.
+func (rt *Runtime) buildWasmState() {
+	p, err := vmwasm.NewPool()
+	if err != nil {
+		rt.wasmErr = err
+		return
+	}
+	// El nivel de nu.version.api que el preludio inyecta (api.md §2): el mismo que
+	// el estado gopher (APILevel). Debe fijarse antes de NewInstance.
+	p.SetAPIVersion(APILevel)
+	// nu.version.major/minor/patch (api.md §1): las mismas constantes que el estado
+	// gopher expone en registerNu, para que las extensiones (p. ej. el banner del
+	// chat) formateen la versión completa. Debe fijarse antes de NewInstance.
+	p.SetVersion(VersionMajor, VersionMinor, VersionPatch)
+	// Presupuesto del watchdog por slice (DM4): el mismo `sliceBudget` que rige el
+	// estado gopher (rt.sched.budget, ya resuelto por precedencia Option>nu.toml>
+	// default). Un bucle de CPU en una task wasm se aborta con EBUDGET tras el slice,
+	// idéntico a gopher. Debe fijarse antes de NewInstance (el preludio arma el hook).
+	p.SetSliceBudget(rt.sched.budget)
+	rt.registerWasmCatalog(p)
+	inst, err := p.NewInstance()
+	if err != nil {
+		p.StopWorkers()
+		_ = p.Close()
+		rt.wasmErr = err
+		return
+	}
+	rt.wasmPool = p
+	rt.wasm = inst
+}
+
+// registerWasmCatalog cuelga en `p` el catálogo completo de primitivas nu.* ya
+// portado a wasm (migracion-vm.md M13b/M13c), agrupado aquí para no ensuciar `New`.
+// Cada `registerXWasm` es la contraparte del `registerX` gopher y reusa las mismas
+// implementaciones Go VM-agnósticas del kernel; el estado de sesión que necesitan
+// (rt.fs/rt.http/rt.sys/rt.log/rt.ui) llega por `rt`. `registerHTTPWasm` incluye
+// `http.stream` y `registerTextWasm` incluye los Blocks de nu.text (se registran
+// desde dentro). `registerUIWasm` instala el compositor SÓLO si hay UI concedida
+// (`rt.ui != nil`, gating headless G20); en headless no registra nada.
+func (rt *Runtime) registerWasmCatalog(p *vmwasm.Pool) {
+	registerCodecsWasm(p)     // nu.json/toml/yaml (§12)
+	registerReWasm(p)         // nu.re (§10)
+	registerFsWasm(p, rt)     // nu.fs (§5)
+	registerSysWasm(p, rt)    // nu.sys (§7)
+	registerLogWasm(p, rt)    // nu.log (§15)
+	registerTextWasm(p, rt)   // nu.text width/truncate + wrap/markdown/highlight/diff (§10)
+	registerHTTPWasm(p, rt)   // nu.http.request + nu.http.stream (§8)
+	registerWsWasm(p, rt)     // nu.ws (§11)
+	registerSearchWasm(p, rt) // nu.search (§11)
+	registerProcWasm(p, rt)   // nu.proc (§6)
+	registerUIWasm(p, rt)     // nu.ui (§9) — sólo si rt.ui != nil (G20)
+	registerPluginWasm(p, rt) // nu.plugin (current/list) + nu.config (§14)
 }
 
 // currentOwner devuelve el nombre del plugin en cuyo contexto corre el código
@@ -335,44 +418,6 @@ func (rt *Runtime) currentOwner() string {
 		return rt.ownerStack[n-1].Name
 	}
 	return ownerUser
-}
-
-// emitMisbehaved es el **gancho interno** de `core:plugin.misbehaved` (api.md
-// §1.3, §4). El watchdog (`runTask`) lo invoca cuando una task se abortó por
-// exceder el presupuesto de un slice. S10 lo **cabló al bus real**: además de
-// dejar constancia en el log (best-effort, como el resto de fallos de task),
-// emite `core:plugin.misbehaved` por `nu.events` con el payload
-// `{ plugin = owner, reason = reason }` (`core:` es el namespace que el kernel
-// reserva, §4). El watchdog sigue llamando a este punto único, sin tocar su
-// superficie.
-//
-// SEGURIDAD DEL HILO (la decisión delicada de S10, ver claude_decisions.md). El
-// que llama es `runTask`, que corre en la goroutine de la task —sobre el thread
-// `co`, NO sobre `host`— pero **con el token tomado** (la emisión ocurre antes de
-// `release`). Que estemos en el thread de la task no importa: el bus es del estado
-// principal y toca `host` (la tabla del payload, los threads efímeros de los
-// handlers), no `co`; lo que protege esos accesos es el **token**, no qué thread
-// corre. Por eso se emite **directamente** (síncrono) en vez de re-encolarlo a
-// otra goroutine: ya tenemos el invariante que el bus necesita (token + estado
-// principal). Si un handler de `core:plugin.misbehaved` re-emitiera, la cola de
-// emits de `nu.events` (events.go) lo aplana por anchura, sin recursión.
-func (rt *Runtime) emitMisbehaved(owner, reason string) {
-	_ = rt.log.write(levelError, owner, "core:plugin.misbehaved: "+reason)
-
-	// Construye el payload sobre `host` (seguro: tenemos el token). El bus puede no
-	// estar inicializado en escenarios de test que construyen un scheduler a pelo;
-	// en el runtime real `registerEvents` siempre corre antes de cualquier task.
-	if rt.sched == nil || rt.sched.events == nil {
-		return
-	}
-	payload := rt.L.NewTable()
-	payload.RawSetString("plugin", lua.LString(owner))
-	payload.RawSetString("reason", lua.LString(reason))
-	// Pasamos `host` (rt.L) como thread llamante: la emisión de misbehaved es un
-	// solo evento desde `runTask` (no un drenado de task que deba vigilar su propio
-	// watchdog —la task que lo motivó ya está abortada—), así que no se ata al
-	// borde cooperativo del watchdog de `emit`.
-	rt.sched.emit(rt.L, "core:plugin.misbehaved", payload)
 }
 
 // Boot ejecuta el **arranque canónico** del runtime (api.md §14, S11): descubre y
@@ -389,7 +434,9 @@ func (rt *Runtime) Boot() error {
 	// cambios. En headless el pintado solo construye el buffer ANSI en memoria (no
 	// hay TTY hasta S32); el timer se corta en `Close`.
 	rt.armPainter()
-	return rt.ldr.Boot()
+	// Las extensiones oficiales se cargan sobre la Instance wasm (BootWasm hace la
+	// discovery/topología y corre cada init.lua; ver vmwasm_loader.go).
+	return rt.ldr.BootWasm()
 }
 
 // Close libera el estado Lua subyacente, corta los timers periódicos activos
@@ -397,30 +444,17 @@ func (rt *Runtime) Boot() error {
 // log si llegó a abrirse.
 func (rt *Runtime) Close() {
 	if rt.sched != nil {
-		rt.sched.stopAllTimers()
-		// Corta los `nu.fs.watch` activos (S15): sus goroutines de fondo y los
-		// watchers del SO no deben sobrevivir al proceso.
-		rt.sched.stopAllWatchers()
-		// Mata los subprocesos vivos de `nu.proc.spawn` (S16): la última red de
-		// seguridad de la vida del proceso (§6), tras `cleanup` y el finalizer del GC.
+		// Mata los subprocesos vivos de `nu.proc.spawn` (S16): red de seguridad tras el
+		// `cleanup` y el finalizer del GC. Cierra los `nu.http.stream` (S20), `nu.ws`
+		// (S21) y cancela los `nu.search.grep` (S27) vivos: sus goroutines de fondo y
+		// conexiones no deben sobrevivir al proceso. Sus objetos Go se rastrean en el
+		// scheduler (las primitivas los registran al crearlos; ver proc.go/stream.go/
+		// ws.go/search.go, reusados por los HostFn de vmwasm). Los `nu.fs.watch` (S15) y
+		// `nu.worker` (S34) viven en la Instance/Pool wasm y los cierra su Close (abajo).
 		rt.sched.stopAllProcs()
-		// Cierra los `nu.http.stream` vivos (S20): sus goroutines de lectura del body
-		// y sus conexiones no deben sobrevivir al proceso (red de seguridad, tras el
-		// `cleanup` de quien abrió el stream).
 		rt.sched.stopAllStreams()
-		// Cierra los `nu.ws.connect` vivos (S21): sus conexiones y goroutines de IO no
-		// deben sobrevivir al proceso (red de seguridad, tras el `cleanup` de quien abrió
-		// el websocket).
 		rt.sched.stopAllWs()
-		// Cancela los `nu.search.grep` vivos (S27): sus pools de goroutines de fondo
-		// (recorrido del árbol + casado del patrón) no deben sobrevivir al proceso (red
-		// de seguridad, tras el `cleanup` de la task que consume el iterador).
 		rt.sched.stopAllGreps()
-		// Corta los `nu.worker.spawn` vivos (S34): cierra su `done`, lo que despierta
-		// cualquier `send`/`recv` colgado y lleva la goroutine de cada worker a soltar su
-		// propio estado Lua (la goroutine del worker es la dueña de su Lua: el padre
-		// nunca lo toca). Red de seguridad tras el `terminate` de quien lo creó.
-		rt.sched.stopAllWorkers()
 	}
 	// Corta el timer de coalescing de `nu.ui` (S29): su goroutine de pintado no debe
 	// sobrevivir al proceso.
@@ -441,5 +475,14 @@ func (rt *Runtime) Close() {
 	if rt.log != nil && !rt.isWorker {
 		_ = rt.log.close()
 	}
-	rt.L.Close()
+	// Estado del backend wasm (M13d), si se construyó: cierra la Instance (su memoria
+	// muere con el módulo) y el Pool (para sus workers y libera). El runtime wazero es
+	// compartido a nivel de proceso: `Pool.Close` no lo cierra (vive lo que el proceso).
+	if rt.wasm != nil {
+		_ = rt.wasm.Close()
+	}
+	if rt.wasmPool != nil {
+		rt.wasmPool.StopWorkers()
+		_ = rt.wasmPool.Close()
+	}
 }

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Tests de `nu.ws.connect` (S21, api.md §8). La sesión NO está en el inventario 🔒
@@ -31,7 +30,7 @@ func wsEchoServer(t *testing.T) *httptest.Server {
 		if err != nil {
 			return
 		}
-		defer c.CloseNow()
+		defer func() { _ = c.CloseNow() }()
 		ctx := r.Context()
 		for {
 			typ, data, err := c.Read(ctx)
@@ -161,10 +160,7 @@ func TestWsConnectRefusedENET(t *testing.T) {
 	_ = ln.Close()
 
 	h := newHarness(t)
-	h.rt.L.SetGlobal("DEADURL", h.rt.L.NewFunction(func(L *lua.LState) int {
-		L.Push(lua.LString("ws://" + addr))
-		return 1
-	}))
+	h.regStringFn("DEADURL", "ws://"+addr)
 	h.eval(`
 		code = nil
 		nu.task.spawn(function()
@@ -185,7 +181,7 @@ func TestWsConnectTimeoutETIMEOUT(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no se pudo escuchar: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -202,10 +198,7 @@ func TestWsConnectTimeoutETIMEOUT(t *testing.T) {
 	}()
 
 	h := newHarness(t)
-	h.rt.L.SetGlobal("SLOWURL", h.rt.L.NewFunction(func(L *lua.LState) int {
-		L.Push(lua.LString("ws://" + ln.Addr().String()))
-		return 1
-	}))
+	h.regStringFn("SLOWURL", "ws://"+ln.Addr().String())
 	h.eval(`
 		code = nil
 		nu.task.spawn(function()

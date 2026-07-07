@@ -145,5 +145,57 @@ jobs:
 
       - name: go test -race
         # -shuffle=on baraja el orden de los tests: caza dependencias de orden
-        # ocultas a coste cero.
-        run: go test -race -shuffle=on ./...
+        # ocultas a coste cero. Se EXCLUYE internal/vmwasm: su suite compila N
+        # módulos wazero con el motor JIT (páginas ejecutables mmap), y bajo la
+        # instrumentación de -race el mmap ejecutable agota la memoria del runner
+        # (OOM, no una carrera). Por eso `internal/vmwasm` se EXCLUYE aquí de forma
+        # permanente y tiene su propio job (vmblob): su suite completa sin -race y sus
+        # tests de concurrencia CON -race dirigido (subconjunto acotado, sin OOM).
+        run: go test -race -shuffle=on $(go list ./... | grep -v /internal/vmwasm)
+
+  # Blob de la VM wasm (migracion-vm.md M02, DM1): reconstruye nu.wasm desde las
+  # fuentes pineadas de Lua + el shim, y verifica que el artefacto comiteado no ha
+  # derivado. Guarda la reproducibilidad de la VM (DM1): permanente mientras wasm
+  # sea la VM del kernel.
+  vmblob:
+    name: Blob de la VM (nu.wasm reproducible)
+    # El runner ya NO necesita pineo: build.sh es hermético (fix post-M17,
+    # migracion-vm.md) — descarga el wasi-sdk oficial pineado por sha256 y
+    # compila con su clang/sysroot, sin tocar la toolchain de la distro. La
+    # etiqueta móvil deja de poder cambiar el blob bajo los pies (lo hizo dos
+    # veces cuando el build usaba el clang/wasi-libc de apt).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Reconstruir nu.wasm y verificar que el blob comiteado no derivó
+        # build.sh descarga el wasi-sdk pineado (sha256), clona Lua pineado
+        # (v5.4.7, commit verificado) y recompila. Si el resultado difiere del
+        # nu.wasm comiteado, fuentes o shim cambiaron sin regenerar el blob: el
+        # diff falla y hay que correr build.sh y comitear el nuevo artefacto.
+        run: |
+          hash_antes=$(sha256sum internal/vmwasm/nu.wasm | cut -d' ' -f1)
+          internal/vmwasm/build.sh
+          hash_despues=$(sha256sum internal/vmwasm/nu.wasm | cut -d' ' -f1)
+          echo "comiteado: $hash_antes"
+          echo "rebuild:   $hash_despues"
+          git diff --exit-code internal/vmwasm/nu.wasm || {
+            echo "nu.wasm derivó de sus fuentes: corre internal/vmwasm/build.sh y comitea el blob" >&2
+            exit 1
+          }
+
+      - name: Tests del backend wasm (suite completa)
+        run: go test ./internal/vmwasm/
+
+      - name: Tests de concurrencia del backend wasm (-race dirigido)
+        # El driver del scheduler y los workers (goroutines de fondo, canales) son
+        # lo que -race audita; se corre sobre los tests que lo ejercen, sin OOM
+        # (subconjunto acotado). TestWorker (M12) cubre el aislamiento entre
+        # instancias, la mensajería acotada y terminate.
+        run: go test -race -run 'TestSched|TestPrim|TestTask|TestTrampolinMultiInstancia|TestWorker' ./internal/vmwasm/
