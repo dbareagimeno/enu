@@ -47,7 +47,7 @@ func TestEventsCancel(t *testing.T) {
 		local n = 0
 		local sub = nu.events.on("x:e", function() n = n + 1 end)
 		nu.events.emit("x:e")   -- corre: n=1
-		sub.cancel()
+		sub:cancel()
 		nu.events.emit("x:e")   -- no corre
 		out = tostring(n)`)
 	if out != "1" {
@@ -61,7 +61,7 @@ func TestEventsCancelDuranteDespacho(t *testing.T) {
 	out := evalOut(t, `
 		local corrio_b = false
 		local subB
-		nu.events.on("x:e", function() if subB then subB.cancel() end end)  -- A cancela a B
+		nu.events.on("x:e", function() if subB then subB:cancel() end end)  -- A cancela a B
 		subB = nu.events.on("x:e", function() corrio_b = true end)          -- B
 		nu.events.emit("x:e")
 		out = tostring(corrio_b)`)
