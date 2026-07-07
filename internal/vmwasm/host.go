@@ -555,6 +555,17 @@ local function __resume(id, arg, iserr, pending)
     t.done = true; t.ok = false
     t.result = { code = "EBUDGET", message = "una task excedió el presupuesto de slice (watchdog)" }
     __finish(t)
+    -- El watchdog cortó la task: emite core:plugin.misbehaved por el bus (paridad con
+    -- rt.emitMisbehaved de gopher, cableado en runTask). El plugin es el owner en curso
+    -- (nil fuera de una extensión → "user"); el reason menciona EBUDGET.
+    local __mb_reason = "EBUDGET: una task excedió el presupuesto de slice del watchdog"
+    if nu.log and nu.log.error then nu.log.error("core:plugin.misbehaved: " .. __mb_reason) end
+    if nu.events and nu.events.emit then
+      -- El owner es el del contexto en curso: durante la EJECUCIÓN de una task la
+      -- pila de owners está vacía → "user", igual que rt.currentOwner() en gopher
+      -- (scheduler.go usa currentOwner() al emitir, no un owner por task).
+      nu.events.emit("core:plugin.misbehaved", { plugin = "user", reason = __mb_reason })
+    end
   elseif yielded.op == "await" then
     local target = __tasks[yielded.id]
     if target and target.done then
@@ -768,20 +779,29 @@ local __ev_dispatching = false
 
 nu.events = nu.events or {}
 
-function nu.events.on(name, fn)
+-- Sub handle (api.md §4): nu.events.on/once devuelven un Sub con :cancel(). Como
+-- Task/Future, es una tabla con una metatable que valida el receptor (Sub:cancel
+-- sobre otro handle → EINVAL, paridad con el userdata gopher). __sub apunta al
+-- registro interno { fn, live, once }.
+local __sub_mt = {
+  __index = {
+    cancel = function(self)
+      if type(self) ~= "table" or self.__sub == nil then
+        error({ code = "EINVAL", message = "Sub:cancel: el receptor no es un Sub" })
+      end
+      self.__sub.live = false
+    end,
+  },
+}
+local function __new_sub(name, fn, once)
   __ev_subs[name] = __ev_subs[name] or {}
-  local sub = { fn = fn, live = true, once = false }
+  local sub = { fn = fn, live = true, once = once }
   __ev_subs[name][#__ev_subs[name]+1] = sub
-  return { cancel = function() sub.live = false end }
+  return setmetatable({ __sub = sub }, __sub_mt)
 end
 
-function nu.events.once(name, fn)
-  local subs = __ev_subs[name] or {}
-  __ev_subs[name] = subs
-  local sub = { fn = fn, live = true, once = true }
-  subs[#subs+1] = sub
-  return { cancel = function() sub.live = false end }
-end
+function nu.events.on(name, fn) return __new_sub(name, fn, false) end
+function nu.events.once(name, fn) return __new_sub(name, fn, true) end
 
 local function __ev_dispatch(name, payload)
   local subs = __ev_subs[name]
@@ -794,7 +814,12 @@ local function __ev_dispatch(name, payload)
   for _, s in ipairs(snap) do
     if s.live then
       if s.once then s.live = false end
-      pcall(s.fn, payload)   -- cada handler bajo pcall (ADR-008)
+      -- cada handler bajo pcall (ADR-008); si lanza, best-effort al log (como gopher)
+      local ok, err = pcall(s.fn, payload)
+      if not ok and nu.log and nu.log.error then
+        local msg = type(err) == "table" and (err.message or err.code) or tostring(err)
+        nu.log.error("un handler de nu.events lanzó: " .. tostring(msg))
+      end
     end
   end
   -- compacta los muertos (once consumidos, cancelados)
