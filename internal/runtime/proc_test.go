@@ -499,20 +499,28 @@ func TestProcOutsideTaskEINVAL(t *testing.T) {
 // subproceso vivo da true; el de un pid imposible, false. La comprobación de "vivo"
 // la hace el propio snippet (`alive(pid_real)`) mientras el proceso sigue corriendo,
 // dentro de una task que completa (el proceso se mata por cleanup al terminar).
+//
+// El pid del subproceso lo obtiene el propio Lua (sin andamiaje Go que rebusque en
+// el userdata, inexistente en wasm): un `sh -c 'echo $$; exec sleep 30'` imprime su
+// pid y luego se REEMPLAZA por `sleep` conservándolo, de modo que el número que
+// `read_line` lee designa al proceso vivo. Sólo usa primitivas de nu.proc: idéntico
+// en ambos backends.
 func TestProcAliveSnippetG17(t *testing.T) {
 	h := newHarness(t)
-	h.register("__pid", procPidFromUD)
 
 	h.eval(`
 		out = {}
 		nu.task.spawn(function()
-			local p = nu.proc.spawn({"sleep", "30"})
+			local p = nu.proc.spawn({"sh", "-c", "echo $$; exec sleep 30"})
 			nu.task.cleanup(function() p:kill() end)
-			out.alive_real = nu.proc.alive(__pid(p))   -- true: el proceso está vivo
+			local pid = tonumber(p:read_line("stdout"))   -- el pid que $$ imprimió
+			out.has_pid = (pid ~= nil)
+			out.alive_real = nu.proc.alive(pid)        -- true: el proceso está vivo
 			out.alive_fake = nu.proc.alive(1073741824) -- false: pid imposible (2^30)
 		end)
 	`)
 
+	h.expectEval(`return tostring(out.has_pid)`, "true")
 	h.expectEval(`return tostring(out.alive_real)`, "true")
 	h.expectEval(`return tostring(out.alive_fake)`, "false")
 }
