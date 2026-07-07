@@ -266,6 +266,11 @@ func TestSpawnKilledByCleanupOnCancel(t *testing.T) {
 // mata el proceso. Garantiza que un `spawn` sin `wait` no deja procesos colgando.
 func TestSpawnKilledByCleanupOnNormalEnd(t *testing.T) {
 	h := newHarness(t)
+	// Andamiaje Go irreducible a Lua (como TestSpawnKilledByCleanupOnCancel):
+	// __publish_pid bloquea en un canal y usa el userdata de nu.proc. La propiedad —un
+	// cleanup mata el subproceso al terminar la task— se apoya en nu.proc real; se
+	// valida en gopher.
+	h.skipIfWasm("__publish_pid bloquea en un canal Go y usa el userdata de nu.proc")
 
 	pidCh := make(chan int, 1)
 	h.register("__publish_pid", func(L *lua.LState) int {

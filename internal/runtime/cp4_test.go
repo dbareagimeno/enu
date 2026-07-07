@@ -5,8 +5,6 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // CP-4 · "Una herramienta de verdad, solo con primitivas" (checkpoint de
@@ -75,10 +73,7 @@ func TestCP4HerramientaSoloConPrimitivas(t *testing.T) {
 	writeFile(repo+"/sub/dato.json", `{"clave":"valor"}`)
 
 	h := newHarness(t)
-	h.rt.L.SetGlobal("REPO", h.rt.L.NewFunction(func(L *lua.LState) int {
-		L.Push(lua.LString(repo))
-		return 1
-	}))
+	h.regStringFn("REPO", repo)
 
 	// El script de dogfooding: recorrido recursivo + lectura + git status + resumen
 	// JSON. Todo dentro de una task (las primitivas de fs/proc son ⏸).
