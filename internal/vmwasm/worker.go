@@ -239,9 +239,32 @@ func parseWorkerCaps(opts map[string]any) (map[string]bool, bool, error) {
 // run es la goroutine del worker: corre el módulo como una task (para que su
 // top-level pueda llamar a ⏸ como parent.recv) y conduce su scheduler hasta que
 // no queda nada vivo o lo interrumpe terminate.
-func (w *worker) run(source string) {
+func (w *worker) run(module string) {
 	defer w.shutdown()
-	boot := "nu.task.spawn(function()\n" + source + "\nend)"
+	// El argumento de nu.worker.spawn es un NOMBRE DE MÓDULO (api.md §13), no código
+	// fuente: el worker lo resuelve con `require` (contra el registro de módulos que
+	// heredó del padre), corriendo su top-level DENTRO de una task para que pueda usar
+	// ⏸ (parent.recv/send). Paridad con el backend gopher (`return require(module)`).
+	// El nombre se pasa por un global fijado sin interpolar (SetGlobalString), así un
+	// nombre con caracteres raros no puede inyectar código.
+	if err := w.inst.SetGlobalString("__worker_module", module); err != nil {
+		return
+	}
+	// require(nombre) si es un módulo registrado (el caso de producción/contrato); si
+	// NO existe (ENOENT), se trata el argumento como CÓDIGO FUENTE inline y se corre con
+	// `load` —lo usan pruebas de bajo nivel que pasan el cuerpo del worker directamente—.
+	// Cualquier otro error de require (p. ej. compilación del módulo) se propaga.
+	boot := `nu.task.spawn(function()
+  local name = __worker_module
+  local ok, mod = pcall(require, name)
+  if ok then return mod end
+  if type(mod) == "table" and mod.code == "ENOENT" then
+    local fn, err = load(name, "worker")
+    if not fn then error(err) end
+    return fn()
+  end
+  error(mod)
+end)`
 	if _, lerr, err := w.inst.Eval(boot); err != nil || lerr != "" {
 		return // error de carga: aislado (ADR-008); el worker termina
 	}

@@ -774,6 +774,27 @@ end
 function nu.task.defer(fn)
   nu.task.spawn(fn)
 end
+
+-- nu.task.every(ms, fn) -> { stop } (§3). Timer periódico: una task que repite
+-- sleep+fn hasta que se para. Vive en preludioTask (no en eventos) porque es una
+-- primitiva de nu.task y debe existir también en los WORKERS (api.md §13), que no
+-- cargan el bus de eventos.
+function nu.task.every(ms, fn)
+  local stopped = false
+  local h = nu.task.spawn(function()
+    while not stopped do
+      nu.task.sleep(ms)
+      if stopped then break end
+      pcall(fn)
+    end
+  end)
+  -- Marca la task del timer como de FONDO: un timer nunca termina por sí mismo, así
+  -- que no debe contar como trabajo vivo de primer plano para la quiescencia (si
+  -- contara, RunTasks/waitIdle no volvería jamás). Se cancela con :stop().
+  local tid = __task_id_of(h)
+  if tid and __tasks[tid] then __tasks[tid].bg = true end
+  return { stop = function() stopped = true; nu.task.cancel(h) end }
+end
 `
 
 // preludioEvents: el bus de eventos nu.events (M08, api.md §4) con la semántica
@@ -848,25 +869,6 @@ function nu.events.emit(name, payload)
     __ev_dispatch(e.name, e.payload)
   end
   __ev_dispatching = false
-end
-
--- nu.task.every(ms, fn) -> { stop } (§3). Timer periódico: una task que repite
--- sleep+fn hasta que se para.
-function nu.task.every(ms, fn)
-  local stopped = false
-  local h = nu.task.spawn(function()
-    while not stopped do
-      nu.task.sleep(ms)
-      if stopped then break end
-      pcall(fn)
-    end
-  end)
-  -- Marca la task del timer como de FONDO: un timer nunca termina por sí mismo, así
-  -- que no debe contar como trabajo vivo de primer plano para la quiescencia (si
-  -- contara, RunTasks/waitIdle no volvería jamás). Se cancela con :stop().
-  local tid = __task_id_of(h)
-  if tid and __tasks[tid] then __tasks[tid].bg = true end
-  return { stop = function() stopped = true; nu.task.cancel(h) end }
 end
 `
 
@@ -1012,6 +1014,12 @@ _G.__check_msg = __check_msg
 // principal (un worker no crea workers).
 const preludioWorkerHost = `
 function nu.worker.spawn(module, opts)
+  if type(module) ~= "string" or module == "" then
+    error({ code = "EINVAL", message = "nu.worker.spawn: module es obligatorio (string no vacío)" })
+  end
+  if opts ~= nil and type(opts) ~= "table" then
+    error({ code = "EINVAL", message = "nu.worker.spawn: opts debe ser una tabla" })
+  end
   local wid = nu.worker._spawn(module, opts)
   local W = { __wid = wid, _recvPending = 0, _onMsg = false }
 
