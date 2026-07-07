@@ -196,6 +196,11 @@ local __handle_mt = {
   end,
 }
 
+-- Metatable de un Block OPACO (M13c, §10): cruza como handle (por __id) igual que
+-- __handle_mt, pero NO despacha métodos —un Block sólo expone .width/.height como
+-- datos; cualquier otra clave (p. ej. .lines) es nil, no una función—.
+local __block_mt = { __index = function() return nil end }
+
 -- __enc(v, out): serializa v al array de trozos "out".
 local function __enc(v, out)
   local t = type(v)
@@ -210,8 +215,8 @@ local function __enc(v, out)
     end
   elseif t == "string" then
     out[#out+1] = string.char(W_STR) .. string.pack("<I4", #v) .. v
-  elseif t == "table" and getmetatable(v) == __handle_mt then
-    -- un handle opaco (C5): cruza como su índice, no como tabla.
+  elseif t == "table" and (getmetatable(v) == __handle_mt or getmetatable(v) == __block_mt) then
+    -- un handle opaco (C5) o un Block (M13c): cruza como su índice, no como tabla.
     out[#out+1] = string.char(W_HANDLE) .. string.pack("<I4", v.__id)
   elseif t == "table" then
     -- ¿secuencia (array) o mapa? Heurística: #v cubre 1..n contiguos. Una tabla
@@ -436,6 +441,14 @@ end
 -- nu.task.sleep(ms). Cede una petición de sleep; el driver Go la cumple y
 -- reanuda tras ms.
 function nu.task.sleep(ms)
+  -- ⏸: fuera de una task no hay a quién ceder → EINVAL (§1.3), como await.
+  if __current == nil then
+    error({ code = "EINVAL", message = "nu.task.sleep: debe llamarse dentro de una task (⏸)" })
+  end
+  -- Un periodo negativo es error de programador, no algo que el scheduler interprete.
+  if type(ms) ~= "number" or ms < 0 then
+    error({ code = "EINVAL", message = "nu.task.sleep: el periodo no puede ser negativo" })
+  end
   coroutine.yield({ op = "sleep", ms = ms })
 end
 
@@ -781,12 +794,23 @@ end
 -- primitiva de nu.task y debe existir también en los WORKERS (api.md §13), que no
 -- cargan el bus de eventos.
 function nu.task.every(ms, fn)
+  -- Un periodo no positivo no tiene semántica útil (sería un bucle ocupado): EINVAL.
+  if type(ms) ~= "number" or ms <= 0 then
+    error({ code = "EINVAL", message = "nu.task.every: el periodo debe ser un número > 0" })
+  end
   local stopped = false
   local h = nu.task.spawn(function()
     while not stopped do
       nu.task.sleep(ms)
       if stopped then break end
-      pcall(fn)
+      -- pcall por frontera (ADR-008): un error en un disparo no para el timer ni
+      -- tumba el proceso; queda en el log (best-effort), como gopher.
+      local ok, err = pcall(fn)
+      if not ok and nu.log and nu.log.error then
+        local msg = type(err) == "table" and (err.message or err.code) or tostring(err)
+        local code = type(err) == "table" and err.code or nil
+        nu.log.error("nu.task.every: un disparo del timer lanzó: " .. (code and (code .. ": ") or "") .. tostring(msg))
+      end
     end
   end)
   -- Marca la task del timer como de FONDO: un timer nunca termina por sí mismo, así
@@ -1017,11 +1041,21 @@ if nu.ui then
     for part in string.gmatch(tok, "[^+]+") do
       if __modnames[part] then mods[part] = true else key = part end
     end
+    -- Un acorde sin tecla (p. ej. "ctrl+") es una secuencia inválida: EINVAL.
+    if key == nil or key == "" then
+      error({ code = "EINVAL", message = "nu.ui.keymap: secuencia inválida (falta la tecla en '" .. tostring(tok) .. "')" })
+    end
     return { key = key, mods = mods }
   end
   local function __parse_seq(seq)
+    if type(seq) ~= "string" or seq == "" then
+      error({ code = "EINVAL", message = "nu.ui.keymap: la secuencia debe ser un string no vacío" })
+    end
     local chords = {}
     for tok in string.gmatch(seq, "%S+") do chords[#chords+1] = __parse_chord(tok) end
+    if #chords == 0 then
+      error({ code = "EINVAL", message = "nu.ui.keymap: la secuencia está vacía" })
+    end
     return chords
   end
 

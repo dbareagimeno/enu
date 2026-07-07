@@ -183,7 +183,9 @@ func registerTextBlocksWasm(p *vmwasm.Pool) {
 	p.AddPreludio(`
 nu.text = nu.text or {}
 local function __wrap_block(m)
-  return setmetatable({ __id = m.id, width = m.width, height = m.height }, __handle_mt)
+  -- Block OPACO (§10): __block_mt cruza como handle por __id pero deja .lines y demás
+  -- claves de contenido en nil (no como funciones-método de __handle_mt).
+  return setmetatable({ __id = m.id, width = m.width, height = m.height }, __block_mt)
 end
 function nu.text.wrap(s, width, opts)      return __wrap_block(nu.text._wrap(s, width, opts)) end
 function nu.text.markdown(s, opts)         return __wrap_block(nu.text._markdown(s, opts)) end
