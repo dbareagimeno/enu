@@ -14,6 +14,8 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -88,7 +90,18 @@ func sharedRuntime() (wazero.Runtime, wazero.CompiledModule, error) {
 		// watchdog (M12) y la base del watchdog por época (DM4). El trampolín
 		// Snapshot/Restore sigue funcionando con este config (comprobado). Cerrar el
 		// módulo NO basta: no interrumpe un Call ya en curso.
-		sharedRT = wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().WithCloseOnContextDone(true))
+		cfg := wazero.NewRuntimeConfig().WithCloseOnContextDone(true)
+		// Caché de compilación en disco (M15, veto de experiencia): el JIT de nu.wasm
+		// —páginas ejecutables mmap— es el grueso del arranque en FRÍO (~230 ms). Cada
+		// invocación del binario es un proceso nuevo, así que sin caché se recompila
+		// siempre. Persistirla hace que a partir del 2º arranque se cargue el módulo YA
+		// compilado (arranque en CALIENTE ~= gopher). wazero la indexa por hash del
+		// contenido + su versión, así que es segura entre versiones y binarios. Si el
+		// dir de caché no se puede preparar, se sigue sin caché (solo más lento).
+		if cache := wasmCompilationCache(); cache != nil {
+			cfg = cfg.WithCompilationCache(cache)
+		}
+		sharedRT = wazero.NewRuntimeWithConfig(ctx, cfg)
 		wasi_snapshot_preview1.MustInstantiate(ctx, sharedRT)
 		if _, err := sharedRT.NewHostModuleBuilder("nu").
 			NewFunctionBuilder().WithFunc(hostTry).Export("host_try").
@@ -105,6 +118,29 @@ func sharedRuntime() (wazero.Runtime, wazero.CompiledModule, error) {
 		}
 	})
 	return sharedRT, sharedCompiled, sharedErr
+}
+
+// wasmCompilationCache prepara la caché de compilación en disco (M15). Devuelve nil
+// si el directorio de caché no se puede preparar —el arranque sigue, solo recompila—.
+// Usa NU_WASM_CACHE si está fijada (los tests la aíslan a un tmpdir); si no, el dir de
+// caché del usuario (`os.UserCacheDir()/nu/wasm`).
+func wasmCompilationCache() wazero.CompilationCache {
+	dir := os.Getenv("NU_WASM_CACHE")
+	if dir == "" {
+		base, err := os.UserCacheDir()
+		if err != nil {
+			return nil
+		}
+		dir = filepath.Join(base, "nu", "wasm")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil
+	}
+	cache, err := wazero.NewCompilationCacheWithDir(dir)
+	if err != nil {
+		return nil
+	}
+	return cache
 }
 
 // newBarePool crea un Pool sobre el runtime compartido, sin más primitivas que
@@ -146,6 +182,8 @@ func (p *Pool) registerGlobals() {
 // llegan al bus wasm, paridad con rt.sched.emit del backend gopher. `payload` puede
 // ser nil (evento sin datos). No suspende: emit es síncrono (G10).
 func (inst *Instance) EmitEvent(name string, payload map[string]any) error {
+	inst.slotMu.Lock()
+	defer inst.slotMu.Unlock()
 	inst.mu.Lock()
 	inst.pendingEName, inst.pendingEPayload = name, payload
 	inst.mu.Unlock()
@@ -159,12 +197,26 @@ func (inst *Instance) EmitEvent(name string, payload map[string]any) error {
 	return nil
 }
 
+// WithLock ejecuta `fn` con el mutex de la Instance tomado —el mismo que serializa
+// los Call a la VM (Eval/schedStep)—. Es la vía por la que el PINTOR (armPainter) y
+// el driver de TTY leen el compositor de forma EXCLUYENTE con las host functions de
+// nu.ui que lo mutan durante un Call: en gopher el token del scheduler serializa
+// pintor y mutaciones; en wasm ese papel lo hace este mutex. `fn` no debe re-entrar
+// la VM (no llamar a Eval), sólo tocar estado Go compartido (el compositor).
+func (inst *Instance) WithLock(fn func()) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	fn()
+}
+
 // SetGlobalString fija el global Lua `name` al string `value` en el estado principal
 // de la Instance, SIN interpolar `value` (ni `name`) en código Lua —lo que abriría
 // una inyección con un valor que llevara comillas o saltos—. Es la contraparte wasm
 // de rt.L.SetGlobal(name, LString(value)) del backend gopher: la usa el binario para
 // pasar sus args CLI al driver Lua y el arnés de tests para inyectar constantes.
 func (inst *Instance) SetGlobalString(name, value string) error {
+	inst.slotMu.Lock()
+	defer inst.slotMu.Unlock()
 	inst.mu.Lock()
 	inst.pendingGName, inst.pendingGVal = name, value
 	inst.mu.Unlock()
@@ -285,6 +337,13 @@ type Instance struct {
 	taskDeadline time.Time
 
 	mu sync.Mutex // sólo protege contra reentrada accidental en tests, no concurrencia real
+
+	// slotMu serializa el par "fijar la ranura + Eval" de SetGlobalString/EmitEvent:
+	// como ambos sueltan `mu` entre el set y la Eval (la Eval la re-toma), dos
+	// llamadas concurrentes (p. ej. la entrega de dos watchers de nu.fs.watch desde
+	// goroutines distintas) podrían pisarse la ranura pendiente. slotMu hace atómico
+	// ese par sin bloquear el `mu` que conduce la VM.
+	slotMu sync.Mutex
 }
 
 // NewInstance instancia el módulo compilado (memoria fresca), cablea el

@@ -154,7 +154,6 @@ func (rt *Runtime) armPainter() {
 		return
 	}
 	rt.ui.armed = true
-	s := rt.sched
 	ticker := time.NewTicker(coalesceInterval)
 	go func() {
 		defer ticker.Stop()
@@ -163,9 +162,7 @@ func (rt *Runtime) armPainter() {
 			case <-rt.ui.stopCh:
 				return
 			case <-ticker.C:
-				s.acquire()
-				rt.flushFrame()
-				s.release()
+				rt.paintLocked()
 			}
 		}
 	}()
@@ -180,7 +177,42 @@ func (rt *Runtime) armPainter() {
 // esperar al tick). PRESUPONE el token tomado (toca el compositor, estado principal,
 // ADR-008); no-op sin UI o sin cambios. En headless `out` es nil: el frame se compone
 // (lo inspeccionan los tests por `comp.encoded()`) pero no se vuelca a ningún sitio.
+// paintLocked pinta un frame tomando el candado que serializa el acceso al
+// compositor con las mutaciones de `nu.ui` (migracion-vm.md M15, veto de corrección):
+// en el backend wasm las host functions de UI mutan el compositor bajo el mutex de la
+// Instance, así que el pintor debe tomar ESE mutex (no el token del scheduler, que en
+// wasm no gobierna la VM) para no leer el compositor a la vez que una `nu.ui.region`
+// lo escribe. En gopher el token del scheduler cumple ese papel. Lo usan el timer de
+// coalescing y el driver de TTY (tras alimentar input).
+// paintLocked pinta bajo AMBOS candados relevantes: el token del scheduler —que
+// serializa con el código que lee el compositor bajo el token (los tests de UI, el
+// driver)— y, dentro de flushFrame sobre wasm, el mutex de la Instance —que serializa
+// con las host functions de `nu.ui` que mutan el compositor durante un Call—. En
+// gopher el token basta (las mutaciones de UI también corren bajo él). Sin doble
+// bloqueo problemático: las host functions wasm no toman el token, así que no hay
+// ciclo token↔inst.mu.
+func (rt *Runtime) paintLocked() {
+	rt.sched.acquire()
+	rt.flushFrame() // sobre wasm flushFrame toma además inst.mu por su cuenta
+	rt.sched.release()
+}
+
+// flushFrame es el punto ÚNICO de pintado: sobre wasm toma el mutex de la Instance
+// (el candado que serializa las mutaciones de `nu.ui` durante un Call) para leer el
+// compositor de forma excluyente con ellas (M15, veto de corrección); sobre gopher el
+// llamante ya tiene el token del scheduler tomado. Todos los llamantes (el timer de
+// coalescing y el driver de TTY) pasan por aquí.
 func (rt *Runtime) flushFrame() {
+	if rt.vmBackend == VMWasm && rt.wasm != nil {
+		rt.wasm.WithLock(rt.flushFrameUnlocked)
+		return
+	}
+	rt.flushFrameUnlocked()
+}
+
+// flushFrameUnlocked hace el pintado en sí; presupone tomado el candado que serializa
+// el compositor (inst.mu en wasm, el token en gopher).
+func (rt *Runtime) flushFrameUnlocked() {
 	if rt.ui == nil || !rt.ui.comp.dirty {
 		return
 	}

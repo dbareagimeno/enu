@@ -88,8 +88,13 @@ func (p *Pool) registerHandleDispatch() {
 
 // handleCallFn construye el HostFn de despacho. Los métodos suspendentes NO deben
 // tocar la Instance salvo por el valor (contrato de RegisterSuspending); el
-// síncrono sí puede (p. ej. liberar el handle).
-func handleCallFn(bool) HostFn {
+// síncrono sí puede (p. ej. liberar el handle). Por eso `suspending` decide si se
+// escribe `inst.dispatchHandle`: en el camino suspendente el HostFn corre en una
+// goroutine de FONDO (performHostcall), y escribir ese campo carreaba con el
+// despacho síncrono del hilo principal (race real bajo -race, M15). El campo sólo
+// lo usa un método liberador SÍNCRONO (ui.go: Region:destroy), así que en el
+// camino suspendente no hace falta y no debe tocarse.
+func handleCallFn(suspending bool) HostFn {
 	return func(inst *Instance, args []any) ([]any, error) {
 		if len(args) < 2 {
 			return nil, &StructuredError{Code: "EINVAL", Message: "handle_call: faltan (handle, método)"}
@@ -110,9 +115,12 @@ func handleCallFn(bool) HostFn {
 		}
 		// Expone el handle en despacho para que un método liberador (destroy/close/
 		// cancel) pueda soltar su propio handle con inst.FreeHandle(inst.dispatchHandle).
-		// Sólo es válido en el despacho SÍNCRONO (hilo principal); los métodos
-		// suspendentes no deben tocar la Instance (contrato de RegisterSuspending).
-		inst.dispatchHandle = Handle(hid)
+		// Sólo es válido —y sólo se escribe— en el despacho SÍNCRONO (hilo principal);
+		// los métodos suspendentes corren en goroutine de fondo y no deben tocar la
+		// Instance (contrato de RegisterSuspending), so pena de carrera con el síncrono.
+		if !suspending {
+			inst.dispatchHandle = Handle(hid)
+		}
 		return fn(inst, val, args[2:])
 	}
 }
