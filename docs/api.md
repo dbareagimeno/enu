@@ -23,12 +23,21 @@ de plugins y librerías Lua puras. Identificadores en inglés, `snake_case`.
 
 ### 1.2 Baseline del entorno Lua
 
-Lua 5.1 (gopher-lua). Disponibles: `string`, `table`, `math`, `coroutine`,
-`pairs/ipairs/pcall/error/...`. **Deshabilitados**: `io`, `os.execute`,
-`os.exit`, `os.remove`, `os.rename`, `os.getenv`, `print` (redirigido a
-`nu.log.info`), `dofile`/`loadfile` fuera del loader. Razón: todo IO debe
-pasar por las primitivas async del core; el IO bloqueante de la stdlib
-congelaría el event loop.
+Lua 5.4 (PUC-Lua, compilada a WASM y ejecutada sobre el runtime embebido —
+ver [migracion-vm.md](migracion-vm.md)). Disponibles: `string`, `table`,
+`math`, `coroutine`, `utf8`, `pairs/ipairs/pcall/error/load/...`.
+**Deshabilitados**: `io`, `os.execute`, `os.exit`, `os.remove`, `os.rename`,
+`os.getenv`, `print` (redirigido a `nu.log.info`), `dofile`/`loadfile` fuera
+del loader. Razón: todo IO debe pasar por las primitivas async del core; el
+IO bloqueante de la stdlib congelaría el event loop.
+
+`load(s)` sí queda disponible (compila un string EN MEMORIA, sin IO): es lo
+que necesita un REPL de Lua sobre la API pública (ver la extensión `repl`).
+Nota de migración 5.1→5.4: `loadstring` desaparece (`load` acepta el string
+directamente), `unpack` pasa a `table.unpack`, `setfenv`/`getfenv` no existen
+(el entorno es `_ENV`), y la entrada incompleta que un REPL detecta se marca
+con `<eof>` en el mensaje de error (antes `at EOF`). El código de las
+extensiones oficiales asume el baseline 5.4.
 
 ### 1.3 Modelo asíncrono
 

@@ -21,12 +21,12 @@
 -- CÓMO EVALÚA LUA ARBITRARIO (el punto delicado de S44, corolario de completitud).
 -- Un REPL NECESITA compilar y ejecutar código del usuario. El baseline del sandbox
 -- (§1.2, S01) deshabilita `dofile`/`loadfile` (cargan FICHEROS de disco saltándose
--- el loader) y `os.execute`/`io`… pero **NO** `load`/`loadstring`: estas compilan
--- un string EN MEMORIA, sin IO bloqueante, así que no violan la razón del baseline
--- ("todo IO debe pasar por las primitivas async del core"). Quedan disponibles para
--- el Lua de usuario tal cual las define `OpenBase` de gopher-lua. Por eso la API
+-- el loader) y `os.execute`/`io`… pero **NO** `load`: esta compila
+-- un string EN MEMORIA, sin IO bloqueante, así que no viola la razón del baseline
+-- ("todo IO debe pasar por las primitivas async del core"). Queda disponible para
+-- el Lua de usuario tal cual la define la base de PUC-Lua 5.4 (§1.2). Por eso la API
 -- pública BASTA exacta para un REPL: **no hizo falta ninguna primitiva nueva**
--- (`nu.eval` o similar); APILevel sigue en 2, api.md intacto. Si `loadstring` no
+-- (`nu.eval` o similar); APILevel sigue en 2, api.md intacto. Si `load` no
 -- existiera, ESO sería un hallazgo (un REPL oficial inconstruible con la API), pero
 -- no es el caso: el sandbox ya dejó la puerta justa abierta.
 --
@@ -59,28 +59,29 @@ local M = {}
 --   2. Si no (porque `src` es una SENTENCIA: `x = 5`, `for i=1,3 do ... end`, una
 --      llamada sin retorno), compila `src` tal cual.
 --   3. Si AMBOS fallan, el segundo error es el de verdad (el de la sentencia, no el
---      artefacto de anteponer `return`). Se inspecciona: gopher-lua marca la
+--      artefacto de anteponer `return`). Se inspecciona: PUC-Lua 5.4 marca la
 --      entrada INCOMPLETA (función/bloque/string sin cerrar, expresión a medias)
---      con `at EOF` en el mensaje (frente a un error real, que trae `line:N(column:M)
---      near '<token>'`). Una entrada incompleta NO es un error: es la señal de
---      "dame otra línea" del modo multilínea.
+--      con `<eof>` en el mensaje (frente a un error real, que trae `near '<token>'`).
+--      Una entrada incompleta NO es un error: es la señal de "dame otra línea" del
+--      modo multilínea.
 --
--- `load`/`loadstring` están disponibles para el Lua de usuario (ver cabecera): el
--- sandbox retiró `dofile`/`loadfile` (disco) pero no estas (memoria). Usamos
--- `loadstring` (Lua 5.1, gopher-lua): devuelve `(fn)` o `(nil, msg)`.
+-- `load` está disponible para el Lua de usuario (ver cabecera): el sandbox retiró
+-- `dofile`/`loadfile` (disco) pero no `load` (memoria). En PUC-Lua 5.4 `load` acepta
+-- un string directamente (absorbió al `loadstring` de 5.1): devuelve `(fn)` o
+-- `(nil, msg)`.
 local function compile(src)
   -- 1) como expresión (return ...).
-  local as_expr = loadstring("return " .. src, "=repl")
+  local as_expr = load("return " .. src, "=repl")
   if as_expr then
     return as_expr, nil, false
   end
   -- 2) como sentencia.
-  local as_stmt, stmt_err = loadstring(src, "=repl")
+  local as_stmt, stmt_err = load(src, "=repl")
   if as_stmt then
     return as_stmt, nil, false
   end
   -- 3) ambos fallan: el error de la SENTENCIA manda. ¿Incompleta?
-  local incomplete = type(stmt_err) == "string" and stmt_err:find("at EOF", 1, true) ~= nil
+  local incomplete = type(stmt_err) == "string" and stmt_err:find("<eof>", 1, true) ~= nil
   return nil, stmt_err, incomplete
 end
 
@@ -310,15 +311,15 @@ end
 -- `incomplete`: el bucle decide entre acumular (multilínea) o evaluar. No ejecuta
 -- ninguna chunk (no hay efectos colaterales en el sondeo).
 function Repl:_compile_probe(src)
-  local as_expr = loadstring("return " .. src, "=repl")
+  local as_expr = load("return " .. src, "=repl")
   if as_expr then
     return as_expr, nil, false
   end
-  local as_stmt, stmt_err = loadstring(src, "=repl")
+  local as_stmt, stmt_err = load(src, "=repl")
   if as_stmt then
     return as_stmt, nil, false
   end
-  local incomplete = type(stmt_err) == "string" and stmt_err:find("at EOF", 1, true) ~= nil
+  local incomplete = type(stmt_err) == "string" and stmt_err:find("<eof>", 1, true) ~= nil
   return nil, stmt_err, incomplete
 end
 
