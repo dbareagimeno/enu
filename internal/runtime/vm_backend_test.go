@@ -2,7 +2,8 @@ package runtime
 
 // Tests de M04: el selector de backend de VM (DM2) y la infraestructura de la
 // suite DUAL. La resolución tiene precedencia WithVMBackend > NU_VM > nu.toml >
-// gopher; el default seguro es gopher hasta la conmutación de M16.
+// default. Desde M16 (la conmutación) el default es **wasm**; gopher queda como
+// legacy accesible tras `backend = "gopher"` / `NU_VM=gopher` hasta M17.
 
 import (
 	"os"
@@ -24,39 +25,49 @@ func skipIfWasm(t *testing.T) {
 	}
 }
 
-// TestVMBackendDefaultGopher: sin nada, el backend es gopher (el default seguro).
-func TestVMBackendDefaultGopher(t *testing.T) {
+// TestVMBackendDefaultWasm: sin nada, el backend es wasm (el default desde M16).
+func TestVMBackendDefaultWasm(t *testing.T) {
 	// Aísla del entorno: si el runner puso NU_VM, lo neutralizamos para este caso.
 	t.Setenv("NU_VM", "")
 	rt := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()))
 	defer rt.Close()
-	if rt.VMBackend() != VMGopher {
-		t.Fatalf("default: got %v, want gopher", rt.VMBackend())
+	if rt.VMBackend() != VMWasm {
+		t.Fatalf("default: got %v, want wasm", rt.VMBackend())
 	}
 }
 
-// TestVMBackendEnv: NU_VM selecciona el backend.
+// TestVMBackendEnv: NU_VM selecciona el backend, incluido el path legacy gopher
+// (vivo hasta M17). NU_VM=wasm confirma que el nombre explícito sigue resolviendo.
 func TestVMBackendEnv(t *testing.T) {
-	t.Setenv("NU_VM", "wasm")
+	t.Setenv("NU_VM", "gopher")
 	rt := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()))
 	defer rt.Close()
-	if rt.VMBackend() != VMWasm {
-		t.Fatalf("NU_VM=wasm: got %v, want wasm", rt.VMBackend())
+	if rt.VMBackend() != VMGopher {
+		t.Fatalf("NU_VM=gopher: got %v, want gopher (legacy)", rt.VMBackend())
+	}
+
+	t.Setenv("NU_VM", "wasm")
+	rt2 := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()))
+	defer rt2.Close()
+	if rt2.VMBackend() != VMWasm {
+		t.Fatalf("NU_VM=wasm: got %v, want wasm", rt2.VMBackend())
 	}
 }
 
-// TestVMBackendToml: nu.toml [vm] backend selecciona cuando no hay NU_VM.
+// TestVMBackendToml: nu.toml [vm] backend selecciona cuando no hay NU_VM. Se
+// prueba con el path legacy `backend = "gopher"`: al ser wasm el default desde
+// M16, seleccionar gopher demuestra que el toml enruta al backend NO-default.
 func TestVMBackendToml(t *testing.T) {
 	t.Setenv("NU_VM", "")
 	cfg := t.TempDir()
 	if err := os.WriteFile(filepath.Join(cfg, "nu.toml"),
-		[]byte("[vm]\nbackend = \"wasm\"\n"), 0o644); err != nil {
+		[]byte("[vm]\nbackend = \"gopher\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rt := New(WithDataDir(t.TempDir()), WithConfigDir(cfg))
 	defer rt.Close()
-	if rt.VMBackend() != VMWasm {
-		t.Fatalf("[vm] backend=wasm: got %v, want wasm", rt.VMBackend())
+	if rt.VMBackend() != VMGopher {
+		t.Fatalf("[vm] backend=gopher: got %v, want gopher (legacy)", rt.VMBackend())
 	}
 }
 

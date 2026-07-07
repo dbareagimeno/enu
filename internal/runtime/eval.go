@@ -27,8 +27,8 @@ import (
 func (rt *Runtime) EvalString(code string) ([]string, error) {
 	// Ramificación del estrangulador (migracion-vm.md M13d): con el backend wasm
 	// seleccionado, el chunk corre sobre la Instance wasm (el catálogo real nu.*),
-	// no sobre el estado gopher. El enrutado SÓLO aplica bajo VMWasm; en gopher (el
-	// default hasta M16) todo sigue igual, por lo que su suite no cambia.
+	// no sobre el estado gopher. Éste es el camino por defecto desde M16; en gopher
+	// (legacy hasta M17) todo sigue igual, por lo que su suite no cambia.
 	if rt.vmBackend == VMWasm {
 		return rt.evalStringWasm(code)
 	}

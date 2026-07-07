@@ -204,19 +204,13 @@ jobs:
         # instancias, la mensajería acotada y terminate.
         run: go test -race -run 'TestSched|TestPrim|TestTask|TestTrampolinMultiInstancia|TestWorker' ./internal/vmwasm/
 
-      - name: Suite DUAL (NU_VM=wasm) — sondeo de integración
-        # Patrón estrangulador (migracion-vm.md §3): la suite corre también con el
-        # backend wasm. Desde M13d, `New` ramifica por backend y `EvalString`/
-        # `EvalTaskString` enrutan a wasm, así que `NU_VM=wasm go test ./...` ENTERO
-        # COLGARÍA: hay tests de bucle de CPU que sin el watchdog por época (DM4) giran
-        # para siempre en wasm. Por eso este job NO corre la suite completa todavía;
-        # acota su alcance a lo que hoy pasa de verdad: el test de integración dedicado
-        # del Runtime (TestRuntimeWasm*, que ejercita el stack real por New +
-        # EvalString/EvalTaskString sin bucles de CPU). El paquete internal/vmwasm ya
-        # se cubre entero en los pasos anteriores de este mismo job.
-        #
-        # La suite dual COMPLETA (`NU_VM=wasm go test ./...`) se REACTIVA aquí cuando
-        # el watchdog por época (DM4) preempte los bucles de CPU y las 8 extensiones
-        # (M13d-ext) estén cargadas — que es cuando deja de colgar y de fallar por
-        # superficie ausente. No se borra este job: se recorta con esta nota.
-        run: go test -run 'TestRuntimeWasm' ./internal/runtime/
+      - name: Selector legacy (NU_VM=gopher) — sondeo del backend en gracia
+        # Conmutación de M16: wasm pasó a ser el DEFAULT, así que el job `test`
+        # (`go test -race ./...` a secas) ya corre la suite ENTERA sobre wasm — el
+        # sondeo `NU_VM=wasm` dedicado que vivía aquí quedó redundante y se retira.
+        # Lo que sí conviene vigilar hasta M17 es que el backend gopher, ahora
+        # legacy, siga alcanzable tras `NU_VM=gopher` / `backend = "gopher"`: se
+        # ejercita SÓLO el selector (TestVMBackend*), no la suite gopher completa,
+        # que dejó de mantenerse dual (la comparativa de corrección es main-vs-rama,
+        # no gopher-vs-wasm). Este paso muere con gopher-lua en M17.
+        run: NU_VM=gopher go test -run 'TestVMBackend' ./internal/runtime/

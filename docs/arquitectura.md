@@ -86,9 +86,10 @@ Tres patas (ADR-004):
    todos los cores sin que Lua se entere. El rendimiento bruto nunca depende
    de la velocidad del intérprete.
 
-Restricción técnica que motiva el diseño: gopher-lua **no es thread-safe**; un
-estado Lua solo puede tocarse desde una goroutine. El patrón es el de
-Node/libuv/`vim.uv`, ya validado.
+Restricción técnica que motiva el diseño: el intérprete de Lua embebido **no es
+thread-safe** (ni la instancia PUC-Lua sobre wazero de hoy ni el gopher-lua
+legacy lo eran); un estado Lua solo puede tocarse desde una goroutine. El patrón
+es el de Node/libuv/`vim.uv`, ya validado.
 
 El aislamiento es **por tarea, no por plugin** (ADR-008): todos los plugins
 conviven en el estado principal — lo que permite que se `require` entre sí y

@@ -266,7 +266,7 @@ func WithEnabledPlugins(names []string) Option {
 // DM2), con precedencia sobre la variable de entorno `NU_VM` y sobre
 // `nu.toml [vm] backend`. Es la vía de los tests que ejercen un backend concreto
 // de forma determinista. Sin esta Option, manda `NU_VM`; sin ella, `nu.toml`; sin
-// nada, gopher (el default seguro hasta la conmutación de M16).
+// nada, wasm (el default desde la conmutación de M16; gopher es legacy hasta M17).
 func WithVMBackend(b VMBackend) Option {
 	return func(c *config) { c.vmBackend = b; c.vmBackendSet = true }
 }
@@ -512,8 +512,8 @@ func (rt *Runtime) Boot() error {
 	rt.armPainter()
 	// Ramificación del estrangulador (M13d-ext): con el backend wasm, las 8
 	// extensiones oficiales se cargan sobre la Instance wasm (BootWasm reusa la
-	// misma discovery/topología que Boot; ver vmwasm_loader.go). Sólo bajo VMWasm;
-	// en gopher (default hasta M16) el arranque no cambia.
+	// misma discovery/topología que Boot; ver vmwasm_loader.go). Éste es ya el
+	// camino por defecto desde M16; en gopher (legacy hasta M17) el arranque no cambia.
 	if rt.vmBackend == VMWasm {
 		return rt.ldr.BootWasm()
 	}
