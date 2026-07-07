@@ -59,8 +59,13 @@ func (inst *Instance) RunTasks(ctx context.Context) error {
 	var inject []any // resultados a inyectar en el próximo step
 	// Una petición en vuelo por task suspendida (una corrutina cede una sola vez);
 	// su cancel permite abortarla cuando la task se cancela, sin esperar su
-	// duración (§1.3). Clave: el id de la task (int64 en el wire).
+	// duración (§1.3). Clave: el id de la task (int64 en el wire). Sólo cubre las
+	// peticiones con id de task parseable (la cancelación dirigida necesita la clave).
 	reqCancels := make(map[int64]context.CancelFunc)
+	// Peticiones cuyo id de task NO parsea (camino defensivo: jamás debería ocurrir,
+	// pero si ocurre su cancel no cabe en el mapa dirigido). Aquí se guardan para que
+	// `cancelAll` las barra al salir y su contexto no se fugue (aviso real de go vet).
+	var orphanCancels []context.CancelFunc
 
 	noteResult := func(r asyncResult) {
 		outstanding--
@@ -74,8 +79,12 @@ func (inst *Instance) RunTasks(ctx context.Context) error {
 	}
 	// Al salir, cancela toda petición en vuelo que quede (los timers de fondo
 	// abandonados), como `Close` en gopher: sus goroutines toman ctx.Done() y mueren.
+	// Barre las dos vías: las dirigidas por id (mapa) y las huérfanas (slice).
 	cancelAll := func() {
 		for _, cancel := range reqCancels {
+			cancel()
+		}
+		for _, cancel := range orphanCancels {
 			cancel()
 		}
 	}
@@ -114,6 +123,10 @@ func (inst *Instance) RunTasks(ctx context.Context) error {
 			reqCtx, cancel := context.WithCancel(ctx)
 			if id, ok := taskID(p.id); ok {
 				reqCancels[id] = cancel
+			} else {
+				// Sin id de task no hay cancelación dirigida posible; se retiene el
+				// cancel para el barrido de `cancelAll` (evita la fuga de contexto).
+				orphanCancels = append(orphanCancels, cancel)
 			}
 			outstanding++
 			go inst.performRequest(reqCtx, p, ch)
