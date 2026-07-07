@@ -1,10 +1,12 @@
 package runtime
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/rivo/uniseg"
-	lua "github.com/yuin/gopher-lua"
+
+	"github.com/dbareagimeno/nu/internal/vmwasm"
 )
 
 // Tests de `nu.text` (S22, inventario 🔒). El corazón es `text.width`: la anchura
@@ -308,56 +310,69 @@ func TestUICaps(t *testing.T) {
 
 // TestNormalizeColor blinda el parseo de colores de `Style` (§9.2, G22): hex
 // válido (normalizado a minúsculas), índices en rango, y rechazo de nombres
-// semánticos y formatos inválidos.
+// semánticos y formatos inválidos. Ejercita `normalizeColorWasm` (vmwasm_ui.go),
+// el parser del binding de UI, con los tipos que cruzan el wire.
 func TestNormalizeColor(t *testing.T) {
 	ok := []struct {
-		in   lua.LValue
+		in   any
 		want string
 	}{
-		{lua.LString("#FF00aa"), "#ff00aa"},
-		{lua.LString("#000000"), "#000000"},
-		{lua.LNumber(0), "0"},
-		{lua.LNumber(255), "255"},
-		{lua.LString("128"), "128"},
+		{"#FF00aa", "#ff00aa"},
+		{"#000000", "#000000"},
+		{int64(0), "0"},
+		{int64(255), "255"},
+		{"128", "128"},
+		{float64(42), "42"},
 	}
 	for _, c := range ok {
-		got, err := normalizeColor(c.in)
-		if err != "" || got != c.want {
-			t.Fatalf("normalizeColor(%v) = (%q,%q), want (%q,\"\")", c.in, got, err, c.want)
+		got, err := normalizeColorWasm(c.in)
+		if err != nil || got != c.want {
+			t.Fatalf("normalizeColorWasm(%v) = (%q,%v), want (%q,nil)", c.in, got, err, c.want)
 		}
 	}
-	bad := []lua.LValue{
-		lua.LString("accent"),  // nombre semántico (G22)
-		lua.LString("#fff"),    // hex corto
-		lua.LString("#gggggg"), // hex no-hex
-		lua.LNumber(256),       // fuera de rango
-		lua.LNumber(-1),        // negativo
-		lua.LBool(true),        // tipo no soportado
+	bad := []any{
+		"accent",     // nombre semántico (G22)
+		"#fff",       // hex corto
+		"#gggggg",    // hex no-hex
+		int64(256),   // fuera de rango
+		int64(-1),    // negativo
+		true,         // tipo no soportado
+		float64(1.5), // índice no entero
 	}
 	for _, c := range bad {
-		if _, err := normalizeColor(c); err == "" {
-			t.Fatalf("normalizeColor(%v) debió fallar", c)
+		if _, err := normalizeColorWasm(c); err == nil {
+			t.Fatalf("normalizeColorWasm(%v) debió fallar", c)
 		}
 	}
 }
 
 // buildBlock corre un snippet que devuelve un Block y recupera el `*block` Go
 // interno para inspeccionarlo (el Block es opaco para Lua, pero el test corre en
-// el mismo paquete). Es el andamiaje de inspección de Blocks que reusarán S23–S29.
+// el mismo paquete). El snippet corre sobre la Instance wasm: el Block es un
+// handle cuyo objeto Go —el `*block` real— se resuelve por la tabla de handles
+// de la Instance (GetHandle) a partir de su `__id`.
 func buildBlock(t *testing.T, h *harness, code string) *block {
 	t.Helper()
-	L := h.rt.L
-	if err := L.DoString(code); err != nil {
-		t.Fatalf("el snippet de Block falló: %v\n%s", err, code)
+	if _, luaErr, goErr := h.rt.wasm.Eval("__blk = (function()\n" + code + "\nend)()"); goErr != nil {
+		t.Fatalf("el snippet de Block falló (motor): %v\n%s", goErr, code)
+	} else if luaErr != "" {
+		t.Fatalf("el snippet de Block falló: %s\n%s", luaErr, code)
 	}
-	ud, ok := L.Get(-1).(*lua.LUserData)
-	L.Pop(1)
-	if !ok {
-		t.Fatalf("el snippet no devolvió un userdata")
+	idStr, luaErr, goErr := h.rt.wasm.Eval("return tostring(__blk.__id)")
+	if goErr != nil || luaErr != "" {
+		t.Fatalf("no se pudo leer __blk.__id: %v %s", goErr, luaErr)
 	}
-	b, ok := ud.Value.(*block)
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		t.Fatalf("el snippet no devolvió un handle de Block (__id = %q)", idStr)
+	}
+	typ, val, ok := h.rt.wasm.GetHandle(vmwasm.Handle(id))
+	if !ok || typ != "Block" {
+		t.Fatalf("el handle %d no es un Block vivo (typ=%q ok=%v)", id, typ, ok)
+	}
+	b, ok := val.(*block)
 	if !ok {
-		t.Fatalf("el userdata no es un *block: %T", ud.Value)
+		t.Fatalf("el objeto del handle no es un *block: %T", val)
 	}
 	return b
 }

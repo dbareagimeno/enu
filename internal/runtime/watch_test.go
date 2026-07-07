@@ -386,14 +386,9 @@ func TestWatchReloadReleasesHandle(t *testing.T) {
 	rt := New(WithDataDir(t.TempDir()), WithConfigDir(t.TempDir()), WithPluginDir(dir))
 	t.Cleanup(rt.Close)
 	h := &harness{t: t, rt: rt}
-	// El etiquetado de handles por dueño (G2) se sondea sobre rt.sched.ownerHandles
-	// —andamiaje del backend gopher (handles.go)—. En wasm los handles viven en la
-	// Instance (AllocHandle), no en rt.sched, y el cableado de reload→releaseOwnerHandles
-	// no está portado: toda la familia de tests que sondea ownerHandles (TestReload*)
-	// falla igual bajo NU_VM=wasm. Portar ese registro es tarea del clúster loader/reload,
-	// no de las primitivas; aquí es un salto irreducible y documentado (no toca cobertura
-	// real de watch en wasm, cubierta por los demás TestWatch*).
-	h.skipIfWasm("el registro de handles por dueño (rt.sched.ownerHandles, G2/S13) es andamiaje gopher no portado a wasm; misma razón por la que TestReload* se salta en wasm")
+	// El etiquetado de handles por dueño (G2) se sondea con `countOwnerHandles`, que
+	// consulta el registro del preludio de reload en wasm (`__count_owner`) —la misma
+	// vía que usan los TestReload*—.
 	if err := rt.Boot(); err != nil {
 		t.Fatalf("Boot: %v", err)
 	}

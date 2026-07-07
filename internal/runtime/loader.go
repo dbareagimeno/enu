@@ -40,7 +40,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // ownerUser es el owner que se anota cuando no hay plugin en el contexto: el chunk
@@ -113,68 +112,6 @@ func newLoader(rt *Runtime, dataDir, configDir string, pluginDirs []string) *loa
 		configDir:  configDir,
 		pluginDirs: pluginDirs,
 	}
-}
-
-// Boot ejecuta el arranque canónico (§14): descubre los plugins de los directorios
-// configurados, los ordena topológicamente por `requires`, ejecuta el `init.lua`
-// de cada uno (empujando su contexto al `ownerStack` y emitiendo
-// `core:plugin.loaded`), luego el `init.lua` del usuario (el último), y por fin
-// emite `core:ready` **una sola vez**.
-//
-// Corre en el estado principal con el token tomado —como un chunk de `-e`, no como
-// una task—: el `init.lua` es código síncrono que no puede llamar funciones ⏸
-// (§1.3); puede lanzar tasks con `nu.task.spawn`, que progresarán al soltar el
-// token. Devuelve un error de carga **accionable** (nombre del conflicto, ciclo o
-// dependencia ausente) sin haber ejecutado ningún `init.lua`: la validación del
-// grafo es total antes de correr una línea de Lua de plugin, para que un grafo roto
-// no deje medio-cargado el sistema.
-func (l *loader) Boot() error {
-	if l.booted {
-		return nil
-	}
-	l.booted = true
-
-	// Una config de runtime rota (`nu.toml` mal formado) aborta el arranque con su
-	// error accionable, antes de tocar plugin alguno (S12): no se carga a medias.
-	if l.configErr != nil {
-		return l.configErr
-	}
-
-	s := l.rt.sched
-	s.acquire()
-	defer s.release()
-
-	plugins, err := l.discover()
-	if err != nil {
-		return err
-	}
-	ordered, err := topoSort(plugins)
-	if err != nil {
-		return err
-	}
-	l.ordered = ordered
-
-	// Configura las rutas de `require` ANTES de correr ningún `init.lua`: un plugin
-	// puede `require` a otro que ya se cargó (orden topológico) o a un módulo de su
-	// propio `lua/`. Que todas las rutas estén disponibles desde el primer init
-	// simplifica el modelo (un `require` resuelve contra el conjunto completo de
-	// `lua/`), coherente con que el grafo ya esté validado.
-	l.setupRequirePaths(ordered)
-
-	// Cada plugin: empuja su contexto, corre su `init.lua`, emite
-	// `core:plugin.loaded`. Un `init.lua` que lanza un error NO tumba el arranque
-	// (ADR-008): queda en el log y se emite `core:plugin.error`; los demás plugins y
-	// el usuario siguen cargando. El owner se saca pase lo que pase (defer).
-	for _, p := range ordered {
-		l.runInit(p)
-	}
-
-	// `init.lua` del usuario: el ÚLTIMO (§14). Corre con owner "user" (pila vacía).
-	l.runUserInit()
-
-	// `core:ready` UNA vez, al final del arranque canónico (§4, §14).
-	s.emit(l.rt.L, "core:ready", lua.LNil)
-	return nil
 }
 
 // discover recorre los directorios de plugins configurados y devuelve un
@@ -313,147 +250,6 @@ func (l *loader) loadManifest(dir, manifestPath string) (*pluginInfo, error) {
 	}, nil
 }
 
-// runInit ejecuta el `init.lua` de un plugin con su contexto empujado al
-// `ownerStack` (así `nu.plugin.current()` y el owner del log son ese plugin
-// durante el init, §14). Un `init.lua` ausente es válido (un plugin puede ser solo
-// módulos `lua/` que otros requieren). Un error en el init queda **aislado**
-// (ADR-008): se loguea, se emite `core:plugin.error`, y el arranque continúa con
-// los demás. El owner se saca pase lo que pase.
-func (l *loader) runInit(p *pluginInfo) {
-	initPath := filepath.Join(p.Dir, pluginInitName)
-	if _, err := os.Stat(initPath); err != nil {
-		// Sin init.lua: nada que ejecutar, pero el plugin existe (sus módulos `lua/`
-		// ya están en las rutas de require). Se considera cargado.
-		l.emitLoaded(p)
-		return
-	}
-
-	l.rt.ownerStack = append(l.rt.ownerStack, p)
-	err := l.doFile(initPath)
-	l.rt.ownerStack = l.rt.ownerStack[:len(l.rt.ownerStack)-1]
-
-	if err != nil {
-		_ = l.rt.log.write(levelError, p.Name,
-			fmt.Sprintf("el init.lua del plugin %q falló: %v", p.Name, err))
-		payload := l.rt.L.NewTable()
-		payload.RawSetString("plugin", lua.LString(p.Name))
-		payload.RawSetString("error", lua.LString(err.Error()))
-		l.rt.sched.emit(l.rt.L, "core:plugin.error", payload)
-		return
-	}
-	l.emitLoaded(p)
-}
-
-// emitLoaded emite `core:plugin.loaded` con `{name, version, dir}` (§4, §14).
-func (l *loader) emitLoaded(p *pluginInfo) {
-	payload := l.rt.L.NewTable()
-	payload.RawSetString("name", lua.LString(p.Name))
-	payload.RawSetString("version", lua.LString(p.Version))
-	payload.RawSetString("dir", lua.LString(p.Dir))
-	l.rt.sched.emit(l.rt.L, "core:plugin.loaded", payload)
-}
-
-// runUserInit ejecuta `config.dir()/init.lua` —el último del arranque canónico
-// (§14)— con owner "user" (pila de plugins vacía). Ausente es lo normal (no todo
-// usuario tiene config); un error se aísla igual que el de un plugin.
-func (l *loader) runUserInit() {
-	initPath := filepath.Join(l.configDir, pluginInitName)
-	if _, err := os.Stat(initPath); err != nil {
-		return
-	}
-	if err := l.doFile(initPath); err != nil {
-		_ = l.rt.log.write(levelError, ownerUser,
-			fmt.Sprintf("el init.lua del usuario (%q) falló: %v", initPath, err))
-		payload := l.rt.L.NewTable()
-		payload.RawSetString("plugin", lua.LString(ownerUser))
-		payload.RawSetString("error", lua.LString(err.Error()))
-		l.rt.sched.emit(l.rt.L, "core:plugin.error", payload)
-	}
-}
-
-// doFile carga y ejecuta un fichero Lua en el estado principal, bajo el token (que
-// `Boot` ya tomó). Usa el `LoadFile` interno de gopher-lua —el loader es justamente
-// el único autorizado a tocar el disco así (§1.2); `dofile`/`loadfile` siguen
-// deshabilitados como globales (sandbox.go)—. Corre como un chunk del estado
-// principal, no como task: errores capturables con normalidad (los devolvemos para
-// que `runInit`/`runUserInit` los aíslen, ADR-008).
-func (l *loader) doFile(path string) error {
-	L := l.rt.L
-	fn, err := L.LoadFile(path)
-	if err != nil {
-		return err
-	}
-	base := L.GetTop()
-	L.Push(fn)
-	if err := L.PCall(0, lua.MultRet, nil); err != nil {
-		return err
-	}
-	L.SetTop(base) // descarta cualquier valor de retorno del init: no se usa
-	return nil
-}
-
-// setupRequirePaths abre `package`/`require` (que el baseline dejó cerrado,
-// sandbox.go §1.2) y fija `package.path` a **solo** los directorios `lua/` de los
-// plugins cargados. Deliberadamente NO incluye el `./?.lua` que gopher-lua trae por
-// defecto: `require` es para módulos de plugins, no un agujero por el que cargar
-// ficheros arbitrarios del cwd (respeta el sandbox). Cada plugin aporta
-// `<dir>/lua/?.lua` y `<dir>/lua/?/init.lua`, de modo que `require("foo")` resuelve
-// `lua/foo.lua` o `lua/foo/init.lua` de cualquier plugin.
-func (l *loader) setupRequirePaths(plugins []*pluginInfo) {
-	L := l.rt.L
-
-	// Abre el módulo `package` una sola vez. `require` (global, ya presente del
-	// baselib) lo necesita para resolver `package.loaders`/`package.path`.
-	L.Push(L.NewFunction(lua.OpenPackage))
-	L.Push(lua.LString(lua.LoadLibName))
-	L.Call(1, 0)
-
-	var patterns []string
-	for _, p := range plugins {
-		luaDir := filepath.Join(p.Dir, "lua")
-		patterns = append(patterns,
-			filepath.Join(luaDir, "?.lua"),
-			filepath.Join(luaDir, "?", "init.lua"))
-	}
-
-	pkg, ok := L.GetGlobal("package").(*lua.LTable)
-	if !ok {
-		return
-	}
-	pkg.RawSetString("path", lua.LString(strings.Join(patterns, ";")))
-	// `cpath` vacío: nada de librerías C nativas (CGO_ENABLED=0, ADR-001).
-	pkg.RawSetString("cpath", lua.LString(""))
-}
-
-// workerRequirePatterns calcula los patrones de `package.path` para el `require`
-// DE UN WORKER (§13, S34): los `lua/` de los plugins que el padre conoce, de modo
-// que un `require("mi_modulo")` dentro del worker resuelva el mismo módulo que en
-// el principal. Si el padre ya hizo `Boot` se usan los plugins cargados
-// (`ordered`); si aún no (un worker spawneado antes del arranque canónico, o en
-// tests que spawnean directamente), se **descubren** los plugins en el acto
-// —ignorando errores de grafo: el worker solo necesita las RUTAS, no validar el
-// grafo, que es competencia del `Boot` del principal—. Espeja el formato de
-// `setupRequirePaths`. Se llama bajo el token del padre (toca el loader).
-func (l *loader) workerRequirePatterns() []string {
-	plugins := l.ordered
-	if !l.booted {
-		// Aún sin Boot: descubre para tener las rutas. Un error de descubrimiento
-		// (dir ilegible) o de manifiesto no debe impedir spawnear un worker; se cae a
-		// "sin patrones" (el require del worker fallará accionable si pide un módulo).
-		if discovered, err := l.discover(); err == nil {
-			plugins = discovered
-		}
-	}
-	var patterns []string
-	for _, p := range plugins {
-		luaDir := filepath.Join(p.Dir, "lua")
-		patterns = append(patterns,
-			filepath.Join(luaDir, "?.lua"),
-			filepath.Join(luaDir, "?", "init.lua"))
-	}
-	return patterns
-}
-
 const (
 	pluginManifestName = "plugin.toml"
 	pluginInitName     = "init.lua"
@@ -541,52 +337,6 @@ func topoSort(plugins []*pluginInfo) ([]*pluginInfo, error) {
 	return ordered, nil
 }
 
-// reload recarga un plugin ya cargado (api.md §14, S13): emite
-// `core:plugin.unload`, suelta los handles del plugin (etiquetados por dueño,
-// G2), vacía la caché de `require` de sus módulos `lua/` y re-ejecuta su
-// `init.lua`. Best-effort (G2): deshace lo que el core sabe deshacer. Lo invoca
-// `nu.plugin.reload` (plugin.go) y corre **bajo el token** (el llamante, una task,
-// lo tiene) en el estado principal. `L` es el thread que llamó: se pasa a `emit`
-// para que un `core:plugin.unload` que ping-pongee quede cubierto por el watchdog
-// de su task (coherente con S10).
-//
-// Un nombre que no corresponde a ningún plugin cargado es `EINVAL` accionable: no
-// se puede recargar lo que no está. (El `init.lua` del usuario, dueño "user", no
-// es un plugin recargable por esta vía: recargarlo es re-correr el arranque, no el
-// ámbito de G2.)
-func (l *loader) reload(L *lua.LState, name string) error {
-	p := l.find(name)
-	if p == nil {
-		return &StructuredError{Code: CodeEINVAL,
-			Message: fmt.Sprintf("no se puede recargar el plugin %q: no está cargado (nu.plugin.reload es para plugins ya cargados, §14)", name)}
-	}
-
-	// 1. `core:plugin.unload {name}` ANTES de soltar nada: las extensiones
-	//    enganchadas limpian sus propios registros (tools, comandos...) —cosas que
-	//    el core no conoce y no puede soltar por ellas (filosofía §1)—. El payload
-	//    nombra el plugin que se descarga (§4).
-	payload := l.rt.L.NewTable()
-	payload.RawSetString("name", lua.LString(p.Name))
-	l.rt.sched.emit(L, "core:plugin.unload", payload)
-
-	// 2. Suelta TODOS los handles del plugin (S13, inventario 🔒): el core los
-	//    etiquetó por dueño al crearlos (`on`/`once`/`every`), así que aquí se
-	//    cancelan sus suscripciones y se paran sus timers. Tras esto las viejas no
-	//    disparan: "reload no deja handlers huérfanos" (G2).
-	l.rt.sched.releaseOwnerHandles(p.Name)
-
-	// 3. Vacía la caché de `require` de los módulos `lua/` del plugin: un módulo que
-	//    cambió en disco debe re-ejecutarse, no servirse de `package.loaded`.
-	l.clearRequireCache(p)
-
-	// 4. Re-ejecuta su `init.lua` con su contexto empujado (como en el arranque,
-	//    §14): lo que registre queda de nuevo etiquetado por dueño. Un init ausente
-	//    es válido (plugin solo-módulos); un init que lanza se aísla (ADR-008), como
-	//    en el arranque, sin tumbar la task que llamó a reload.
-	l.runInit(p)
-	return nil
-}
-
 // find devuelve el `*pluginInfo` cargado con ese nombre, o nil si no hay ninguno.
 // Busca en `ordered` (lo que `Boot` cargó); el nombre es la identidad (§14), así
 // que como mucho hay uno.
@@ -597,36 +347,6 @@ func (l *loader) find(name string) *pluginInfo {
 		}
 	}
 	return nil
-}
-
-// clearRequireCache borra de `package.loaded` las entradas de los módulos del
-// directorio `lua/` del plugin que se recarga (S13, §14): así un `require` desde
-// el `init.lua` re-ejecutado vuelve a CARGAR el módulo (re-ejecuta su fichero) en
-// vez de devolver la copia cacheada de la carga anterior. Es lo que hace que
-// editar un módulo `lua/` del plugin y recargar surta efecto.
-//
-// El mapeo fichero → nombre de módulo refleja los patrones de `setupRequirePaths`
-// (`<lua>/?.lua` y `<lua>/?/init.lua`): `foo.lua` → `foo`, `foo/init.lua` → `foo`,
-// `bar/baz.lua` → `bar.baz` (los separadores de ruta se vuelven puntos, la
-// convención de `require` de Lua). Solo se tocan las entradas que existen en
-// `package.loaded` (un módulo del plugin que nadie requirió no está ahí). NO se
-// purgan módulos de OTROS plugins aunque compartan `package.path`: solo se
-// enumeran los ficheros bajo el `lua/` de ESTE plugin.
-func (l *loader) clearRequireCache(p *pluginInfo) {
-	L := l.rt.L
-	pkg, ok := L.GetGlobal("package").(*lua.LTable)
-	if !ok {
-		return // `require` no se abrió (arranque desnudo sin plugins): nada que limpiar
-	}
-	loaded, ok := pkg.RawGetString("loaded").(*lua.LTable)
-	if !ok {
-		return
-	}
-
-	luaDir := filepath.Join(p.Dir, "lua")
-	for _, mod := range moduleNames(luaDir) {
-		loaded.RawSetString(mod, lua.LNil)
-	}
 }
 
 // moduleNames enumera los nombres de módulo `require`-ables bajo `luaDir`,

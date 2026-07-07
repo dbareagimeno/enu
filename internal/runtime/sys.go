@@ -2,11 +2,8 @@ package runtime
 
 import (
 	"os"
-	"runtime"
 	"sync"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.sys` — entorno y reloj (api.md §7, sesión S17). Wrappers finos sobre la
@@ -98,104 +95,8 @@ func (s *sysState) setenv(name, value string) {
 	s.mu.Unlock()
 }
 
-// registerSys cuelga `nu.sys` del global `nu` con sus firmas de §7. Lo llama
-// `registerNu` (nu.go). Como el resto de la API de sistema, `sys` es [W] (§16),
-// hoy registrado en el estado principal (los workers son S34).
-func (rt *Runtime) registerSys(nu *lua.LTable) {
-	L := rt.L
-	sys := L.NewTable()
-	sys.RawSetString("platform", L.NewFunction(rt.sysPlatform))
-	sys.RawSetString("env", L.NewFunction(rt.sysEnv))
-	sys.RawSetString("setenv", L.NewFunction(rt.sysSetenv))
-	sys.RawSetString("now_ms", L.NewFunction(rt.sysNowMs))
-	sys.RawSetString("mono_ms", L.NewFunction(rt.sysMonoMs))
-	sys.RawSetString("hostname", L.NewFunction(rt.sysHostname))
-	sys.RawSetString("pid", L.NewFunction(rt.sysPid))
-	nu.RawSetString("sys", sys)
-}
-
-// sysPlatform implementa `nu.sys.platform() -> string` (§7): el SO en que corre,
-// de `runtime.GOOS`. Para los SO soportados devuelve "linux"/"darwin"/"windows";
-// en cualquier otro, el `GOOS` literal (no se inventa un valor: el contrato
-// enumera los tres comunes, pero el dato crudo es más honesto que mentir).
-func (rt *Runtime) sysPlatform(L *lua.LState) int {
-	L.Push(lua.LString(runtime.GOOS))
-	return 1
-}
-
-// sysEnv implementa `nu.sys.env(name) -> string?` (§7): el valor de la variable
-// `name`, leyendo el overlay de `setenv` por encima del entorno del SO; `nil` si
-// no existe en ninguno.
-func (rt *Runtime) sysEnv(L *lua.LState) int {
-	name := L.CheckString(1)
-	if v, ok := rt.sys.envLookup(name); ok {
-		L.Push(lua.LString(v))
-	} else {
-		L.Push(lua.LNil)
-	}
-	return 1
-}
-
-// sysSetenv implementa `nu.sys.setenv(name, value)` (§7): registra una variable
-// que afecta **solo a subprocesos futuros**. NO toca `os.Setenv` —el entorno del
-// proceso `nu` actual no cambia (un subproceso lanzado sin heredar el overlay no
-// la ve, y `os.Getenv` en Go sigue sin verla)—; se guarda en el overlay del
-// Runtime que `nu.proc` aplica al lanzar.
-func (rt *Runtime) sysSetenv(L *lua.LState) int {
-	name := L.CheckString(1)
-	value := L.CheckString(2)
-	rt.sys.setenv(name, value)
-	return 0
-}
-
-// sysNowMs implementa `nu.sys.now_ms() -> number` (§7): reloj de **pared** en
-// milisegundos desde el epoch Unix. Puede saltar hacia atrás (ajustes de hora,
-// NTP); para medir duraciones úsese `mono_ms`. Es un `number` (float Lua): los
-// ms del epoch caben de sobra en la mantisa de un float64 durante siglos.
-func (rt *Runtime) sysNowMs(L *lua.LState) int {
-	L.Push(lua.LNumber(time.Now().UnixMilli()))
-	return 1
-}
-
 // monoOrigin es el instante de referencia del reloj monotónico: se fija al
 // cargar el paquete. `mono_ms` devuelve los ms transcurridos desde él. El valor
 // absoluto no significa nada (origen arbitrario, §7); solo las DIFERENCIAS entre
 // dos lecturas son la duración real.
 var monoOrigin = time.Now()
-
-// sysMonoMs implementa `nu.sys.mono_ms() -> number` (§7): reloj **monotónico**
-// en ms desde un origen arbitrario. Inmune a saltos del reloj de pared: dos
-// lecturas siempre crecen (o se mantienen), así que su diferencia es una
-// duración fiable. Se apoya en el reloj monotónico que Go embebe en `time.Time`
-// (`time.Since` lo usa), no en `now_ms`.
-func (rt *Runtime) sysMonoMs(L *lua.LState) int {
-	L.Push(lua.LNumber(time.Since(monoOrigin).Milliseconds()))
-	return 1
-}
-
-// sysHostname implementa `nu.sys.hostname() -> string` (§7): el nombre de la
-// máquina (`os.Hostname`). Es el contenido de los locks de sesión (sesiones.md
-// §6, junto al pid de `nu.proc.alive`, G17). Un fallo del SO al consultarlo se
-// rinde como `EIO` —raro, pero no se inventa un nombre—.
-func (rt *Runtime) sysHostname(L *lua.LState) int {
-	name, err := os.Hostname()
-	if err != nil {
-		raiseError(L, CodeEIO, "nu.sys.hostname: "+err.Error(), lua.LNil)
-		return 0
-	}
-	L.Push(lua.LString(name))
-	return 1
-}
-
-// sysPid implementa `nu.sys.pid() -> integer` (§7, G32): el pid del proceso `nu`
-// actual (`os.Getpid`). No ⏸ (consulta local inmediata, como `hostname`) y [W]
-// (§16: hereda de que `sys` es módulo [W] entero). Es el `pid` que la extensión
-// sesiones graba en el lock `{ pid, hostname, started }` (sesiones.md §6) para
-// que otro proceso pueda comprobar con `nu.proc.alive` si el escritor sigue vivo.
-// Lo que `nu.proc.alive(pid)` valida es un pid AJENO (existencia, no identidad);
-// `pid()` es el camino para conocer el PROPIO, que `nu.proc` —gestor de hijos— no
-// daba. Se devuelve como integer Lua: un pid cabe de sobra en el rango entero.
-func (rt *Runtime) sysPid(L *lua.LState) int {
-	L.Push(lua.LNumber(os.Getpid()))
-	return 1
-}

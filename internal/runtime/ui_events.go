@@ -20,51 +20,14 @@ package runtime
 // (igual que el painter toma el token para pintar); las vías de aquí presuponen ese
 // invariante (se llaman con el token tomado).
 
-import lua "github.com/yuin/gopher-lua"
-
-// emitUIEvent emite un evento `ui:*` por el bus con su payload (un mapa de datos, o
-// nil para un evento sin datos). Es el punto único por el que pasan todos los `ui:*`:
-// presupone el token tomado y que el bus existe (`registerEvents` corre siempre en
-// `New`). Ramifica por backend (migracion-vm.md M13d): sobre wasm el bus vive en la
-// Instance (EmitEvent lo emite sin interpolar); sobre gopher se arma la tabla Lua
-// sobre `host` y se emite por rt.sched. En headless, donde `nu.ui` no se registra,
-// nadie llama a las vías de abajo, pero el bus sigue ahí —`ui:` es del core—.
+// emitUIEvent emite un evento `ui:*` por el bus de la Instance wasm con su payload
+// (un mapa de datos, o nil para un evento sin datos). Es el punto único por el que
+// pasan todos los `ui:*`. En headless, donde `nu.ui` no se registra, nadie llama a
+// las vías de abajo, pero el bus sigue ahí —`ui:` es del core—.
 func (rt *Runtime) emitUIEvent(name string, payload map[string]any) {
-	if rt.vmBackend == VMWasm {
-		if rt.wasm != nil {
-			_ = rt.wasm.EmitEvent(name, payload)
-		}
-		return
+	if rt.wasm != nil {
+		_ = rt.wasm.EmitEvent(name, payload)
 	}
-	if rt.sched == nil || rt.sched.events == nil {
-		return
-	}
-	rt.sched.emit(rt.L, name, uiPayloadToLua(rt.L, payload))
-}
-
-// uiPayloadToLua convierte el mapa de payload de un evento ui:* a un valor Lua sobre
-// `L` (gopher). Sólo maneja los tipos que estos eventos usan: número (w/h) y booleano
-// (focused). Un payload nil da `lua.LNil` (eventos sin datos, ui:suspend/resume).
-func uiPayloadToLua(L *lua.LState, payload map[string]any) lua.LValue {
-	if payload == nil {
-		return lua.LNil
-	}
-	t := L.NewTable()
-	for k, v := range payload {
-		switch x := v.(type) {
-		case int:
-			t.RawSetString(k, lua.LNumber(x))
-		case int64:
-			t.RawSetString(k, lua.LNumber(x))
-		case float64:
-			t.RawSetString(k, lua.LNumber(x))
-		case bool:
-			t.RawSetString(k, lua.LBool(x))
-		case string:
-			t.RawSetString(k, lua.LString(x))
-		}
-	}
-	return t
 }
 
 // resizeUI aplica un cambio de tamaño de la pantalla y emite `ui:resize` (§9.1: "el

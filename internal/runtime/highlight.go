@@ -6,7 +6,6 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.text.highlight` — syntax highlighting de un snippet a un `Block` (api.md
@@ -58,56 +57,6 @@ import (
 // elección es estética. `styles.Get` cae a su propio fallback si el nombre no
 // existe, así que nunca es nil.
 const defaultHighlightTheme = "github"
-
-// registerHighlight añade `nu.text.highlight` a la tabla `nu.text` ya creada por
-// `registerText` (S22). Lo llama registerText (text.go) para mantener todo
-// `nu.text` registrado en un sitio.
-func (rt *Runtime) registerHighlight(textT *lua.LTable) {
-	textT.RawSetString("highlight", rt.L.NewFunction(rt.textHighlight))
-}
-
-// textHighlight implementa `nu.text.highlight(code, lang, opts?) -> Block` (§10):
-// resalta `code` según el lenguaje `lang`, devolviendo un Block con un span por
-// tramo coloreado según el theme. Lenguaje desconocido/vacío → texto plano (un
-// Block sin estilo, NO error). NINGUNA ⏸ (CPU puro). Cada línea del código es una
-// línea del Block (se preservan los saltos de línea); el texto reconstruido a
-// partir de los spans es idéntico a `code`.
-func (rt *Runtime) textHighlight(L *lua.LState) int {
-	code := L.CheckString(1)
-
-	// `lang` puede ser nil (degrada a texto plano) o un string; cualquier otro tipo
-	// es un uso malo de la firma.
-	lang := ""
-	if v := L.Get(2); v != lua.LNil {
-		s, ok := v.(lua.LString)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.text.highlight: lang debe ser un string", lua.LNil)
-			return 0
-		}
-		lang = string(s)
-	}
-
-	// `opts.theme` (string) elige el theme de Chroma; ausente → el default de S24.
-	themeName := defaultHighlightTheme
-	if opts := L.Get(3); opts != lua.LNil {
-		t, ok := opts.(*lua.LTable)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.text.highlight: opts debe ser una tabla", lua.LNil)
-			return 0
-		}
-		if tv := t.RawGetString("theme"); tv != lua.LNil {
-			ts, ok := tv.(lua.LString)
-			if !ok {
-				raiseError(L, CodeEINVAL, "nu.text.highlight: opts.theme debe ser un nombre de theme (string)", lua.LNil)
-				return 0
-			}
-			themeName = string(ts)
-		}
-	}
-
-	rt.pushBlock(L, highlightToBlock(code, lang, themeName))
-	return 1
-}
 
 // highlightToBlock es el núcleo puro (sin Lua): tokeniza `code` con el lexer de
 // `lang` y construye el Block, o degrada a texto plano si el lenguaje es

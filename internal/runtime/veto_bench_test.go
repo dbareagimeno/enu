@@ -1,15 +1,13 @@
 package runtime
 
 // Benchmarks del veto 2 de M15 (migracion-vm.md §5): el camino caliente del
-// producto debe quedar DENTRO DE 2× del backend gopher. El mismo binario lleva los
-// dos backends hasta la conmutación (M16), así que la comparación es directa:
+// producto debía quedar DENTRO DE 2× del backend gopher. Tras la retirada de
+// gopher-lua (M17) la baseline gopher YA NO ES EJECUTABLE —el binario lleva una
+// sola VM—; los números del contraste wasm/gopher quedaron registrados en la
+// bitácora de M15. Estos benchmarks siguen corriendo, ahora sobre wasm, como
+// termómetro del camino caliente:
 //
-//	NU_VM=gopher go test -bench BenchmarkVeto -benchtime=... ./internal/runtime/
-//	NU_VM=wasm   go test -bench BenchmarkVeto -benchtime=... ./internal/runtime/
-//
-// y el ratio wasm/gopher de cada uno se contrasta con el 2× del veto. NO es un
-// "fallback a gopher" (que la política de tests proscribe): es la BASELINE pactada
-// del veto, medida sobre la misma rama.
+//	go test -bench BenchmarkVeto -benchtime=... ./internal/runtime/
 //
 // BenchmarkVetoAgentTurn cubre "un turno de agente headless contra el adaptador
 // stub": dos vueltas del turno (petición → tool_call → tool_result → texto final),

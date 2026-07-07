@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Arnés de tests del runtime (S02): corre snippets Lua contra un Runtime real y
@@ -82,26 +80,18 @@ func (h *harness) logLines() []string {
 	return strings.Split(trimmed, "\n")
 }
 
-// register instala `fn` como global `name` en el estado Lua, para que los
-// snippets la invoquen. Es la vía por la que una prueba inyecta una primitiva Go
-// de andamiaje (p. ej. una que lanza un error estructurado) sin contaminar la
-// superficie del runtime de producción.
-func (h *harness) register(name string, fn lua.LGFunction) {
-	h.t.Helper()
-	h.rt.L.SetGlobal(name, h.rt.L.NewFunction(fn))
+// withToken corre `fn` con el token tomado: la vía de los tests que leen el
+// compositor (composeRow) serializados con el pintor (paintLocked, ui.go).
+func withToken(rt *Runtime, fn func()) {
+	rt.sched.acquire()
+	defer rt.sched.release()
+	fn()
 }
-
-// isWasm indica si el runtime bajo prueba corre sobre el backend wasm (NU_VM=wasm).
-// La suite es DUAL: los mismos tests corren en gopher y en wasm. Un puñado de
-// helpers de andamiaje (register de primitivas Go arbitrarias) sólo existen en
-// gopher; `isWasm` deja a un test proveer su equivalente wasm o saltarse el caso.
-func (h *harness) isWasm() bool { return h.rt.vmBackend == VMWasm }
 
 // defWasmGlobal define un global Lua evaluando `code` en el ESTADO PRINCIPAL del
 // backend wasm. Es la vía por la que un test inyecta una primitiva de andamiaje
-// EXPRESABLE EN LUA (p. ej. un echo que suspende con nu.task.sleep) sobre wasm,
-// donde no hay un registro de LGFunction como en gopher. Falla la prueba si el
-// snippet de definición no evalúa limpio.
+// EXPRESABLE EN LUA (p. ej. un echo que suspende con nu.task.sleep). Falla la prueba
+// si el snippet de definición no evalúa limpio.
 func (h *harness) defWasmGlobal(code string) {
 	h.t.Helper()
 	if _, luaErr, goErr := h.rt.wasm.Eval(code); goErr != nil {
@@ -112,34 +102,14 @@ func (h *harness) defWasmGlobal(code string) {
 }
 
 // regStringFn instala una "constante" Lua `name()` que devuelve el string `value`,
-// en AMBOS backends: en gopher como una LGFunction; en wasm inyectando el valor sin
-// interpolar (SetStringGlobal) y definiendo el accesor. Es el idioma de withURL/BASE
-// generalizado, para tests que pasan varios blobs de texto (fuentes, markdown) a los
-// snippets.
+// inyectando el valor sin interpolar (SetStringGlobal) y definiendo el accesor sobre
+// el estado wasm. Es el idioma de withURL/BASE generalizado, para tests que pasan
+// varios blobs de texto (fuentes, markdown) a los snippets.
 func (h *harness) regStringFn(name, value string) {
 	h.t.Helper()
-	if h.isWasm() {
-		valName := "__" + name + "_val"
-		h.rt.SetStringGlobal(valName, value)
-		h.defWasmGlobal("function " + name + "() return " + valName + " end")
-		return
-	}
-	h.rt.L.SetGlobal(name, h.rt.L.NewFunction(func(L *lua.LState) int {
-		L.Push(lua.LString(value))
-		return 1
-	}))
-}
-
-// skipIfWasm salta el test cuando corre sobre wasm, con `reason` documentando por
-// qué el caso es irreduciblemente específico de gopher (típicamente: usa una
-// primitiva de andamiaje Go que bloquea en un canal o toca el LState, sin
-// equivalente expresable en Lua; la propiedad de fondo ya se cubre en wasm por
-// otra vía). Mantiene la suite dual verde sin perder cobertura real.
-func (h *harness) skipIfWasm(reason string) {
-	h.t.Helper()
-	if h.isWasm() {
-		h.t.Skipf("no aplica en el backend wasm: %s", reason)
-	}
+	valName := "__" + name + "_val"
+	h.rt.SetStringGlobal(valName, value)
+	h.defWasmGlobal("function " + name + "() return " + valName + " end")
 }
 
 // eval corre `code` exigiendo que termine sin error y devuelve sus valores de

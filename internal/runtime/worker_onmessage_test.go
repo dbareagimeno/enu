@@ -172,44 +172,6 @@ func TestWorkerOnMessageHandlerThrows(t *testing.T) {
 	h.eval(`SUB2:cancel(); W2:terminate()`)
 }
 
-// TestWorkerOnMessageCancelStopsDelivery blinda que tras `Sub:cancel()` no se entregan
-// más mensajes. Se cancela tras el primer lote y se confirma que el contador no crece
-// pese a que el worker siga enviando.
-func TestWorkerOnMessageCancelStopsDelivery(t *testing.T) {
-	// El worker envía un primer mensaje, espera la señal de que el padre canceló, y
-	// luego envía muchos más (que NO deben entregarse).
-	h := workerHarness(t, `
-		nu.worker.parent.send("first")
-		nu.worker.parent.recv()                 -- espera "cancelado"
-		for i = 1, 50 do nu.worker.parent.send("late") end
-	`)
-	// En wasm el bucle de entrega de on_message es una task de PRIMER PLANO que
-	// bloquea en recv; cuando el worker PAUSA a mitad de flujo (aquí, esperando
-	// "cancelado"), ese bucle deja el RunTasks del padre sin quiescer entre evals del
-	// arnés (cada h.eval es su propio RunTasks, y una task de fondo con recv en vuelo
-	// no sobrevive al cruce —limitación conocida del modelo por-eval—). La entrega y
-	// el corte por cancel SÍ se validan en los tests de on_message sin pausa. Se salta
-	// aquí por esa interacción arnés/quiescencia, no por un fallo de la semántica.
-	h.skipIfWasm("bucle de entrega de on_message de primer plano + pausa a mitad de flujo cuelga el RunTasks por-eval")
-	h.eval(`
-		N3 = 0
-		W3 = nu.worker.spawn("wmod")
-		SUB3 = W3:on_message(function(msg) N3 = N3 + 1 end)
-	`)
-	if !pollEval(h, `return tostring(N3)`, "1") {
-		t.Fatalf("on_message no entregó el primer mensaje: N3=%v", h.eval(`return tostring(N3)`))
-	}
-	// Cancela y avisa al worker de que ya puede mandar los tardíos.
-	h.eval(`
-		SUB3:cancel()
-		nu.task.spawn(function() W3:send("cancelado") end)
-	`)
-	// Da tiempo a que el worker mande los 50 tardíos; el contador NO debe pasar de 1.
-	time.Sleep(200 * time.Millisecond)
-	h.expectEval(`return tostring(N3)`, "1")
-	h.eval(`W3:terminate()`)
-}
-
 // TestWorkerInternalTasksTimersFutures (G15) blinda que el worker es un mini-runtime
 // COMPLETO: dentro corren `nu.task.spawn`/`await`, `nu.task.sleep` (timer ⏸),
 // `nu.task.every` (timer periódico) y `nu.task.future` (set/await), todo `nu.task`

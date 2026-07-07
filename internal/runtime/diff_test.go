@@ -369,7 +369,7 @@ func TestDiffLua(t *testing.T) {
 	h := newHarness(t)
 
 	// Cambio en medio: 1 hunk con del+add y contexto.
-	if err := h.rt.L.DoString(`
+	h.eval(`
 		local r = nu.text.diff("a\nb\nVIEJA\nc\nd\n", "a\nb\nNUEVA\nc\nd\n")
 		assert(#r.hunks == 1, "esperaba 1 hunk, hay " .. #r.hunks)
 		local hk = r.hunks[1]
@@ -383,29 +383,23 @@ func TestDiffLua(t *testing.T) {
 		assert(#kinds == #want, "nº líneas " .. #kinds)
 		for i = 1, #want do assert(kinds[i] == want[i], "línea " .. i .. " = " .. kinds[i]) end
 		assert(r.block == nil, "sin render no debe haber block")
-	`); err != nil {
-		t.Fatalf("diff Lua (cambio): %v", err)
-	}
+	`)
 
 	// a == b → sin hunks.
-	if err := h.rt.L.DoString(`
+	h.eval(`
 		local r = nu.text.diff("x\ny\n", "x\ny\n")
 		assert(#r.hunks == 0, "a==b debe dar 0 hunks, hay " .. #r.hunks)
-	`); err != nil {
-		t.Fatalf("diff Lua (a==b): %v", err)
-	}
+	`)
 
 	// a vacío → todo add.
-	if err := h.rt.L.DoString(`
+	h.eval(`
 		local r = nu.text.diff("", "p\nq\n")
 		assert(#r.hunks == 1, "1 hunk")
 		local hk = r.hunks[1]
 		assert(hk.old_start == 0 and hk.old_count == 0, "old vacío")
 		assert(hk.new_start == 1 and hk.new_count == 2, "new 1,2")
 		for _, ln in ipairs(hk.lines) do assert(ln.kind == "add", "todo add") end
-	`); err != nil {
-		t.Fatalf("diff Lua (a vacío): %v", err)
-	}
+	`)
 
 	// render → block con .height legible.
 	b := buildBlock(t, h, `

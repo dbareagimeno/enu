@@ -386,22 +386,15 @@ func TestMCPProcessLifecycle(t *testing.T) {
 	// Helper de observación del pid registrado ANTES de Boot (evita la carrera con el
 	// scheduler / el auto-connect de mcp). Ramifica por backend.
 	h, _ := bootMCPWith(t, func(rt *Runtime) {
-		if rt.vmBackend == VMWasm {
-			rt.wasmPool.RegisterHandleMethod("Proc", "_mcp_pid",
-				func(inst *vmwasm.Instance, val any, args []any) ([]any, error) {
-					return []any{int64(val.(*luaProc).cmd.Process.Pid)}, nil
-				})
-			return
-		}
-		rt.L.SetGlobal("__mcp_pid", rt.L.NewFunction(procPidFromUD))
+		rt.wasmPool.RegisterHandleMethod("Proc", "_mcp_pid",
+			func(inst *vmwasm.Instance, val any, args []any) ([]any, error) {
+				return []any{int64(val.(*luaProc).cmd.Process.Pid)}, nil
+			})
 	})
 
-	// La expresión que obtiene el pid desde `conn.proc` depende del backend: en gopher el
-	// global Go toma el userdata; en wasm se invoca el método de handle por `__hcall`.
-	pidExpr := `__mcp_pid(conn.proc)`
-	if h.isWasm() {
-		pidExpr = `__hcall(conn.proc.__id, "_mcp_pid")`
-	}
+	// El pid de `conn.proc` se obtiene invocando el método de handle `_mcp_pid` por
+	// `__hcall` (el handle vive en la Instance wasm).
+	pidExpr := `__hcall(conn.proc.__id, "_mcp_pid")`
 
 	h.eval(`
 		out, errc, ALIVE_BEFORE, LIFE_PID = nil, nil, nil, nil

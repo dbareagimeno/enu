@@ -48,56 +48,6 @@ func TestGatingForcedUI(t *testing.T) {
 	h.expectEval(`return tostring(nu.has("ui.images"))`, "false")
 }
 
-// TestClipboardSetOSC52 blinda que `nu.ui.clipboard_set` emite la secuencia OSC 52
-// correcta al terminal. Inyecta un buffer como destino (`clipWriter`) para inspeccionar
-// los bytes exactos —en producción ese destino es el TTY (os.Stdout)—.
-func TestClipboardSetOSC52(t *testing.T) {
-	h := newHarness(t)
-	// Caja blanca: muta rt.ui.clipWriter DESPUÉS de construir el estado wasm, pero el
-	// backend de UI wasm ya capturó el writer al cablearse (SetUIBackend en
-	// buildWasmState), así que la mutación tardía no le llega. El portapapeles OSC 52
-	// funciona en wasm por el writer real del compositor; este test lo inyecta a mano.
-	h.skipIfWasm("muta rt.ui.clipWriter tras cablear el backend wasm (caja blanca)")
-	var buf bytes.Buffer
-	h.rt.ui.clipWriter = &buf
-
-	h.eval(`nu.ui.clipboard_set("hola mundo")`)
-
-	want := encodeOSC52Set("hola mundo")
-	if got := buf.String(); got != want {
-		t.Fatalf("clipboard_set emitió %q, quería %q", got, want)
-	}
-}
-
-// TestClipboardGetHeadless blinda que `nu.ui.clipboard_get` (⏸) devuelve nil cuando no
-// hay driver de TTY del que leer la respuesta (este entorno headless con `clipReader`
-// nil). Además comprueba que SÍ escribió la consulta OSC 52 al terminal.
-func TestClipboardGetHeadless(t *testing.T) {
-	h := newHarness(t)
-	// Caja blanca: inyecta clipWriter/clipReader tras cablear el backend wasm (ver
-	// TestClipboardSetOSC52); no le llegan al backend ya capturado.
-	h.skipIfWasm("muta rt.ui.clipWriter/clipReader tras cablear el backend wasm (caja blanca)")
-	if err := h.rt.Boot(); err != nil {
-		t.Fatalf("Boot falló: %v", err)
-	}
-	var buf bytes.Buffer
-	h.rt.ui.clipWriter = &buf
-	// clipReader es nil (sin driver): la lectura resuelve a nil de inmediato.
-
-	h.eval(`
-		got = "SENTINEL"
-		nu.task.spawn(function()
-			got = nu.ui.clipboard_get()
-		end)
-	`)
-	// La task corrió y resolvió a nil (got pasó de "SENTINEL" a nil).
-	h.expectEval(`return tostring(got)`, "nil")
-	// La consulta OSC 52 sí se envió al terminal.
-	if got := buf.String(); got != encodeOSC52Query() {
-		t.Fatalf("clipboard_get debió enviar la consulta %q, envió %q", encodeOSC52Query(), got)
-	}
-}
-
 // TestUIResizeEvent blinda que cambiar el tamaño de la pantalla emite `ui:resize` con
 // `{w, h}` (§9.1: "cambios → evento ui:resize") y actualiza `nu.ui.size()`. Un resize
 // al MISMO tamaño no emite un evento espurio.

@@ -3,8 +3,6 @@ package runtime
 import (
 	"strconv"
 	"strings"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.text.diff` — diff estructurado de dos strings línea a línea (api.md §10,
@@ -326,107 +324,6 @@ func defaultDiffTheme() diffTheme {
 		context: nil,
 		header:  &style{bold: true},
 	}
-}
-
-// registerDiff añade `nu.text.diff` a la tabla `nu.text` ya creada por
-// `registerText` (S22). Lo llama registerText (text.go) para mantener todo
-// `nu.text` registrado en un sitio.
-func (rt *Runtime) registerDiff(textT *lua.LTable) {
-	textT.RawSetString("diff", rt.L.NewFunction(rt.textDiff))
-}
-
-// textDiff implementa `nu.text.diff(a, b, opts?) -> {hunks, block?}` (§10): diff
-// estructurado línea a línea de `a` (viejo) y `b` (nuevo). Devuelve una tabla con
-// `hunks` (siempre) y, si `opts.render == true`, `block` (un Block pintado).
-// NINGUNA ⏸ (CPU puro). Un `opts` no-tabla o un `opts.theme` mal formado →
-// `EINVAL` (G22).
-func (rt *Runtime) textDiff(L *lua.LState) int {
-	a := L.CheckString(1)
-	b := L.CheckString(2)
-
-	render := false
-	theme := defaultDiffTheme()
-	if opts := L.Get(3); opts != lua.LNil {
-		optsT, ok := opts.(*lua.LTable)
-		if !ok {
-			raiseError(L, CodeEINVAL, "nu.text.diff: opts debe ser una tabla", lua.LNil)
-			return 0
-		}
-		render = lua.LVAsBool(optsT.RawGetString("render"))
-		if themeV := optsT.RawGetString("theme"); themeV != lua.LNil {
-			if err := applyDiffTheme(L, &theme, themeV); err != "" {
-				raiseError(L, CodeEINVAL, "nu.text.diff: opts.theme."+err, lua.LNil)
-				return 0
-			}
-		}
-	}
-
-	hunks := computeDiff(a, b)
-
-	result := L.NewTable()
-	result.RawSetString("hunks", hunksToLua(L, hunks))
-	if render {
-		rt.pushBlock(L, renderDiffBlock(hunks, &theme))
-		result.RawSetString("block", L.Get(-1))
-		L.Pop(1)
-	}
-	L.Push(result)
-	return 1
-}
-
-// applyDiffTheme rellena `theme` con los Styles de `opts.theme` (una tabla con
-// claves "add"/"del"/"context"/"header"). Cada clave es opcional; la ausente
-// conserva el default. Valida cada Style con parseStyle (G22). Devuelve un
-// mensaje de error (no vacío) en vez de lanzar, para componer el contexto.
-func applyDiffTheme(L *lua.LState, theme *diffTheme, v lua.LValue) string {
-	t, ok := v.(*lua.LTable)
-	if !ok {
-		return "theme debe ser una tabla de Styles por tipo de línea"
-	}
-	for _, kv := range []struct {
-		key string
-		dst **style
-	}{
-		{"add", &theme.add},
-		{"del", &theme.del},
-		{"context", &theme.context},
-		{"header", &theme.header},
-	} {
-		sv := t.RawGetString(kv.key)
-		if sv == lua.LNil {
-			continue
-		}
-		parsed, err := parseStyle(L, sv)
-		if err != "" {
-			return kv.key + ": " + err
-		}
-		*kv.dst = parsed
-	}
-	return ""
-}
-
-// hunksToLua convierte los hunks Go a la tabla Lua que `nu.text.diff` expone (ver
-// la forma en la cabecera). Cada hunk es una tabla con los cuatro rangos y un
-// array `lines` de `{kind, text}`. Todos los índices son 1-based.
-func hunksToLua(L *lua.LState, hunks []diffHunk) *lua.LTable {
-	arr := L.NewTable()
-	for _, h := range hunks {
-		ht := L.NewTable()
-		ht.RawSetString("old_start", lua.LNumber(h.oldStart))
-		ht.RawSetString("old_count", lua.LNumber(h.oldCount))
-		ht.RawSetString("new_start", lua.LNumber(h.newStart))
-		ht.RawSetString("new_count", lua.LNumber(h.newCount))
-		lines := L.NewTable()
-		for _, op := range h.lines {
-			lt := L.NewTable()
-			lt.RawSetString("kind", lua.LString(op.kind))
-			lt.RawSetString("text", lua.LString(op.text))
-			lines.Append(lt)
-		}
-		ht.RawSetString("lines", lines)
-		arr.Append(ht)
-	}
-	return arr
 }
 
 // renderDiffBlock pinta los hunks a un Block: una cabecera "@@ -o,oc +n,nc @@"

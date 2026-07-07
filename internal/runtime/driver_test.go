@@ -18,8 +18,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // syncBuf es un buffer concurrente: el painter/feed escriben bajo el token (serializados
@@ -256,36 +254,6 @@ func dumpScreen(h *harness) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
-}
-
-// TestDriverShutdownFromSignalPath comprueba el OTRO disparador de apagado: emitir
-// `core:shutdown` por el bus (lo que hace la goroutine de señales ante SIGTERM) cierra el
-// bucle aunque no llegue ninguna tecla. Conduce el driver con un reader que nunca entrega
-// bytes (bloquea) y dispara el evento desde fuera.
-func TestDriverShutdownFromBus(t *testing.T) {
-	h := newHarnessUI(t, 10, 1)
-	if err := h.rt.Boot(); err != nil {
-		t.Fatalf("Boot falló: %v", err)
-	}
-	inR, inW := io.Pipe() // nunca escribimos: el reader bloquea
-	out := &syncBuf{}
-	d := newDriver(h.rt, inR, out)
-	d.installShutdownHandler()
-
-	done := make(chan struct{})
-	go func() { d.drive(); close(done) }()
-
-	// Emite core:shutdown como lo haría la goroutine de señales (bajo el token).
-	h.rt.sched.acquire()
-	h.rt.sched.emit(h.rt.L, "core:shutdown", lua.LNil)
-	h.rt.sched.release()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("core:shutdown por el bus no apagó el bucle")
-	}
-	_ = inW.Close()
 }
 
 // TestDriverEmergencyExit (ADR-017, G35): la RED DE SALIDA DE EMERGENCIA del kernel

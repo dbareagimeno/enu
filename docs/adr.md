@@ -353,8 +353,8 @@ equivalente — detalle del loader).
 
 ## ADR-011 · Realización del scheduler: goroutine-por-task + token de ejecución Lua
 
-**Estado:** Aceptada · 2026-06 (refina *cómo* se realiza ADR-004 sobre
-gopher-lua; no cambia su semántica observable ni la API de [api.md](api.md))
+**Estado:** **Reemplazada por [ADR-020](#adr-020--el-puente--definitivo-tasks-como-corrutinas-lua-nativas-reemplaza-adr-011-en-la-conmutación)** · la conmutación **M16** hizo de wasm el backend por defecto y la retirada **M17** ([migracion-vm.md](migracion-vm.md)) eliminó gopher-lua del `go.mod` y del binario, borrando el scheduler goroutine-por-task que este ADR realizaba; el puente ⏸ definitivo (tasks como corrutinas Lua nativas) lo describe ahora ADR-020. Como manda el flujo del proyecto, el cuerpo no se reescribe: queda como registro histórico de *cómo* se realizó ADR-004 sobre gopher-lua. · Originalmente Aceptada · 2026-06 (refinaba *cómo* se realiza ADR-004 sobre
+gopher-lua; no cambiaba su semántica observable ni la API de [api.md](api.md))
 
 **Contexto.** ADR-004 fijó el "modelo del navegador" (estado Lua principal
 single-threaded, async por await implícito) y anticipó como mayor coste "el

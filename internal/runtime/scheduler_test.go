@@ -3,8 +3,6 @@ package runtime
 import (
 	"strings"
 	"testing"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Tests 🔒 del scheduler (S04): el puente del modelo goroutine-por-task + token
@@ -20,22 +18,18 @@ import (
 // interno que suspende la task y la reanuda con el valor que acarrea una
 // goroutine de fondo.
 func withEcho(h *harness) {
-	if h.isWasm() {
-		// Equivalente wasm de suspendEcho, expresado en Lua: suspende de verdad con
-		// nu.task.sleep(0) (una ida y vuelta real por el driver Go) y devuelve su
-		// argumento. Mismas validaciones que la versión gopher: sólo dentro de una
-		// task (⏸) y sólo string/number. __current es el id de la task en curso
-		// (nil fuera de toda task), la señal que usa el propio scheduler.
-		h.defWasmGlobal(`function suspend_echo(x)
+	// suspend_echo expresado en Lua sobre wasm: suspende de verdad con
+	// nu.task.sleep(0) (una ida y vuelta real por el driver Go) y devuelve su
+	// argumento. Validaciones: sólo dentro de una task (⏸) y sólo string/number.
+	// __current es el id de la task en curso (nil fuera de toda task), la señal que
+	// usa el propio scheduler.
+	h.defWasmGlobal(`function suspend_echo(x)
   if __current == nil then error({ code = "EINVAL", message = "suspend_echo solo puede llamarse dentro de una task" }) end
   local t = type(x)
   if t ~= "string" and t ~= "number" then error({ code = "EINVAL", message = "suspend_echo espera string o number" }) end
   nu.task.sleep(0)
   return x
 end`)
-		return
-	}
-	h.register("suspend_echo", h.rt.sched.suspendEcho)
 }
 
 // TestSpawnAwaitAcrossSuspension es el caso central de S04: una task se suspende
@@ -217,54 +211,6 @@ func TestSpawnArgsPassed(t *testing.T) {
 		nu.task.spawn(function() out.v = p:await() end)
 	`)
 	h.expectEval(`return out.v`, "42")
-}
-
-// TestLoopNotBlockedBySuspension: una task suspendida **suelta el token**, así
-// que otra task corre mientras tanto. Se prueba con una compuerta: la task A se
-// suspende esperándola y la task B la dispara. B solo puede correr si A liberó el
-// token al suspenderse; si la suspensión retuviera el token, B nunca correría, A
-// nunca despertaría y el test se colgaría (lo caza el timeout de `go test`). El
-// orden resultante es determinista —"B" siempre antes de "A-despues"— sin
-// depender del orden de arranque de las goroutines.
-func TestLoopNotBlockedBySuspension(t *testing.T) {
-	h := newHarness(t)
-	// gate_wait bloquea en un canal Go dentro del token (usa s.sched.suspend con un
-	// LState): andamiaje irreducible a Lua. La propiedad —una suspensión no bloquea
-	// el loop, otra task avanza mientras— se cubre en wasm por TestManyConcurrent-
-	// Suspensions y por el contador en paralelo de CP5 (camino de red).
-	h.skipIfWasm("gate_wait/gate_fire bloquean en un canal Go; sin equivalente Lua")
-
-	// Compuerta: gate_wait (⏸) bloquea fuera del token hasta que gate_fire la
-	// cierra. gate_fire es síncrona (corre bajo el token, en la task B).
-	gate := make(chan struct{})
-	h.register("gate_wait", func(L *lua.LState) int {
-		vals := h.rt.sched.suspend(L, func() deliverFn {
-			<-gate // bloquea en la goroutine de fondo (sin token)
-			return func(L *lua.LState) []lua.LValue { return nil }
-		})
-		for _, v := range vals {
-			L.Push(v)
-		}
-		return len(vals)
-	})
-	h.register("gate_fire", func(L *lua.LState) int {
-		close(gate)
-		return 0
-	})
-
-	h.eval(`
-		order = {}
-		nu.task.spawn(function()
-			gate_wait()                       -- A: suspende hasta que B dispare
-			order[#order + 1] = "A-despues"
-		end)
-		nu.task.spawn(function()
-			order[#order + 1] = "B"           -- B corre mientras A está suspendida
-			gate_fire()
-		end)
-	`)
-	h.expectEval(`return order[1]`, "B")
-	h.expectEval(`return order[2]`, "A-despues")
 }
 
 // TestManyConcurrentSuspensions estresa el puente con muchas tasks suspendidas a

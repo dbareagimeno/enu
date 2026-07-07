@@ -43,7 +43,6 @@ import (
 	"syscall"
 	"time"
 
-	lua "github.com/yuin/gopher-lua"
 	"golang.org/x/term"
 )
 
@@ -78,42 +77,27 @@ func (d *ttyDriver) requestQuit() {
 	d.quitOnce.Do(func() { close(d.quit) })
 }
 
-// installShutdownHandler registra el handler INTERNO de `core:shutdown` que termina el
-// bucle (ver cabecera). El handler es una `*lua.LFunction` que envuelve una closure Go:
-// se cuela en la lista de suscriptores del bus directamente (como cualquier `on`, pero
-// sin pasar por `nu.events.on`, porque no es código Lua quien suscribe sino el binario).
-// Corre bajo el token (lo toma para tocar el bus, estado principal).
+// installShutdownHandler suscribe en el bus de la Instance wasm un handler de
+// `core:shutdown` que enciende un flag global; el bucle lo sondea tras cada lote de
+// input (`pollWasmQuit`). Así un `core:shutdown` emitido por la UI Lua (una app que
+// mapea su tecla de salida) termina el bucle. Corre bajo el token (lo toma por forma,
+// aunque en wasm el bus lo gobierna el mutex de la Instance).
 func (d *ttyDriver) installShutdownHandler() {
 	s := d.rt.sched
 	s.acquire()
 	defer s.release()
-	// Sobre wasm el bus de eventos vive en la Instance (M13d): un `core:shutdown`
-	// emitido por la UI Lua (una app que mapea su tecla de salida) NO llega al bus
-	// gopher, así que el handler Go de abajo no lo oiría. Se suscribe un handler Lua que
-	// enciende un flag global; el bucle lo sondea tras cada lote de input (`pollWasmQuit`).
-	// El handler gopher de abajo se mantiene además: cubre el `core:shutdown` emitido
-	// Go-side (las señales de terminación, TestDriverShutdownFromBus).
-	if d.rt.vmBackend == VMWasm && d.rt.wasm != nil {
-		_, _, _ = d.rt.wasm.Eval("_G.__driver_quit = false\n" +
-			`nu.events.on("core:shutdown", function() _G.__driver_quit = true end)`)
-	}
-	if s.events == nil {
+	if d.rt.wasm == nil {
 		return
 	}
-	fn := d.rt.L.NewFunction(func(L *lua.LState) int {
-		d.requestQuit()
-		return 0
-	})
-	sub := &subscriber{fn: fn, live: true, name: "core:shutdown", ownerName: ownerUser}
-	s.events.subs["core:shutdown"] = append(s.events.subs["core:shutdown"], sub)
+	_, _, _ = d.rt.wasm.Eval("_G.__driver_quit = false\n" +
+		`nu.events.on("core:shutdown", function() _G.__driver_quit = true end)`)
 }
 
 // pollWasmQuit sondea el flag `__driver_quit` que el handler Lua de `core:shutdown`
-// enciende en el bus wasm (installShutdownHandler): si está activo, pide el apagado. Es
-// la contraparte del handler Go del bus gopher, para el `core:shutdown` que emite la UI
-// Lua sobre wasm. No-op fuera de wasm. Presupone el token (lo llama `feed`).
+// enciende en el bus de la Instance (installShutdownHandler): si está activo, pide el
+// apagado. Presupone el token (lo llama `feed`).
 func (d *ttyDriver) pollWasmQuit() {
-	if d.rt.vmBackend != VMWasm || d.rt.wasm == nil {
+	if d.rt.wasm == nil {
 		return
 	}
 	if out, _, err := d.rt.wasm.Eval("return tostring(__driver_quit)"); err == nil && out == "true" {
@@ -218,17 +202,12 @@ func (d *ttyDriver) feed(pending *[]byte, flush bool) {
 			d.rt.emitUIFocus(ev.text == "in")
 			continue
 		}
-		if d.rt.vmBackend == VMWasm {
-			// Sobre wasm la pila de input y el despacho de secuencias viven en el
-			// preludio Lua (vmwasm/ui.go, M11): el `rt.ui.input` de gopher está vacío.
-			// Se inyecta el evento crudo por `FeedInput`, que lo despacha por
-			// `__ui_dispatch_input` (la misma vía que M13 cablea al TTY real).
-			if d.rt.wasm != nil {
-				_, _ = d.rt.wasm.FeedInput(inputEventToWasm(ev))
-			}
-			continue
+		// La pila de input y el despacho de secuencias viven en el preludio Lua de la
+		// Instance (vmwasm/ui.go): se inyecta el evento crudo por `FeedInput`, que lo
+		// despacha por `__ui_dispatch_input` (la misma vía que el TTY real usa).
+		if d.rt.wasm != nil {
+			_, _ = d.rt.wasm.FeedInput(inputEventToWasm(ev))
 		}
-		d.rt.ui.input.feedInput(ev)
 	}
 	// Sobre wasm, un handler Lua pudo pedir el apagado (`core:shutdown`) al despachar
 	// estas teclas: se sondea el flag ahora (el bus gopher no lo vería, M13d).
@@ -379,20 +358,10 @@ func (rt *Runtime) PrepareBareScreen() {
 	if rt.ui == nil {
 		return
 	}
-	if rt.vmBackend == VMWasm {
-		// Sobre wasm la pila de input vive en el preludio (M13d): el handler de salida se
-		// instala como un `on_input` Lua. Sobre la pila vacía de la pantalla desnuda queda
-		// arriba (nada de producto que le gane).
-		rt.installKernelExitWasm()
-		return
-	}
-	if rt.ui.input == nil {
-		return
-	}
-	// Handler de salida del kernel ARRIBA de la pila (la pantalla desnuda no monta UI
-	// de producto que deba ganarle): q/esc/ctrl+c → `core:shutdown`.
-	h := &inputHandler{in: rt.ui.input, raw: rt.newKernelExitHandler(), ownerName: ownerUser, live: true}
-	rt.ui.input.push(h)
+	// La pila de input vive en el preludio de la Instance: el handler de salida se
+	// instala como un `on_input` Lua. Sobre la pila vacía de la pantalla desnuda queda
+	// arriba (nada de producto que le gane).
+	rt.installKernelExitWasm()
 }
 
 // InstallEmergencyExit instala la RED DE SALIDA DE EMERGENCIA del kernel (ADR-017, G35)
@@ -411,19 +380,11 @@ func (rt *Runtime) InstallEmergencyExit() {
 	if rt.ui == nil {
 		return
 	}
-	if rt.vmBackend == VMWasm {
-		// Sobre wasm la pila de input vive en el preludio (M13d): la red de emergencia se
-		// instala como un `on_input` Lua. Como el despacho va de arriba abajo y `on_input`
-		// apila, instalarla ANTES de `Boot` (pila vacía) la deja al fondo, bajo cualquier
-		// handler que una app apile después —la misma semántica que `pushBottom` en gopher.
-		rt.installKernelExitWasm()
-		return
-	}
-	if rt.ui.input == nil {
-		return
-	}
-	h := &inputHandler{in: rt.ui.input, raw: rt.newKernelExitHandler(), ownerName: ownerUser, live: true}
-	rt.ui.input.pushBottom(h)
+	// La pila de input vive en el preludio de la Instance: la red de emergencia se
+	// instala como un `on_input` Lua. Como el despacho va de arriba abajo y `on_input`
+	// apila, instalarla ANTES de `Boot` (pila vacía) la deja al fondo, bajo cualquier
+	// handler que una app apile después.
+	rt.installKernelExitWasm()
 }
 
 // installKernelExitWasm instala en el preludio de input wasm el handler de SALIDA del
@@ -447,33 +408,6 @@ func (rt *Runtime) installKernelExitWasm() {
 end)`)
 }
 
-// newKernelExitHandler fabrica la `*lua.LFunction` del handler de SALIDA del kernel: una
-// closure Go que, ante `q`/`esc`/`ctrl+c`, emite `core:shutdown` y devuelve true
-// (consumida); cualquier otra tecla pasa (false). Lo comparten la pantalla desnuda
-// (`PrepareBareScreen`, arriba de su pila vacía) y la red de emergencia
-// (`InstallEmergencyExit`, al fondo bajo la UI de producto). **Presupone el token tomado.**
-func (rt *Runtime) newKernelExitHandler() *lua.LFunction {
-	return rt.L.NewFunction(func(L *lua.LState) int {
-		ev := L.OptTable(1, nil)
-		if ev == nil || ev.RawGetString("type").String() != "key" {
-			L.Push(lua.LFalse)
-			return 1
-		}
-		key := ev.RawGetString("key").String()
-		ctrl := false
-		if m, ok := ev.RawGetString("mods").(*lua.LTable); ok {
-			ctrl = lua.LVAsBool(m.RawGetString("ctrl"))
-		}
-		if key == "q" || key == "esc" || (key == "c" && ctrl) {
-			rt.sched.emit(rt.L, "core:shutdown", lua.LNil)
-			L.Push(lua.LTrue)
-			return 1
-		}
-		L.Push(lua.LFalse)
-		return 1
-	})
-}
-
 // handleSignals atiende las señales del terminal en su propia goroutine. Un `SIGWINCH`
 // reconsulta el tamaño y lo reaplica (bajo el token: toca el compositor y emite
 // `ui:resize`). Una señal de terminación pide el apagado ordenado del bucle. Termina
@@ -493,12 +427,11 @@ func (rt *Runtime) handleSignals(d *ttyDriver, sigCh <-chan os.Signal, inFd int)
 				}
 				continue
 			}
-			// SIGTERM/SIGINT/SIGHUP: apagado. Anuncia `core:shutdown` por el bus (que las
-			// extensiones —y el handler interno del driver— limpien lo suyo) y, por si el
-			// bus no estuviera, fuerza el quit directo.
-			rt.sched.acquire()
-			rt.sched.emit(rt.L, "core:shutdown", lua.LNil)
-			rt.sched.release()
+			// SIGTERM/SIGINT/SIGHUP: apagado. Anuncia `core:shutdown` por el bus de la
+			// Instance (que las extensiones limpien lo suyo) y fuerza el quit directo.
+			if rt.wasm != nil {
+				_ = rt.wasm.EmitEvent("core:shutdown", nil)
+			}
 			d.requestQuit()
 			return
 		}

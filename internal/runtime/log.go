@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // `nu.log` (api.md §15): las extensiones registran lo que pasa a un fichero en
@@ -130,79 +128,4 @@ func defaultConfigDir() string {
 		return filepath.Join(home, ".config", "nu")
 	}
 	return filepath.Join(os.TempDir(), "nu-config")
-}
-
-// registerLog cuelga la tabla `nu.log` (con sus cuatro niveles) del global `nu`
-// y redefine `print` como alias de `nu.log.info` (§15). Devuelve la función
-// `info` para que el alias comparta exactamente la misma closure.
-func registerLog(rt *Runtime, nu *lua.LTable) {
-	L := rt.L
-
-	logTbl := L.NewTable()
-	info := L.NewFunction(rt.logFunc(levelInfo))
-	logTbl.RawSetString("debug", L.NewFunction(rt.logFunc(levelDebug)))
-	logTbl.RawSetString("info", info)
-	logTbl.RawSetString("warn", L.NewFunction(rt.logFunc(levelWarn)))
-	logTbl.RawSetString("error", L.NewFunction(rt.logFunc(levelError)))
-	nu.RawSetString("log", logTbl)
-
-	// `print` es alias de `info` (§15): la misma función, no una copia, para que
-	// nadie pueda distinguirlas. Reemplaza al `print` que define OpenBase (que
-	// escribiría a stdout) y al provisional de S01.
-	L.SetGlobal("print", info)
-}
-
-// logFunc fabrica la closure Go que respalda un nivel de `nu.log`. Lee el owner
-// en cada llamada (no al construirse) vía `currentOwner`: S11 hizo que siga la
-// pila de plugins del arranque, así que el log refleja el plugin activo en el
-// momento de loguear (durante su `init.lua`, su nombre; fuera, "user").
-func (rt *Runtime) logFunc(level logLevel) lua.LGFunction {
-	return func(L *lua.LState) int {
-		msg := logMessage(L)
-		// Best-effort: un fallo de escritura no se propaga a Lua ni a la
-		// pantalla (§15). Si el disco está roto, el programa sigue.
-		_ = rt.log.write(level, rt.currentOwner(), msg)
-		return 0
-	}
-}
-
-// logMessage construye el texto de la línea a partir de los argumentos de la
-// llamada `nu.log.<nivel>(fmt, ...)`:
-//
-//   - sin argumentos -> línea vacía;
-//   - un solo argumento -> su `tostring` (respeta `__tostring`), sin tratarlo
-//     como formato (así `print(t)` no rompe si `t` contiene un `%`);
-//   - `fmt` + varargs -> `string.format(fmt, ...)`, delegando en Lua para tener
-//     su semántica exacta de directivas.
-func logMessage(L *lua.LState) string {
-	n := L.GetTop()
-	switch {
-	case n == 0:
-		return ""
-	case n == 1:
-		return L.ToStringMeta(L.Get(1)).String()
-	default:
-		return luaStringFormat(L, n)
-	}
-}
-
-// luaStringFormat invoca `string.format` con los `n` argumentos que hay en la
-// pila. Reutiliza la implementación de Lua en vez de reimplementar las
-// directivas en Go: un formato mal escrito lanza el mismo error que en Lua, que
-// se propaga al `pcall` envolvente —es un error del programador, no algo que el
-// log deba tragarse en silencio.
-func luaStringFormat(L *lua.LState, n int) string {
-	strLib, ok := L.GetGlobal("string").(*lua.LTable)
-	if !ok {
-		return L.ToStringMeta(L.Get(1)).String()
-	}
-	format := strLib.RawGetString("format")
-	L.Push(format)
-	for i := 1; i <= n; i++ {
-		L.Push(L.Get(i))
-	}
-	L.Call(n, 1)
-	res := L.ToStringMeta(L.Get(-1)).String()
-	L.Pop(1)
-	return res
 }

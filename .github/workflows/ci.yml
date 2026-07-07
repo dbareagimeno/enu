@@ -61,13 +61,6 @@ jobs:
       - name: Análisis estático (go vet)
         run: go vet ./...
 
-      - name: Censo de la frontera VM (trinquete de la migración)
-        # Guardia de la migración de la VM (docs/migracion-vm.md M01): falla si el
-        # kernel gana un símbolo de gopher-lua fuera de la allowlist del censo, para
-        # que ningún fichero introduzca acoplamiento nuevo mientras se migra a wasm.
-        # Se retira junto a gopher-lua en M17.
-        run: ./tools/censo-vm.sh --check
-
       - name: Módulos limpios (verify + tidy)
         # Materializa "cero dependency hell" (filosofía §6): `go mod verify` valida
         # las sumas, y `go mod tidy` + `git diff --exit-code` falla si alguien añadió
@@ -155,15 +148,16 @@ jobs:
         # ocultas a coste cero. Se EXCLUYE internal/vmwasm: su suite compila N
         # módulos wazero con el motor JIT (páginas ejecutables mmap), y bajo la
         # instrumentación de -race el mmap ejecutable agota la memoria del runner
-        # (OOM, no una carrera). El backend wasm tiene su propio job (vmblob) que
-        # corre su suite completa sin -race y sus tests de concurrencia CON -race
-        # dirigido. Se une a la suite normal cuando wasm sea la única VM (M17).
+        # (OOM, no una carrera). Por eso `internal/vmwasm` se EXCLUYE aquí de forma
+        # permanente y tiene su propio job (vmblob): su suite completa sin -race y sus
+        # tests de concurrencia CON -race dirigido (subconjunto acotado, sin OOM).
         run: go test -race -shuffle=on $(go list ./... | grep -v /internal/vmwasm)
 
   # Blob de la VM wasm (migracion-vm.md M02, DM1): reconstruye nu.wasm desde las
   # fuentes pineadas de Lua + el shim, y verifica que el artefacto comiteado no ha
   # derivado. Sólo en Linux (la toolchain wasm de Ubuntu basta; el blob es
-  # portable). Se retira junto a gopher-lua en M17 cuando wasm sea la única VM.
+  # portable). Guarda la reproducibilidad de la VM (DM1): permanente mientras wasm
+  # sea la VM del kernel.
   vmblob:
     name: Blob de la VM (nu.wasm reproducible)
     runs-on: ubuntu-latest
@@ -203,14 +197,3 @@ jobs:
         # (subconjunto acotado). TestWorker (M12) cubre el aislamiento entre
         # instancias, la mensajería acotada y terminate.
         run: go test -race -run 'TestSched|TestPrim|TestTask|TestTrampolinMultiInstancia|TestWorker' ./internal/vmwasm/
-
-      - name: Selector legacy (NU_VM=gopher) — sondeo del backend en gracia
-        # Conmutación de M16: wasm pasó a ser el DEFAULT, así que el job `test`
-        # (`go test -race ./...` a secas) ya corre la suite ENTERA sobre wasm — el
-        # sondeo `NU_VM=wasm` dedicado que vivía aquí quedó redundante y se retira.
-        # Lo que sí conviene vigilar hasta M17 es que el backend gopher, ahora
-        # legacy, siga alcanzable tras `NU_VM=gopher` / `backend = "gopher"`: se
-        # ejercita SÓLO el selector (TestVMBackend*), no la suite gopher completa,
-        # que dejó de mantenerse dual (la comparativa de corrección es main-vs-rama,
-        # no gopher-vs-wasm). Este paso muere con gopher-lua en M17.
-        run: NU_VM=gopher go test -run 'TestVMBackend' ./internal/runtime/

@@ -2,8 +2,6 @@ package runtime
 
 import (
 	"testing"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Tests unitarios del puente de errores estructurados (S02, inventario 🔒).
@@ -17,23 +15,12 @@ import (
 // forma de "forzar un EINVAL" (criterio de hecho de S02) sin que el runtime de
 // producción tenga aún ninguna primitiva que falle.
 func registerFail(h *harness) {
-	if h.isWasm() {
-		// Equivalente wasm expresado en Lua: lanza la MISMA tabla estructurada
-		// {code, message, detail?}. `detail` sólo aparece si se pasó (nil si no),
-		// idéntico a raiseError con lua.LNil. No necesita una LGFunction: el error
-		// estructurado es un valor Lua puro.
-		h.defWasmGlobal(`function fail(code, msg, detail)
+	// Andamiaje expresado en Lua sobre wasm: lanza la MISMA tabla estructurada
+	// {code, message, detail?}. `detail` sólo aparece si se pasó (nil si no). El
+	// error estructurado es un valor Lua puro, no necesita una primitiva Go.
+	h.defWasmGlobal(`function fail(code, msg, detail)
   error({ code = code, message = msg, detail = detail })
 end`)
-		return
-	}
-	h.register("fail", func(L *lua.LState) int {
-		code := L.CheckString(1)
-		msg := L.OptString(2, "")
-		detail := L.Get(3) // lua.LNil si no se pasó
-		raiseError(L, code, msg, detail)
-		return 0 // inalcanzable: raiseError desenrolla
-	})
 }
 
 // allReservedCodes es el orden estable de los códigos reservados para las tablas
@@ -103,34 +90,6 @@ func TestReservedCodesNotSwallowedNorRewritten(t *testing.T) {
 				t.Fatalf("message alterado al cruzar el puente: %q", se.Message)
 			}
 		})
-	}
-}
-
-// TestStructuredErrorRoundTripDetail: un detalle estructurado sobrevive el viaje
-// Go→Lua→Go: tras EvalString, el *StructuredError conserva la tabla `detail`.
-func TestStructuredErrorRoundTripDetail(t *testing.T) {
-	h := newHarness(t)
-	// StructuredError.Detail es un lua.LValue (tipo GOPHER): el error de un chunk wasm
-	// no nace en un LState gopher, así que su detail no puede materializarse como
-	// *lua.LTable en la frontera de EvalString (el code/message SÍ cruzan fiel, que es
-	// la garantía funcional; el detail sigue accesible como tabla DENTRO de Lua vía
-	// pcall). Comprobar el tipo gopher del detail sólo tiene sentido en el backend gopher.
-	h.skipIfWasm("StructuredError.Detail como *lua.LTable es un artefacto del LState gopher")
-	registerFail(h)
-
-	se := h.evalErr(`fail("ENOENT", "no está", { path = "/x", retries = 3 })`)
-	if se.Code != CodeENOENT {
-		t.Fatalf("code: got %q, want %q", se.Code, CodeENOENT)
-	}
-	detail, ok := se.Detail.(*lua.LTable)
-	if !ok {
-		t.Fatalf("detail: got %T, want *lua.LTable", se.Detail)
-	}
-	if got := detail.RawGetString("path"); got.String() != "/x" {
-		t.Fatalf("detail.path: got %q, want %q", got.String(), "/x")
-	}
-	if got := detail.RawGetString("retries"); got != lua.LNumber(3) {
-		t.Fatalf("detail.retries: got %v, want 3", got)
 	}
 }
 

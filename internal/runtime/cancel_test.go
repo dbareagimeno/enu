@@ -3,8 +3,6 @@ package runtime
 import (
 	"strings"
 	"testing"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 // Tests de cancelación (api.md §1.3, §3, sesión S08). S08 está en el inventario
@@ -175,18 +173,11 @@ func TestCancelNotCapturableByXpcall(t *testing.T) {
 // inmunidad es exclusiva del aborto, no un `pcall` mutilado.
 func TestNormalErrorsStillCapturableByPcall(t *testing.T) {
 	h := newHarness(t)
-	if h.isWasm() {
-		// Equivalente wasm de la primitiva de andamiaje: un error estructurado del
-		// core lanzado desde Lua (mismo code/message), expresable sin registrar una
-		// LGFunction. La propiedad bajo prueba —un error estructurado es capturable
-		// por pcall con code intacto— no depende de si el error nace en Go o en Lua.
-		h.defWasmGlobal(`function boom_einval() error({ code = "EINVAL", message = "kaboom" }) end`)
-	} else {
-		h.register("boom_einval", func(L *lua.LState) int {
-			raiseError(L, CodeEINVAL, "kaboom", lua.LNil)
-			return 0
-		})
-	}
+	// Primitiva de andamiaje expresada en Lua sobre wasm: un error estructurado del
+	// core (mismo code/message) lanzado desde Lua. La propiedad bajo prueba —un error
+	// estructurado es capturable por pcall con el code intacto— no depende de si el
+	// error nace en Go o en Lua.
+	h.defWasmGlobal(`function boom_einval() error({ code = "EINVAL", message = "kaboom" }) end`)
 
 	h.eval(`
 		out = {}
