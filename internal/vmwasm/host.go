@@ -608,10 +608,18 @@ function __sched_step(injected)
     local r = table.remove(__ready, 1)
     __resume(r.id, r.arg, r.iserr, pending)
   end
-  -- El paso devuelve DOS listas: las nuevas peticiones y los ids abortados. Go
-  -- cancela la petición en vuelo de cada id abortado (si la hubiera) para no
-  -- esperar su duración completa tras una cancelación.
-  return __wire.enc_list(pending, __aborted)
+  -- Cuenta las tasks vivas de PRIMER PLANO (no done, no de fondo). Los timers de
+  -- fondo (nu.task.every) nunca terminan: si contaran, el bucle no volvería jamás.
+  -- Go usa este recuento para la quiescencia (paridad con waitIdle de gopher, que
+  -- espera mientras hay primer plano vivo, no por los timers).
+  local live_fg = 0
+  for _, t in pairs(__tasks) do
+    if not t.done and not t.bg then live_fg = live_fg + 1 end
+  end
+  -- El paso devuelve TRES valores: las nuevas peticiones, los ids abortados (Go
+  -- cancela su petición en vuelo tras una cancelación) y el nº de tasks vivas de
+  -- primer plano (para la quiescencia).
+  return __wire.enc_list(pending, __aborted, live_fg)
 end
 `
 
@@ -846,14 +854,19 @@ end
 -- sleep+fn hasta que se para.
 function nu.task.every(ms, fn)
   local stopped = false
-  local id = nu.task.spawn(function()
+  local h = nu.task.spawn(function()
     while not stopped do
       nu.task.sleep(ms)
       if stopped then break end
       pcall(fn)
     end
   end)
-  return { stop = function() stopped = true; nu.task.cancel(id) end }
+  -- Marca la task del timer como de FONDO: un timer nunca termina por sí mismo, así
+  -- que no debe contar como trabajo vivo de primer plano para la quiescencia (si
+  -- contara, RunTasks/waitIdle no volvería jamás). Se cancela con :stop().
+  local tid = __task_id_of(h)
+  if tid and __tasks[tid] then __tasks[tid].bg = true end
+  return { stop = function() stopped = true; nu.task.cancel(h) end }
 end
 `
 

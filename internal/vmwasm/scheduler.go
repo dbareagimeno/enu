@@ -72,20 +72,30 @@ func (inst *Instance) RunTasks(ctx context.Context) error {
 		}
 		inject = append(inject, resultMap(r))
 	}
+	// Al salir, cancela toda petición en vuelo que quede (los timers de fondo
+	// abandonados), como `Close` en gopher: sus goroutines toman ctx.Done() y mueren.
+	cancelAll := func() {
+		for _, cancel := range reqCancels {
+			cancel()
+		}
+	}
 
 	for {
 		injWire, err := Encode([]any{inject})
 		if err != nil {
+			cancelAll()
 			return err
 		}
 		inject = nil
 
 		stepWire, err := inst.schedStep(injWire)
 		if err != nil {
+			cancelAll()
 			return err
 		}
-		pending, aborted, err := decodeStep(stepWire)
+		pending, aborted, liveFg, err := decodeStep(stepWire)
 		if err != nil {
+			cancelAll()
 			return err
 		}
 
@@ -109,8 +119,17 @@ func (inst *Instance) RunTasks(ctx context.Context) error {
 			go inst.performRequest(reqCtx, p, ch)
 		}
 
-		if outstanding == 0 {
-			return nil // ninguna task viva ni trabajo en vuelo: todas terminaron
+		// Quiescencia (paridad con waitIdle de gopher, que espera mientras hay primer
+		// plano vivo): se termina cuando NO queda ninguna task viva de PRIMER PLANO
+		// (liveFg==0; los timers de fondo `every` no cuentan —nunca terminan y
+		// colgarían el drain—) o cuando no hay nada en vuelo que pueda producir
+		// progreso (outstanding==0: idle/deadlock). Una task de primer plano suspendida
+		// en un future/await SÍ mantiene vivo el bombeo —incluidos los timers de fondo,
+		// cuyo callback puede resolver ese future—. Al salir se cancelan las goroutines
+		// en vuelo (timers abandonados). liveFg<0 (compat: paso sin 3er valor) NO corta.
+		if liveFg == 0 || outstanding == 0 {
+			cancelAll()
+			return nil
 		}
 
 		// Espera al menos un resultado, y drena los que ya estén listos.
@@ -151,26 +170,28 @@ type pendingReq struct {
 	request map[string]any
 }
 
-// decodeStep interpreta el wire que __sched_step devolvió: DOS valores. El primero
+// decodeStep interpreta el wire que __sched_step devolvió: TRES valores. El primero
 // es el array de peticiones { id, request } (request = { op, ... }); el segundo, el
 // array de ids de tasks abortadas este paso (sus peticiones en vuelo hay que
-// cancelarlas). El segundo valor puede faltar (compat: pasos que no lo emitan).
-func decodeStep(wire []byte) ([]pendingReq, []int64, error) {
+// cancelarlas); el tercero, el nº de tasks vivas de PRIMER PLANO (para la
+// quiescencia: los timers de fondo no cuentan). Los valores 2º/3º pueden faltar
+// (compat); sin el 3º se asume "hay primer plano" (-1) para no cortar el drain.
+func decodeStep(wire []byte) ([]pendingReq, []int64, int, error) {
 	vals, err := Decode(wire)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	var reqs []pendingReq
 	if len(vals) >= 1 && vals[0] != nil {
 		arr, ok := vals[0].([]any)
 		if !ok {
-			return nil, nil, fmt.Errorf("vmwasm: sched pending no es array: %T", vals[0])
+			return nil, nil, 0, fmt.Errorf("vmwasm: sched pending no es array: %T", vals[0])
 		}
 		reqs = make([]pendingReq, 0, len(arr))
 		for _, item := range arr {
 			m, ok := item.(map[string]any)
 			if !ok {
-				return nil, nil, fmt.Errorf("vmwasm: sched item no es map: %T", item)
+				return nil, nil, 0, fmt.Errorf("vmwasm: sched item no es map: %T", item)
 			}
 			req, _ := m["request"].(map[string]any)
 			op, _ := req["op"].(string)
@@ -187,7 +208,13 @@ func decodeStep(wire []byte) ([]pendingReq, []int64, error) {
 			}
 		}
 	}
-	return reqs, aborted, nil
+	liveFg := -1 // sin el 3er valor: asume primer plano (no cortar por defecto)
+	if len(vals) >= 3 {
+		if n, ok := taskID(vals[2]); ok {
+			liveFg = int(n)
+		}
+	}
+	return reqs, aborted, liveFg, nil
 }
 
 // performRequest cumple una petición de trabajo externo y manda el resultado por
