@@ -49,7 +49,8 @@ indefinidamente.
 | `agent:delta` (thinking) | Bloque de razonamiento **colapsado por defecto**, expandible; estilo atenuado. |
 | `agent:tool.start/progress/end` | Bloque de tool **colapsable**: cabecera con nombre + args resumidos; `progress` en vivo; al terminar, resultado plegado si es largo. |
 | `agent:message` | Sella el mensaje (sustituye los deltas por el render final). |
-| `agent:error` | Bloque de error con el código estructurado y, si `retryable`, acción de reintento. |
+| `agent:error` | Bloque de error con el código estructurado (`[code] mensaje`) y, si `retryable`, acción de reintento: la pista `(/retry para reintentar)` sobre el builtin `/retry` → `Session:retry()` (G43). |
+| `agent:retry` | Nota atenuada "reintentando (n/m) en Xs…" mientras el motor espera el backoff (G42). |
 | `agent:permission.asked` | Diálogo modal (§5), encolado FIFO si ya hay uno visible. |
 | `agent:compact` | Marca visual de "historia compactada arriba". |
 
@@ -99,7 +100,8 @@ Builtins (registrados con esta misma función — dogfooding):
 `/sessions` (picker desde el listado de [sesiones.md](sesiones.md) §7,
 reanuda vía `agent.session{ resume = id }`), `/fork`, `/compact`,
 `/permissions` (ver y editar la política de la sesión), `/think` (ver y
-cambiar el razonamiento, ADR-016), `/help`, `/quit`.
+cambiar el razonamiento, ADR-016), `/retry` (re-ejecuta el turno tras un
+error, `Session:retry`, G43), `/help`, `/quit`.
 
 > ✅ **Implementado** ([pospuesto.md](pospuesto.md) **P28**). Además de
 > `/model`, `/sessions`, `/compact`, `/clear`, `/help`, `/quit`, el chat trae
