@@ -111,8 +111,8 @@ func TestAgentG46ResumeReaplicaEventos(t *testing.T) {
 		end)`)
 	h.expectEval(`return tostring(out2)`, "done")
 	h.expectEval(`return tostring(errc2)`, "nil")
-	h.expectEval(`return tostring(MODEL2)`, "test/m2")   // último set_model, no agent.toml
-	h.expectEval(`return tostring(THINK2)`, "adaptive")  // último set_thinking
+	h.expectEval(`return tostring(MODEL2)`, "test/m2")    // último set_model, no agent.toml
+	h.expectEval(`return tostring(THINK2)`, "adaptive")   // último set_thinking
 	h.expectEval(`return tostring(ALLOW2)`, "write_file") // reaplicado, sin duplicar
 	h.expectEval(`return tostring(DENY2)`, "run_shell")
 
