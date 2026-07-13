@@ -187,9 +187,14 @@ inventario 🔒 y los hitos de veto). Esta sección solo garantiza que lo
 
 ## Convenciones de Git
 
+- **Modelo de ramas (desde 2026-07-14):** `develop` es la rama de integración
+  y la **rama por defecto** del repo — ahí aterriza todo el trabajo y de ahí
+  salen las versiones *no estables*. `main` queda reservada para **versiones
+  estables**: solo recibe merges desde `develop` cuando se corta una estable,
+  nunca trabajo directo.
 - **Rama de trabajo:** desarrolla en la rama indicada por la tarea (p. ej.
-  `claude/...`); créala localmente si no existe. Nunca empujes a otra rama sin
-  permiso explícito.
+  `claude/...`); créala localmente si no existe y ábrela **desde `develop`**.
+  Nunca empujes a otra rama sin permiso explícito.
 - **Mensajes de commit en español**, descriptivos y referenciando el hallazgo
   cuando aplique. Estilo observado en el historial:
   - `Resuelve G27: nu.task.all alinea resultados con inputs (Promise.all)`
