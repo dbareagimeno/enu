@@ -383,10 +383,10 @@ func TestWsRecvFrameType_G52(t *testing.T) {
 			w:close()
 		end)
 	`)
-	h.expectEval(`return tostring(binOk)`, "true")   // bytes binarios intactos
-	h.expectEval(`return tostring(b1)`, "true")       // segundo valor: binario
+	h.expectEval(`return tostring(binOk)`, "true") // bytes binarios intactos
+	h.expectEval(`return tostring(b1)`, "true")    // segundo valor: binario
 	h.expectEval(`return txt`, "hola")
-	h.expectEval(`return tostring(b2)`, "false")      // segundo valor: texto
+	h.expectEval(`return tostring(b2)`, "false") // segundo valor: texto
 }
 
 // TestWsRecvBinaryNilOnClose_G52 blinda (G52/A-38) que al cierre `recv` sigue dando
