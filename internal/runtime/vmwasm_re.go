@@ -78,7 +78,7 @@ func registerReWasm(p *vmwasm.Pool) {
 	// Wrapper Lua: nu.re.compile devuelve el handle con un método `match` propio que
 	// fusiona (array + nombrados) la tabla mixta de capturas; find_all/replace/_match
 	// se despachan por la metatable genérica del handle.
-	p.AddPreludio(`
+	p.AddPreludioW(`
 nu.re = nu.re or {}
 function nu.re.compile(pattern)
   local re = nu.re._compile(pattern)   -- handle {__id} con la metatable de handles
@@ -91,5 +91,5 @@ function nu.re.compile(pattern)
     return caps
   end
   return re
-end`)
+end`, "re._compile")
 }

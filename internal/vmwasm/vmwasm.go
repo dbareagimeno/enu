@@ -56,8 +56,8 @@ type Pool struct {
 	verMajor      int               // nu.version.major/minor/patch (api.md §1); los fija el Runtime
 	verMinor      int
 	verPatch      int
-	extraPreludio []string      // snippets Lua que aporta el catálogo (M13b: wrappers finos)
-	sliceBudget   time.Duration // presupuesto por slice del watchdog (DM4); ≤0 lo desactiva (workers, G15)
+	extraPreludio []preludioSnippet // snippets Lua que aporta el catálogo (M13b: wrappers finos)
+	sliceBudget   time.Duration     // presupuesto por slice del watchdog (DM4); ≤0 lo desactiva (workers, G15)
 
 	// Registro de workers vivos de este Pool (M12), para _send/_recv/_terminate y
 	// para el apagado ordenado. Sólo lo usa el Pool principal.
@@ -264,12 +264,41 @@ func (p *Pool) SetVersion(major, minor, patch int) {
 // un mini-runtime cuyo trabajo es quemar CPU). Debe llamarse antes de NewInstance.
 func (p *Pool) SetSliceBudget(d time.Duration) { p.sliceBudget = d }
 
+// preludioSnippet es un fragmento Lua del catálogo con su marca de disponibilidad
+// (G45): workerSafe distingue los wrappers [W] —que spawnWorker copia al preludio
+// de cada worker— de los solo-principal (p. ej. nu.fs.watch, que depende de
+// nu.events, inexistente en un worker). needs enumera los thunks que el wrapper
+// envuelve: el snippet solo cruza si alguno está concedido por caps, de modo que
+// la superficie no concedida NO EXISTE dentro del worker (deny-by-default, §14)
+// también en su capa Lua, no solo en los thunks.
+type preludioSnippet struct {
+	src        string
+	workerSafe bool
+	needs      []string
+}
+
 // AddPreludio añade un snippet Lua que se ejecuta al final del preludio, cuando la
 // tabla `nu` ya está montada. Es el punto de extensión con el que un módulo del
 // catálogo (M13b) aporta un wrapper fino en Lua —p. ej. nu.re.compile, que ensambla
 // la tabla mixta de capturas que el wire no puede cruzar de una pieza—. Debe
-// llamarse antes de NewInstance.
-func (p *Pool) AddPreludio(snippet string) { p.extraPreludio = append(p.extraPreludio, snippet) }
+// llamarse antes de NewInstance. Esta variante registra el snippet como
+// SOLO-PRINCIPAL: no cruza a los workers.
+func (p *Pool) AddPreludio(snippet string) {
+	p.extraPreludio = append(p.extraPreludio, preludioSnippet{src: snippet})
+}
+
+// AddPreludioW es AddPreludio con marca [W] (G45): el snippet además cruza al
+// preludio de cada worker, porque envuelve superficie que api.md §16 declara
+// disponible en workers. La marca es por-snippet y no en bloque porque conviven
+// wrappers [W] (log, re, text, proc, ws, http.stream, search.grep) con wrappers
+// solo-principal (fs.watch). `needs` son los nombres de los thunks que el wrapper
+// llama (p. ej. "re._compile"): el snippet cruza solo si caps concede alguno —la
+// misma autoridad (workerGrants) que poda los thunks poda sus wrappers, y un
+// módulo no concedido no existe en el worker tampoco como tabla Lua (§14). Sin
+// needs, el snippet cruza siempre.
+func (p *Pool) AddPreludioW(snippet string, needs ...string) {
+	p.extraPreludio = append(p.extraPreludio, preludioSnippet{src: snippet, workerSafe: true, needs: needs})
+}
 
 // Close libera las instancias del Pool. El runtime wazero es compartido a nivel
 // de proceso y no se cierra aquí (vive lo que el proceso); las instancias se

@@ -98,7 +98,7 @@ func registerWsWasm(p *vmwasm.Pool, rt *Runtime) {
 	// send/recv (por __hcall_s, ⏸) y close (por __hcall, síncrono). Mismo patrón que
 	// nu.re.compile (vmwasm_re.go), aquí enrutando los métodos bloqueantes al
 	// despacho suspendente.
-	p.AddPreludio(`
+	p.AddPreludioW(`
 nu.ws = nu.ws or {}
 function nu.ws.connect(url, opts)
   local ws = nu.ws._connect(url, opts)   -- ⏸: handle {__id} tras el handshake
@@ -106,7 +106,7 @@ function nu.ws.connect(url, opts)
   ws.recv  = function(self)       return __hcall_s(self.__id, "recv") end
   ws.close = function(self)       return __hcall(self.__id, "close") end
   return ws
-end`)
+end`, "ws._connect")
 }
 
 // parseWsOptsWasm extrae (url, wsOpts) del wire de nu.ws.connect. Mismo contrato

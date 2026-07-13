@@ -170,7 +170,7 @@ func (p *Pool) preludio() string {
 	// Snippets del catálogo (M13b): wrappers finos en Lua, con `nu` ya montado.
 	for _, s := range p.extraPreludio {
 		b.WriteString("\n")
-		b.WriteString(s)
+		b.WriteString(s.src)
 	}
 	return b.String()
 }

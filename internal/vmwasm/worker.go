@@ -156,6 +156,42 @@ func (inst *Instance) spawnWorker(source string, caps map[string]bool, capsGiven
 		wp.reg.register(name, parent.fns[id], parent.suspending[id])
 	}
 
+	// Los MÉTODOS de handle también cruzan (G45): la superficie [W] incluye los
+	// métodos de los handles que sus thunks producen (Proc:wait, Re:match,
+	// GrepIter:next...), y registerHandleDispatch arranca el pool del worker con
+	// el mapa vacío. Se copia entero, sin podar por caps: es inerte lo inalcanzable
+	// (un método solo se despacha sobre un handle YA creado por un thunk concedido
+	// de la PROPIA instancia — un worker sin `ui` jamás tendrá un handle Region).
+	for key, fn := range parent.methods {
+		wp.reg.methods[key] = fn
+	}
+
+	// Los wrappers Lua [W] del catálogo cruzan al worker (G45): buena parte de la
+	// superficie de api.md §16 (nu.log.*, nu.re.compile, nu.proc.spawn, nu.text.*,
+	// nu.ws.connect, nu.http.stream, nu.search.grep) no son thunks del registro
+	// sino snippets de extraPreludio; sin esta copia el worker arranca con esos
+	// módulos a nil. Cruzan SOLO los marcados worker-safe (nu.fs.watch no: su
+	// entrega depende de nu.events, que en un worker no existe) y SOLO si caps
+	// concede alguno de los thunks que envuelven (needs): así "lo no concedido no
+	// existe" (§14) vale también para la capa de wrappers —un worker sin la cap
+	// `http` no tiene nu.http ni como tabla—, con workerGrants como única
+	// autoridad de poda.
+	for _, s := range inst.pool.extraPreludio {
+		if !s.workerSafe {
+			continue
+		}
+		cruza := len(s.needs) == 0
+		for _, need := range s.needs {
+			if workerGrants(need, caps, capsGiven) {
+				cruza = true
+				break
+			}
+		}
+		if cruza {
+			wp.extraPreludio = append(wp.extraPreludio, s)
+		}
+	}
+
 	chans := newWorkerChannels()
 
 	// Primitivas del lado WORKER del canal con el padre (siempre presentes; el
