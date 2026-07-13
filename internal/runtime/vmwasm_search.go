@@ -185,7 +185,7 @@ func registerSearchWasm(p *vmwasm.Pool, rt *Runtime) {
 	// iteradora que en cada paso llama GrepIter:next por __hcall_s (⏸) y registra el
 	// cierre en la task actual. Reconstruye el `for r in nu.search.grep(pattern,
 	// opts) do ... end` del contrato (§11); el primer valor es la función iteradora.
-	p.AddPreludio(`
+	p.AddPreludioW(`
 nu.search = nu.search or {}
 function nu.search.grep(pattern, opts)
   local it = nu.search._grep(pattern, opts)   -- handle {__id} tras enumerar el árbol
@@ -193,7 +193,7 @@ function nu.search.grep(pattern, opts)
   return function()
     return __hcall_s(it.__id, "next")
   end
-end`)
+end`, "search._grep")
 }
 
 // parseFilesOptsWasm extrae filesOpts del mapa `opts` que cruzó el wire. Mismo

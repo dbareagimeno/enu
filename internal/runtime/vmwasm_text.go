@@ -180,7 +180,7 @@ func registerTextBlocksWasm(p *vmwasm.Pool) {
 	// height}` que devuelven las primitivas crudas como el handle opaco de un Block
 	// (§9.2), con la metatable de handles (__handle_mt, del preludio base) para que
 	// `.width`/`.height` sean legibles y el Block cruce a `Region:blit` como W_HANDLE.
-	p.AddPreludio(`
+	p.AddPreludioW(`
 nu.text = nu.text or {}
 local function __wrap_block(m)
   -- Block OPACO (§10): __block_mt cruza como handle por __id pero deja .lines y demás
@@ -194,7 +194,7 @@ function nu.text.diff(a, b, opts)
   local r = nu.text._diff(a, b, opts)
   if r.block then r.block = __wrap_block(r.block) end
   return r
-end`)
+end`, "text._wrap", "text._markdown", "text._highlight", "text._diff")
 }
 
 // blockResult empaqueta un `*block` recién construido como el retorno de una primitiva

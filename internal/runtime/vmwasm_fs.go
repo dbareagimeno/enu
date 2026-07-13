@@ -352,6 +352,9 @@ func registerWatchWasm(p *vmwasm.Pool, rt *Runtime) {
 	// único derivado del id del handle) que desenvuelve el lote y llama a `fn(events)`;
 	// Watcher:stop cancela la suscripción y corta la entrega Go. El handler corre bajo
 	// el pcall del bus (ADR-008), igual que en gopher.
+	//
+	// AddPreludio (sin W) deliberado: fs.watch NO es [W] (api.md §16) — su entrega
+	// corre sobre nu.events, que en un worker no existe (G45).
 	p.AddPreludio(`
 nu.fs = nu.fs or {}
 function nu.fs.watch(path, opts, fn)

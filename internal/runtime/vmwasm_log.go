@@ -31,7 +31,7 @@ func registerLogWasm(p *vmwasm.Pool, rt *Runtime) {
 	reg("log._error", levelError)
 
 	// Wrapper Lua: formatea los args y llama al primitivo del nivel. print = info.
-	p.AddPreludio(`
+	p.AddPreludioW(`
 nu.log = nu.log or {}
 local function __logfmt(...)
   local n = select("#", ...)
@@ -43,5 +43,5 @@ function nu.log.debug(...) nu.log._debug(__logfmt(...)) end
 function nu.log.info(...) nu.log._info(__logfmt(...)) end
 function nu.log.warn(...) nu.log._warn(__logfmt(...)) end
 function nu.log.error(...) nu.log._error(__logfmt(...)) end
-print = nu.log.info`)
+print = nu.log.info`, "log._debug", "log._info", "log._warn", "log._error")
 }

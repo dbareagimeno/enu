@@ -1633,6 +1633,48 @@ function M.session(opts)
         table.insert(self.history, e.summary)
       end
     end
+
+    -- G46: el replay reaplica también los `event` del agente — la sesión reanudada
+    -- continúa DONDE ESTABA, no donde arrancó. Precedencia (agente.md §2): opts
+    -- explícitos del resume > event del transcript > agent.toml — los opts siguen
+    -- siendo efímeros *cuando se dan*; cuando callan, el transcript manda. Se
+    -- recorre TODO el transcript, no solo desde el último compact (la compactación
+    -- resume mensajes, no configuración): para los repetibles la última gana
+    -- (sesiones.md §3) y los acumulativos allow/deny se reaplican en orden sobre la
+    -- política base, con la misma semántica que en caliente (idempotentes) y sin
+    -- re-persistir nada (el replay lee, no escribe).
+    local last_model, saw_thinking, last_thinking
+    local function readd(list, pattern)
+      if type(pattern) ~= "string" or pattern == "" then return end
+      for _, p in ipairs(list) do
+        if p == pattern then return end
+      end
+      list[#list + 1] = pattern
+    end
+    for _, e in ipairs(entries) do
+      if e.t == "event" and e.ns == "agent" and type(e.data) == "table" then
+        local k = e.data.kind
+        if k == "set_model" and type(e.data.model) == "string" then
+          last_model = e.data.model
+        elseif k == "set_thinking" then
+          saw_thinking, last_thinking = true, e.data.thinking
+        elseif k == "allow" then
+          readd(self.permissions.allow, e.data.pattern)
+        elseif k == "deny" then
+          readd(self.permissions.deny, e.data.pattern)
+        end
+      end
+    end
+    if last_model ~= nil and opts.model == nil then
+      -- Como Session:set_model: valida contra el registro. Si el provider
+      -- desapareció desde que se grabó, EPROVIDER al abrir (mejor que en el
+      -- primer turno); el escape es un opts.model explícito, que tiene precedencia.
+      providers.resolve(last_model)
+      self.model = last_model
+    end
+    if saw_thinking and opts.thinking == nil then
+      self.thinking = normalize_thinking(last_thinking)
+    end
   end
 
   -- Fork (P22, Session:fork): copia el prefijo del padre al historial y al
@@ -1685,7 +1727,8 @@ function M.session(opts)
     end
   end
 
-  emit(self.handle.id, "session.start", { model = model })
+  -- self.model, no el local: un resume pudo reaplicar un set_model del transcript (G46).
+  emit(self.handle.id, "session.start", { model = self.model })
   return self
 end
 

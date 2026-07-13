@@ -156,7 +156,7 @@ func registerHTTPStreamWasm(p *vmwasm.Pool, rt *Runtime) {
 	// scheduler por __hcall_s (⏸)— y close (por __hcall, síncrono). Mismo patrón que
 	// nu.ws.connect (vmwasm_ws.go): el handle ya trae la metatable de handles; aquí
 	// sólo se le cuelgan los campos de cabecera y los métodos.
-	p.AddPreludio(`
+	p.AddPreludioW(`
 nu.http = nu.http or {}
 function nu.http.stream(opts)
   local st, status, headers = nu.http._stream(opts)  -- ⏸: handle {__id} tras las cabeceras
@@ -166,7 +166,7 @@ function nu.http.stream(opts)
   st.events  = function(self) return function() return __hcall_s(self.__id, "next_event") end end
   st.close   = function(self) return __hcall(self.__id, "close") end
   return st
-end`)
+end`, "http._stream")
 }
 
 // parseIdleTimeoutWasm extrae opts.idle_timeout_ms del mapa `opts` que cruzó el wire

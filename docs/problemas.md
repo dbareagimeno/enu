@@ -9,14 +9,17 @@ resolución se aplica a los documentos afectados y la entrada pasa a
 aquello es lo que decidimos no decidir; esto son agujeros que la v1 sí
 necesita cerrados.
 
-**Estado: 47 registradas, 45 resueltas, 2 abiertas (G45–G46)** (G44–G51
+**Estado: 47 registradas, 47 resueltas, 0 abiertas** (G44–G51
 añadidas 2026-07-12 desde la auditoría integral
 ([auditoria-2026-07-12.md](auditoria-2026-07-12.md)): G47–G51 —incoherencias
 documentales— resueltas el mismo día; G44 —el bombeo del scheduler— resuelta
 y **construida** el 2026-07-13 con la opción (b), `RunTasks` persistente
-(bitácora de [implementacion.md](implementacion.md)); G45–G46 —la superficie [W] de los
-workers y el replay de `event`— quedan **abiertas** esperando decisión de
-diseño. Los números G42–G43 están **reservados**: los
+(bitácora de [implementacion.md](implementacion.md)); G45 —la superficie [W]
+de los workers— resuelta y **construida** el 2026-07-13 con la opción (a),
+marca worker-safe por snippet de preludio; G46 —el replay de `event`—
+resuelta y **construida** el 2026-07-13 con la opción (a) más la (c):
+precedencia `opts > transcript > agent.toml` y allow/deny reaplicados en
+orden. Los números G42–G43 están **reservados**: los
 usa la rama `claude/ux-producto-pulido` (retry con backoff y `agent:error`
 estructurado), aún sin fusionar. G41 añadida 2026-07-03 desde la
 construcción — un handler que escribía en un upvalue de una task suspendida
@@ -1047,7 +1050,30 @@ El modo interactivo lanza ese `RunTasks` de larga vida (`PumpTasks`) junto al dr
 
 **Opciones.** (a) **Bucle integrado:** `drive()` pasa a bombear el scheduler — un solo bucle que hace `select` sobre input, resultados de hostcalls y señal de trabajo nuevo, con `RunTasks` reescrito como paso reentrante (`schedStep` + espera señalizada) en vez de bucle-a-quiescencia. (b) **`RunTasks` persistente:** el canal de resultados y el contador pasan a la `Instance` (no locales a la invocación), la quiescencia de primer plano NO cancela las peticiones de fondo (los `every` sobreviven pausados), y `EmitEvent`/`FeedInput`/`CoSpawn` publican en un canal de *kick* que forma el tercer caso del `select`; el modo interactivo lanza ese `RunTasks` de larga vida junto al driver. (c) **Parches puntuales** sin bucle interactivo (solo el kick + no cancelar el fondo): arregla (2) y (3) pero deja (1), la manifestación que bloquea el producto. Se eligió **(b)**: conserva la arquitectura actual (un solo hilo entra a la VM, `inst.mu` como token), resuelve las tres manifestaciones y no reescribe el driver. (a) se descartó por acoplar capas (`internal/runtime` ↔ `internal/vmwasm`) y reescribir el driver sin necesidad — queda como evolución natural si el modelo de dos bucles llegara a doler (el `select` unificado puede absorber el kick y el canal de resultados ya existentes). (c) se descartó por dejar intacta la manifestación (1), justo la que bloquea el producto.
 
-## G45 · La superficie [W] prometida en `api.md` §16 no llega a los workers: los wrappers Lua de `extraPreludio` no cruzan — `api.md` §16 / `vmwasm/worker.go` — **ABIERTO**
+## G45 · La superficie [W] prometida en `api.md` §16 no llega a los workers: los wrappers Lua de `extraPreludio` no cruzan — `api.md` §16 / `vmwasm/worker.go` — **RESUELTO**
+
+**Resolución** (2026-07-13; opción (a), construida el mismo día — detalle en la
+fila `G45 (kernel)` de la bitácora de [implementacion.md](implementacion.md)).
+`AddPreludio` gana la variante **`AddPreludioW(snippet, needs...)`** que etiqueta
+el fragmento como [W] y declara los **thunks que envuelve** (`needs`, p. ej.
+`"re._compile"`); `spawnWorker` copia al preludio del worker los etiquetados
+**cuyos `needs` pasan `workerGrants`** — la misma autoridad que poda los thunks
+poda sus wrappers, de modo que "lo no concedido no existe" (api.md §14) vale
+también en la capa Lua: un worker sin la cap `http` no tiene `nu.http` ni como
+tabla, y la detección de superficie por existencia (la que blinda el aislamiento
+de subagentes, agente.md §9) sigue siendo fiable. Los siete wrappers [W] cruzan
+(`log`, `re.compile`, `text.*`, `proc.spawn`, `ws.connect`, `http.stream`,
+`search.grep`); `fs.watch` queda solo-principal con la variante sin marca, como
+exigía la nota del problema. La construcción **destapó una segunda capa de la
+misma grieta**: los **métodos de handle** (`Re:match`, `Proc:read_line`,
+`GrepIter:next`...) tampoco cruzaban — `registerHandleDispatch` arrancaba el
+pool del worker con el mapa de métodos vacío, así que incluso con los wrappers
+copiados todo handle era inservible; el mapa del padre se copia entero, sin
+podar (lo inalcanzable es inerte: un método solo se despacha sobre un handle ya
+creado por un thunk concedido de la propia instancia). **No toca `api.md`**
+(APILevel intacto): §16 se cumple ahora tal como se lee. Blindaje 🔒:
+`worker_g45_test.go` (paridad con la tabla de §16 desde dentro de un worker,
+wrappers operativos punta a punta y poda por caps también de los wrappers).
 
 **Problema.** `api.md` §16 declara disponibles en workers ([W]) `re`, `ws`, `search`, `log`, `proc`, `http` y `text` completos, pero buena parte de esa superficie no son thunks del catálogo sino **wrappers Lua** registrados con `Pool.AddPreludio` (`nu.log.*`, `nu.re.compile`, `nu.text.wrap/markdown/highlight/diff`, `nu.proc.spawn` y sus métodos, `nu.ws.connect`, `nu.http.stream`, `nu.search.grep`). `spawnWorker` (`vmwasm/worker.go:137-179`) copia los módulos y las primitivas del registro pero **nunca `extraPreludio`**: el preludio del worker corre sin esos wrappers y los módulos quedan ausentes (verificado empíricamente: los seis probados, `nil`). Los thunks host sí cruzan; falta exactamente la capa de wrappers. Nota: el wrapper de `nu.fs.watch` también vive en `extraPreludio` pero watch NO es [W] — la solución debe discriminar, no copiar en bloque.
 
@@ -1055,7 +1081,27 @@ El modo interactivo lanza ese `RunTasks` de larga vida (`PumpTasks`) junto al dr
 
 **Opciones.** (a) **Marca worker-safe por preludio:** `AddPreludio` gana una variante/opción que etiqueta el fragmento como [W] (`log`, `re`, `text`, `proc`, `ws`, `http.stream`, `search.grep` sí; `fs.watch`, ui no), y `spawnWorker` copia los etiquetados — el gating de `caps` sigue haciéndolo `workerGrants` sobre los thunks subyacentes (un wrapper sin su thunk falla con el error de cap, coherente). (b) **Rebajar §16** quitando el marcador [W] a esos módulos — rompe la promesa de la espec y castra a los workers; descartable salvo urgencia. (c) **Mover los wrappers al preludio base** del Pool (compartido por principal y workers) — no discrimina fs.watch ni futuros wrappers solo-principal sin añadir de todos modos una marca, que es la opción (a). Recomendación: (a), con test de paridad que recorra la tabla de §16 dentro de un worker.
 
-## G46 · El replay de `resume` ignora las entradas `event`: los cambios en caliente persistidos se pierden al reanudar — `sesiones.md` §3 / `agente.md` §2 (tensión G18/G19) — **ABIERTO**
+## G46 · El replay de `resume` ignora las entradas `event`: los cambios en caliente persistidos se pierden al reanudar — `sesiones.md` §3 / `agente.md` §2 (tensión G18/G19) — **RESUELTO**
+
+**Resolución** (2026-07-13; opción (a) **más la (c)** — la recomendación
+completa del registro—, construida el mismo día en la extensión `agent`,
+fila `G46 (extensión)` de la bitácora de [implementacion.md](implementacion.md)).
+La tensión G18/G19 se cierra declarando la **precedencia explícita** en
+[agente.md](agente.md) §2: **opts del resume > `event` del transcript >
+`agent.toml`** — los `opts` siguen siendo efímeros (G18) pero solo pisan al
+transcript *cuando se dan*; cuando callan, rige lo grabado. El replay de
+`agent.session{resume=...}` reaplica los `event` del agente: los repetibles
+(`set_model`, `set_thinking`) con last-wins (la regla de sesiones.md §3, cuyo
+ejemplo canónico deja de ser letra muerta), y los acumulativos (`allow`/`deny`)
+**reaplicados en orden** sobre la política base, con la semántica de caliente
+(idempotentes) y sin re-persistir — perder una palanca de seguridad al reanudar
+sorprende, así que ningún opts los pisa. Los `event` se releen del transcript
+**entero**, no desde el último `compact` (la compactación resume mensajes, no
+configuración; anotado en sesiones.md §3). Si el modelo grabado ya no resuelve,
+reanudar falla con `EPROVIDER` al abrir — mejor que en el primer turno—; el
+escape es un `opts.model` explícito, que tiene precedencia. Sin cambios de
+kernel ni de `api.md`. Blindaje: `agent_g46_test.go` (precedencia en ambos
+sentidos, last-wins con cambios repetidos, allow/deny reaplicados sin duplicar).
 
 **Problema.** `Session:set_model`/`set_thinking`/`allow`/`deny` persisten entradas `event` en el transcript, y `sesiones.md` §3 define para ellas una regla de replay explícita ("para datos repetibles… la última gana", con el cambio de modelo como ejemplo canónico). Pero el replay de `agent.session{resume=...}` (`agent/init.lua`) solo reconstruye `message` y `compact`: las `event` se reciben del store y se descartan. Una sesión que cambió de modelo en caliente vuelve al modelo de `opts`/`agent.toml` al reanudarse, sin aviso. La grieta tiene una tensión de espec previa: G18 declaró los `opts` **efímeros** (se reaplican en cada resume), lo que para el caso del modelo choca frontalmente con el last-wins de sesiones.md §3 — hay que decidir la precedencia, no solo implementar.
 

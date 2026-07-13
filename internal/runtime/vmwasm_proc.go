@@ -205,7 +205,7 @@ func registerProcWasm(p *vmwasm.Pool, rt *Runtime) {
 	// Wrapper Lua: nu.proc.spawn envuelve el handle de proc._spawn y le cuelga los
 	// seis métodos de §6 —los de IO por __hcall_s (⏸), close_stdin/kill por __hcall
 	// (síncronos)—. Mismo patrón que nu.ws.connect (vmwasm_ws.go).
-	p.AddPreludio(`
+	p.AddPreludioW(`
 nu.proc = nu.proc or {}
 function nu.proc.spawn(argv, opts)
   local p = nu.proc._spawn(argv, opts)   -- handle {__id}
@@ -216,7 +216,7 @@ function nu.proc.spawn(argv, opts)
   p.close_stdin = function(self)           return __hcall(self.__id, "close_stdin") end
   p.kill        = function(self, sig)      return __hcall(self.__id, "kill", sig) end
   return p
-end`)
+end`, "proc._spawn")
 }
 
 // parseProcArgsWasm valida y extrae (argv, opts) del wire de nu.proc.run/spawn (§6).
