@@ -48,29 +48,57 @@ func newWorkerChannels() *workerChannels {
 func (c *workerChannels) closeDone() { c.doneOnce.Do(func() { close(c.done) }) }
 
 // worker es un worker vivo visto desde el padre: su Instance aislada, sus canales
-// y su join de apagado.
+// y su join de apagado. `id`/`parent` son el ancla al registro del Pool principal:
+// permiten que shutdown() se retire a sí mismo del mapa (A-07).
 type worker struct {
 	inst       *Instance
 	chans      *workerChannels
 	terminated chan struct{}
 	termOnce   sync.Once
+	id         int64 // id en el registro del padre (0 hasta registrar)
+	parent     *Pool // Pool principal que lleva el registro (nil hasta registrar)
 }
 
 // registerWorker registra un worker en el Pool y devuelve su id (el __wid del
-// lado Lua). Sólo el Pool principal lleva este registro.
+// lado Lua). Sólo el Pool principal lleva este registro. Se llama ANTES de
+// arrancar la goroutine del worker, para que shutdown() —que se retira del mapa
+// (A-07)— nunca pueda correr sobre un worker aún sin id/parent.
 func (p *Pool) registerWorker(w *worker) int64 {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
 	p.workerNext++
 	id := p.workerNext
+	w.id = id
+	w.parent = p
 	p.workers[id] = w
 	return id
 }
 
-func (p *Pool) lookupWorker(id int64) *worker {
+// deregisterWorker retira un worker terminado del registro (A-07): evita el
+// crecimiento monótono del mapa —y con él la retención de la struct y sus
+// canales— en procesos de larga vida que spawneen workers periódicamente. Lo
+// llama shutdown() cuando el worker ha terminado del todo. Idempotente (borrar
+// una clave ausente es un no-op).
+func (p *Pool) deregisterWorker(id int64) {
+	p.workerMu.Lock()
+	delete(p.workers, id)
+	p.workerMu.Unlock()
+}
+
+// lookupWorker resuelve un worker por su id. Devuelve (w, known): `w` es el
+// worker VIVO (nil si ya no está en el registro), y `known` indica si el id fue
+// alguna vez un worker válido. Tras A-07 un worker terminado se retira del mapa,
+// así que un id conocido (0 < id ≤ workerNext) que ya no está presente es un
+// worker RETIRADO —send debe dar ECLOSED y recv nil, igual que cuando seguía en
+// el mapa con `done` cerrado—; sólo un id fuera de ese rango (forjado/corrupto)
+// es realmente inválido (EINVAL).
+func (p *Pool) lookupWorker(id int64) (w *worker, known bool) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
-	return p.workers[id]
+	if w, ok := p.workers[id]; ok {
+		return w, true
+	}
+	return nil, id > 0 && id <= p.workerNext
 }
 
 // registerWorkerHost registra las primitivas del lado PADRE de los workers (M12).
@@ -98,15 +126,24 @@ func (p *Pool) registerWorkerHost() {
 		if err != nil {
 			return nil, err
 		}
+		// Registrar ANTES de arrancar la goroutine (A-07): así w.id/w.parent ya
+		// están fijados cuando run→shutdown se retire del mapa, aunque el worker
+		// termine de inmediato (p. ej. un error de carga o un módulo trivial).
 		id := inst.pool.registerWorker(w)
+		go w.run(source)
 		return []any{id}, nil
 	})
 
 	// nu.worker._send(wid, msg) ⏸: encola msg en la cola hacia el worker; SUSPENDE
 	// si está llena (backpressure). ECLOSED si el worker terminó.
 	p.RegisterSuspending("worker._send", func(inst *Instance, args []any) ([]any, error) {
-		w := inst.pool.lookupWorker(toI64(args[0]))
+		w, known := inst.pool.lookupWorker(toI64(args[0]))
 		if w == nil {
+			if known {
+				// worker retirado tras terminar (A-07): misma semántica que con la
+				// entrada aún en el mapa y `done` cerrado.
+				return nil, &StructuredError{Code: "ECLOSED", Message: "Worker:send: el worker ha terminado"}
+			}
 			return nil, &StructuredError{Code: "EINVAL", Message: "Worker:send: worker inválido"}
 		}
 		return sendOnChan(w.chans.toWorker, w.chans.done, args[1], "Worker:send")
@@ -115,8 +152,13 @@ func (p *Pool) registerWorkerHost() {
 	// nu.worker._recv(wid) ⏸: saca un mensaje de la cola desde el worker; SUSPENDE
 	// hasta que llegue. nil (fin de canal) si el worker terminó y no queda nada.
 	p.RegisterSuspending("worker._recv", func(inst *Instance, args []any) ([]any, error) {
-		w := inst.pool.lookupWorker(toI64(args[0]))
+		w, known := inst.pool.lookupWorker(toI64(args[0]))
 		if w == nil {
+			if known {
+				// worker retirado tras terminar (A-07): fin de canal, igual que con
+				// la entrada aún en el mapa, `done` cerrado y la cola drenada.
+				return []any{nil}, nil
+			}
 			return nil, &StructuredError{Code: "EINVAL", Message: "Worker:recv: worker inválido"}
 		}
 		return recvOnChan(w.chans.fromWorker, w.chans.done)
@@ -125,7 +167,7 @@ func (p *Pool) registerWorkerHost() {
 	// nu.worker._terminate(wid): inmediato y seguro (estados aislados). Interrumpe
 	// un bucle de CPU (cancela el ctx) y despierta cualquier send/recv (cierra done).
 	p.Register("worker._terminate", func(inst *Instance, args []any) ([]any, error) {
-		if w := inst.pool.lookupWorker(toI64(args[0])); w != nil {
+		if w, _ := inst.pool.lookupWorker(toI64(args[0])); w != nil {
 			w.terminate()
 		}
 		return nil, nil
@@ -209,8 +251,10 @@ func (inst *Instance) spawnWorker(source string, caps map[string]bool, capsGiven
 	}
 	winst.workerChans = chans
 
+	// La goroutine NO se arranca aquí: el llamador (worker._spawn) registra primero
+	// el worker en el Pool (fija id/parent) y sólo después hace `go w.run(source)`,
+	// para que shutdown() pueda retirarse siempre del registro (A-07).
 	w := &worker{inst: winst, chans: chans, terminated: make(chan struct{})}
-	go w.run(source)
 	return w, nil
 }
 
@@ -312,11 +356,18 @@ end)`
 	_ = w.inst.RunTasks(w.inst.ctx) // se detiene solo (idle) o por terminate (ctx cancelado)
 }
 
-// shutdown cierra los canales y el estado del worker, y notifica el join. Lo corre
-// la goroutine dueña del worker (la única que toca su estado Lua).
+// shutdown cierra los canales y el estado del worker, se retira del registro del
+// padre (A-07) y notifica el join. Lo corre la goroutine dueña del worker (la
+// única que toca su estado Lua), sea cual sea la vía de fin —natural, terminate()
+// o StopWorkers—, así que es el único punto de retirada del mapa. La retirada va
+// ANTES de cerrar `terminated`: cuando wait() (y con él StopWorkers) retorna, la
+// entrada ya no está en el registro.
 func (w *worker) shutdown() {
 	w.chans.closeDone()
 	_ = w.inst.Close()
+	if w.parent != nil {
+		w.parent.deregisterWorker(w.id)
+	}
 	close(w.terminated)
 }
 

@@ -393,3 +393,181 @@ func TestWorkerRecvTrasTerminate(t *testing.T) {
 		t.Fatalf("recv tras terminate: got %q (se esperaba nil)", out)
 	}
 }
+
+// --- A-07: el registro Pool.workers retira los workers terminados -------------
+//
+// Antes, registerWorker añadía al mapa y nadie borraba: cada spawn dejaba para
+// siempre la struct, sus canales y la entrada del mapa (crecimiento monótono en
+// procesos de larga vida). Ahora shutdown() —el único punto por el que pasa todo
+// fin de worker, sea natural, terminate() o StopWorkers— se retira del registro.
+// La degradación semántica DEBE preservarse: send sobre un worker retirado →
+// ECLOSED, recv → nil (fin de canal), no EINVAL —el id fue válido, solo que ya no
+// está—; un id que nunca existió sí es EINVAL.
+
+// spawnRun replica lo que hace worker._spawn: crea el worker aislado, lo registra
+// en el Pool (fija id/parent) y arranca su goroutine. Devuelve el worker y su id.
+func spawnRun(t *testing.T, inst *Instance, src string) (*worker, int64) {
+	t.Helper()
+	w, err := inst.spawnWorker(src, nil, false)
+	if err != nil {
+		t.Fatalf("spawnWorker: %v", err)
+	}
+	id := inst.pool.registerWorker(w)
+	go w.run(src)
+	return w, id
+}
+
+// hostFn localiza una primitiva host registrada por su nombre. En la ruta de
+// degradación de A-07 (worker ya retirado) las primitivas del handle Worker
+// retornan SIN suspender, así que en el test se pueden invocar directamente.
+func hostFn(p *Pool, name string) HostFn {
+	for id, n := range p.reg.names {
+		if n == name {
+			return p.reg.fns[id]
+		}
+	}
+	return nil
+}
+
+// workerCount lee el tamaño del registro bajo su lock.
+func workerCount(p *Pool) int {
+	p.workerMu.Lock()
+	defer p.workerMu.Unlock()
+	return len(p.workers)
+}
+
+// A-07(a): spawn+terminate repetido NO hace crecer el registro. Tras cada
+// terminate+wait el worker está fuera del mapa; el registro vuelve a 0.
+func TestWorkerRegistroNoCreceA07(t *testing.T) {
+	p, err := NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := p.NewInstance()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { p.StopWorkers(); _ = inst.Close(); _ = p.Close() })
+
+	const n = 50
+	for i := 0; i < n; i++ {
+		w, _ := spawnRun(t, inst, `nu.task.sleep(100000)`)
+		w.terminate()
+		w.wait() // espera al shutdown completo (que se retira del mapa)
+		if c := workerCount(p); c != 0 {
+			t.Fatalf("A-07: tras spawn+terminate #%d el registro tiene %d entradas (se esperaba 0)", i+1, c)
+		}
+	}
+	// Los ids siguen siendo monótonos (no se reutilizan): sanity de que la retirada
+	// borra la entrada, no reinicia el contador.
+	if p.workerNext != n {
+		t.Fatalf("A-07: workerNext=%d, se esperaba %d", p.workerNext, n)
+	}
+}
+
+// A-07(b): send sobre un worker YA RETIRADO (terminado y reapeado) sigue dando
+// ECLOSED, no EINVAL; un id que nunca existió sí es EINVAL.
+func TestWorkerSendTrasTerminateReapedA07(t *testing.T) {
+	p, err := NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := p.NewInstance()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { p.StopWorkers(); _ = inst.Close(); _ = p.Close() })
+
+	w, id := spawnRun(t, inst, `nu.task.sleep(100000)`)
+	w.terminate()
+	w.wait() // reapeado: fuera del mapa
+	if lw, known := p.lookupWorker(id); lw != nil || !known {
+		t.Fatalf("A-07: lookupWorker(%d) = (%v, known=%v), se esperaba (nil, true)", id, lw, known)
+	}
+
+	send := hostFn(p, "worker._send")
+	if send == nil {
+		t.Fatal("no se encontró la primitiva worker._send")
+	}
+	// worker retirado → ECLOSED (degradación preservada).
+	if _, err := send(inst, []any{id, map[string]any{"x": int64(1)}}); !isCode(err, "ECLOSED") {
+		t.Fatalf("A-07: send tras terminate+reap → %v, se esperaba ECLOSED", err)
+	}
+	// id que nunca existió → EINVAL (se conserva la distinción conocido/forjado).
+	if _, err := send(inst, []any{int64(99999), map[string]any{"x": int64(1)}}); !isCode(err, "EINVAL") {
+		t.Fatalf("A-07: send con id forjado → %v, se esperaba EINVAL", err)
+	}
+}
+
+// A-07(c): recv sobre un worker YA RETIRADO devuelve nil (fin de canal), sin
+// error; un id que nunca existió sí es EINVAL.
+func TestWorkerRecvTrasTerminateReapedA07(t *testing.T) {
+	p, err := NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := p.NewInstance()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { p.StopWorkers(); _ = inst.Close(); _ = p.Close() })
+
+	w, id := spawnRun(t, inst, `nu.task.sleep(100000)`)
+	w.terminate()
+	w.wait() // reapeado: fuera del mapa
+
+	recv := hostFn(p, "worker._recv")
+	if recv == nil {
+		t.Fatal("no se encontró la primitiva worker._recv")
+	}
+	res, err := recv(inst, []any{id})
+	if err != nil {
+		t.Fatalf("A-07: recv tras terminate+reap dio error %v (se esperaba nil sin error)", err)
+	}
+	if len(res) != 1 || res[0] != nil {
+		t.Fatalf("A-07: recv tras terminate+reap → %v, se esperaba [nil] (fin de canal)", res)
+	}
+	// id que nunca existió → EINVAL.
+	if _, err := recv(inst, []any{int64(99999)}); !isCode(err, "EINVAL") {
+		t.Fatalf("A-07: recv con id forjado → %v, se esperaba EINVAL", err)
+	}
+}
+
+// A-07(d): StopWorkers retira todas las entradas; el fin NATURAL (un módulo que
+// retorna solo) también, vía el mismo shutdown().
+func TestWorkerStopWorkersYFinNaturalRetiranA07(t *testing.T) {
+	p, err := NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := p.NewInstance()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { p.StopWorkers(); _ = inst.Close(); _ = p.Close() })
+
+	// Cinco workers vivos, bloqueados esperando al padre.
+	for i := 0; i < 5; i++ {
+		spawnRun(t, inst, `nu.worker.parent.recv()`)
+	}
+	if c := workerCount(p); c != 5 {
+		t.Fatalf("A-07: se esperaban 5 workers vivos, hay %d", c)
+	}
+	p.StopWorkers()
+	if c := workerCount(p); c != 0 {
+		t.Fatalf("A-07: StopWorkers dejó %d entradas (se esperaba 0)", c)
+	}
+
+	// Fin natural: un módulo que retorna de inmediato se retira él solo.
+	w, _ := spawnRun(t, inst, `return 1`)
+	w.wait()
+	if c := workerCount(p); c != 0 {
+		t.Fatalf("A-07: fin natural dejó %d entradas (se esperaba 0)", c)
+	}
+}
+
+// isCode comprueba que err es un StructuredError con el código dado.
+func isCode(err error, code string) bool {
+	se, ok := err.(*StructuredError)
+	return ok && se.Code == code
+}
