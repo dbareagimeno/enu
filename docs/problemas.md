@@ -9,7 +9,10 @@ resolución se aplica a los documentos afectados y la entrada pasa a
 aquello es lo que decidimos no decidir; esto son agujeros que la v1 sí
 necesita cerrados.
 
-**Estado: 47 registradas, 47 resueltas, 0 abiertas** (G44–G51
+**Estado: 48 registradas, 48 resueltas, 0 abiertas** (G52 añadida
+2026-07-14 desde A-38 de la auditoría integral — `Ws:send` sin vía binaria y
+`Ws:recv` sin distinguir el tipo de frame — resuelta por adición a `api.md`
+§8, nivel de API 2→3; G44–G51
 añadidas 2026-07-12 desde la auditoría integral
 ([auditoria-2026-07-12.md](auditoria-2026-07-12.md)): G47–G51 —incoherencias
 documentales— resueltas el mismo día; G44 —el bombeo del scheduler— resuelta
@@ -1144,3 +1147,37 @@ sentidos, last-wins con cambios repetidos, allow/deny reaplicados sin duplicar).
 ## G51 · El inventario de primitivas de `arquitectura.md` omite `nu.search` y el codec YAML — `arquitectura.md` / `api.md` §11-§12 — **RESUELTO**
 
 **Resolución** (aplicada en [arquitectura.md](arquitectura.md), tabla del kernel): la fila **io** nombra la búsqueda paralela del árbol (`files`/`grep`, api.md §11) y la fila **data** enumera YAML junto a JSON y TOML (api.md §12, necesario para las skills de agente.md §6). Quien lea solo la tabla como "el inventario" ya no pierde dos módulos de la superficie sagrada. (A-33 del informe; la supuesta omisión de `nu.sys` se refutó en la verificación — está representada como "entorno" en la fila io.)
+
+## G52 · `nu.ws` no tiene vía binaria: `Ws:send` siempre manda frame de texto y `Ws:recv` no distingue el tipo de frame — `api.md` §8 / `runtime/ws.go` — **RESUELTO**
+
+**Resolución** (2026-07-14; adición a [api.md](api.md) §8, nivel de API 2→3).
+`Ws:send(data, opts?)` gana `opts.binary?: boolean`: con él, el frame sale
+binario (`MessageBinary`); sin él, el comportamiento actual (frame de texto)
+se conserva intacto — compatible con todo llamante existente. Y `Ws:recv()`
+devuelve un **segundo valor** `binary: boolean` que distingue el tipo del
+frame entrante (los llamantes actuales, que solo toman el primero, no notan
+nada: adición pura en Lua). Se descartó la autodetección (mandar binario
+cuando `data` no sea UTF-8 válido): un cambio de tipo de frame dependiente
+del *contenido* es magia frágil — el mismo programa mandaría frames de tipo
+distinto según el payload, y un consumidor estricto al otro lado vería un
+protocolo incoherente. El tipo de frame es semántica del protocolo y la
+declara quien envía. Implementación: kernel (`ws.go` + wrapper), con tests
+que citan A-38/G52.
+
+**Problema.** `ws.go:148` cablea `websocket.MessageText` en todo `send`:
+bytes no-UTF-8 → un servidor conforme cierra con 1007 (RFC 6455 §5.6 exige
+UTF-8 en frames de texto), y `api.md` no restringía `data` a texto ni ofrecía
+alternativa. En recepción, `recv` ya entregaba los bytes de cualquier frame
+(descarta el `MessageType`), así que un binario entrante *funcionaba* pero era
+indistinguible de texto: un proxy/echo fiel era inexpresable. Detectado en la
+auditoría integral (A-38 del informe).
+
+**Impacto.** Cualquier protocolo WS binario (o mixto) era inutilizable desde
+`nu`: MCP sobre WS con payloads comprimidos, protocolos de LSP/DAP framing
+binario, o un simple relay fiel.
+
+**Opciones.** (a) `opts.binary` en `send` + segundo retorno en `recv`
+(elegida: explícita, mínima, retrocompatible). (b) Autodetección por validez
+UTF-8 del payload (descartada: tipo de frame dependiente del contenido).
+(c) Modo por conexión en `ws.connect` (descartada: los protocolos mixtos
+existen y obligaría a dos conexiones o a un modo "raw" igual de explícito).

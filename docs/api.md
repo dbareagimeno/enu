@@ -218,7 +218,7 @@ TLS y proxy (G12): `request` y `stream` aceptan
 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` del entorno se respetan por defecto.
 Defaults globales en la sección `[net]` de `nu.toml` (`ca_file`, proxy),
 sobreescribibles por petición.
-| `nu.ws.connect(url, opts?) -> Ws` ⏸ | `Ws:send(data)` ⏸, `Ws:recv() -> string?` ⏸ (`nil` al cerrar), `Ws:close()`. |
+| `nu.ws.connect(url, opts?) -> Ws` ⏸ | `Ws:send(data, opts?)` ⏸ — `opts.binary?: boolean` manda frame **binario**; sin él, frame de texto (el protocolo exige UTF-8 válido en texto: bytes arbitrarios van con `binary`, o un servidor conforme cierra con 1007) (G52). `Ws:recv() -> data: string?, binary: boolean` ⏸ (`nil` al cerrar; el segundo valor distingue el tipo de frame entrante) (G52). `Ws:close()`. |
 
 Reservado para futuro (no v1): `nu.net.tcp`.
 
@@ -417,10 +417,11 @@ theme, overrides) por construcción, sin sistema de prioridades.
 
 - Congelar v1 = congelar **este documento**: firmas y semánticas solo cambian
   por adición; `nu.version.api` se incrementa con cada adición. **Nivel actual:
-  `api = 2`** — el nivel 1 fue el congelado inicial; la primera (y por ahora
-  única) adición posterior fue `nu.sys.pid()` (G32), que lo subió a 2. Una
-  adición nunca rompe firmas existentes: el código escrito contra el nivel 1
-  sigue siendo válido en el 2.
+  `api = 3`** — el nivel 1 fue el congelado inicial; `nu.sys.pid()` (G32) lo
+  subió a 2; los frames binarios de `nu.ws` (G52: `opts.binary` en `Ws:send`,
+  segundo retorno de `Ws:recv`) lo subieron a 3. Una adición nunca rompe
+  firmas existentes: el código escrito contra el nivel 1 sigue siendo válido
+  en los niveles siguientes.
 - Detección de capacidades con `nu.has()`, nunca sniffing de versión.
 - Namespaces de eventos `core:`/`ui:` y códigos de error de §1.4 reservados.
 - Fuera de esta especificación (deliberadamente): toolkit de widgets, hooks
