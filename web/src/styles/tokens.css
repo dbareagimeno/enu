@@ -2,7 +2,7 @@
  *
  * Cada theme define 8+1 tokens (--bg --fg --bright --dim --border --key --c2
  * --c3 --c4). Valores EXACTOS de la tabla del handoff (coinciden con
- * bootPalettes del prototipo). Default: nu. El cambio de theme es instantáneo
+ * bootPalettes del prototipo). Default: enu. El cambio de theme es instantáneo
  * (sin transition). Se aplican bajo html[data-theme="…"]; un script inline en
  * el <head> fija el atributo antes del primer paint (sin flash).
  *
@@ -14,9 +14,9 @@
  * vigila en el build y rompe si un token de lectura baja de AA. Al retocar la
  * paleta, sube el token conservando su matiz hasta que el check quede verde. */
 
-/* nu (default, cian) — vale también sin atributo por si el script no corre. */
+/* enu (default, cian) — vale también sin atributo por si el script no corre. */
 html,
-html[data-theme='nu'] {
+html[data-theme='enu'] {
   --bg: #0a1416;
   --fg: #a9bfc4;
   --bright: #e8f4f6;

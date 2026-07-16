@@ -9,7 +9,7 @@
 // Es la misma frontera que usa `remark-enlaces-wiki` para su rama "wiki del repo".
 //
 // Cinco reglas, todas estructurales sobre el mdast (por eso remark y no rehype):
-//   A. Rangos entre `<!-- nu:interno -->` y `<!-- /nu:interno -->` (secciones
+//   A. Rangos entre `<!-- enu:interno -->` y `<!-- /enu:interno -->` (secciones
 //      enteras marcadas como internas): fuera, con los comentarios incluidos.
 //   B. Blockquotes de estado (`> ✅ Implementado …`, `> Estado de implementación …`).
 //   C. Asides `*(…)*` de estado (✅ / Implementado / Estado / Pulido) o de puro tag.
@@ -23,7 +23,7 @@
 // (p. ej. un `**P25**` incrustado en una frase de producto) NO lo reescribe el
 // plugin —borrar la frase perdería significado—; eso se arregla en la fuente. El
 // gate `check-limpieza-html.mjs` solo exige que no queden marcadores parentéticos
-// `(G#/(P#/(S#/(ADR-`, ni `✅`, ni `nu:interno` en el HTML final.
+// `(G#/(P#/(S#/(ADR-`, ni `✅`, ni `enu:interno` en el HTML final.
 
 import { toString as mdastToString } from 'mdast-util-to-string';
 
@@ -34,8 +34,8 @@ const TAG = String.raw`(?:G\d+|P\d+|S\d+|ADR-\d+|A-\d+)`;
 const TAGLIST = `${TAG}(?:\\s*[,;/]\\s*${TAG})*`;
 const RE_TAG = new RegExp(TAG);
 
-const RE_APERTURA = /<!--\s*nu:interno\s*-->/;
-const RE_CIERRE = /<!--\s*\/nu:interno\s*-->/;
+const RE_APERTURA = /<!--\s*enu:interno\s*-->/;
+const RE_CIERRE = /<!--\s*\/enu:interno\s*-->/;
 
 // --- Regla D: strip de tags parentéticos sobre el valor de un nodo `text` ------
 
@@ -168,7 +168,7 @@ export function remarkLimpiezaInterno() {
     const ruta = (file?.path || file?.history?.[0] || '').replace(/\\/g, '/');
     const esWikiRepo = /\/docs\/[^/]+\.md$/.test(ruta) && !ruta.includes('/content/docs/');
     // La instantánea EN de la wiki conserva los marcadores de proceso
-    // (<!-- nu:interno -->, (G##), > ✅ …) igual que la fuente ES: se limpia con
+    // (<!-- enu:interno -->, (G##), > ✅ …) igual que la fuente ES: se limpia con
     // el mismo criterio, para que las páginas /en/docs no filtren trazabilidad.
     const esWikiEn = ruta.includes('/content/en/wiki/');
     if (!esWikiRepo && !esWikiEn) return; // fuera de jurisdicción: no se toca

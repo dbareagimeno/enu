@@ -14,17 +14,17 @@
 //   están, degrada sin fallar.
 //
 //   Home (portada) espera estos ids:
-//     #nu-prompt   span con la etiqueta del prompt ('>' o 'lua>')
-//     #nu-typed    span donde se pinta el texto tecleado
-//     #nu-feedback línea de feedback (dim, min-height fija)
+//     #enu-prompt   span con la etiqueta del prompt ('>' o 'lua>')
+//     #enu-typed    span donde se pinta el texto tecleado
+//     #enu-feedback línea de feedback (dim, min-height fija)
 //
 //   Pager (páginas internas) espera:
-//     #nu-status-left  el hueco izquierdo de la statusline; al pulsar ':' se
+//     #enu-status-left  el hueco izquierdo de la statusline; al pulsar ':' se
 //                      convierte en prompt de comando, y se restaura al salir.
 //     [data-scroll]    (opcional) el contenedor scrolleable para j/k; si falta,
 //                      hace scroll de window.
 //
-//   Búsqueda: en pager, '/' emite el CustomEvent 'nu:search-open' en window y
+//   Búsqueda: en pager, '/' emite el CustomEvent 'enu:search-open' en window y
 //   delega. El overlay de búsqueda (otra fase) lo escucha; también puede
 //   escuchar 'nu:search-close'. Este módulo NO dibuja el overlay.
 //
@@ -40,13 +40,13 @@ import {
 } from '../lib/const';
 import { i18n, type Lang } from '../lib/i18n';
 
-const THEMES = ['nu', 'dracula', 'gruvbox', 'solarized'] as const;
+const THEMES = ['enu', 'dracula', 'gruvbox', 'solarized'] as const;
 type Theme = (typeof THEMES)[number];
 
-const LS_THEME = 'nu-theme';
-const LS_LANG = 'nu-lang';
+const LS_THEME = 'enu-theme';
+const LS_LANG = 'enu-lang';
 
-const BASE: string = import.meta.env.BASE_URL; // p. ej. '/nu/'
+const BASE: string = import.meta.env.BASE_URL; // p. ej. '/enu/'
 
 // ── Estado ──────────────────────────────────────────────────────────────────
 type CommandMode = '' | 'cmd' | 'search' | 'repl';
@@ -120,7 +120,7 @@ export function applyLang(): void {
 
 // Picker de theme: activo entre corchetes en key, resto dim.
 function refreshThemePickers(): void {
-  const cur = document.documentElement.getAttribute('data-theme') ?? 'nu';
+  const cur = document.documentElement.getAttribute('data-theme') ?? 'enu';
   document.querySelectorAll<HTMLElement>('[data-theme-pick]').forEach((el) => {
     const t = el.getAttribute('data-theme-pick');
     const active = t === cur;
@@ -132,14 +132,14 @@ function refreshThemePickers(): void {
 
 // ── Feedback (portada) ───────────────────────────────────────────────────────
 export function setFeedback(text: string): void {
-  const el = document.getElementById('nu-feedback');
+  const el = document.getElementById('enu-feedback');
   if (el) el.textContent = text;
 }
 
 function renderTyped(): void {
-  const t = document.getElementById('nu-typed');
+  const t = document.getElementById('enu-typed');
   if (t) t.textContent = buffer;
-  const p = document.getElementById('nu-prompt');
+  const p = document.getElementById('enu-prompt');
   if (p) {
     p.textContent = commandMode === 'repl' ? 'lua>' : '>';
     p.style.color = commandMode === 'repl' ? 'var(--key)' : 'var(--dim)';
@@ -147,21 +147,21 @@ function renderTyped(): void {
   // Hint tecleable (W-06): visible solo con el prompt vacío y fuera del REPL, de
   // modo que guía al primer tecleo, desaparece en cuanto hay texto y reaparece
   // si el buffer se vacía. Ocultado con display (sin transición: prohibidas).
-  const h = document.getElementById('nu-hint');
+  const h = document.getElementById('enu-hint');
   if (h) h.style.display = buffer === '' && commandMode !== 'repl' ? '' : 'none';
 }
 
 // ── Mini-REPL Lua (easter egg) ───────────────────────────────────────────────
 // Evalúa lo mismo que evalLua del prototipo: aritmética (^ como potencia),
-// print("…"), concatenación .. de dos strings literales, nu.version (leído de
+// print("…"), concatenación .. de dos strings literales, enu.version (leído de
 // VERSION, sin literal duplicado — W-08), os.date(); el resto → nil; error
 // aritmético → syntax error.
 function evalLua(src: string): string {
   const s = src.trim();
   if (!s) return '';
   // La versión sale de const.ts (VERSION es "v0.1.3"); el REPL la muestra sin la
-  // `v`, como nu.version en el binario real, y así sigue a la versión de verdad.
-  if (s === 'nu.version' || s === 'nu.version.api')
+  // `v`, como enu.version en el binario real, y así sigue a la versión de verdad.
+  if (s === 'enu.version' || s === 'enu.version.api')
     return '"' + VERSION.replace(/^v/, '') + '"';
   if (s === 'os.date()') return '"' + new Date().toString() + '"';
   const pr = s.match(/^print\((["'])(.*)\1\)$/);
@@ -229,7 +229,7 @@ function applyThemeCmd(rest: string): string {
   const d = i18n[lang];
   const name = rest.replace(/^=/, '').trim();
   if (!name) {
-    const cur = document.documentElement.getAttribute('data-theme') ?? 'nu';
+    const cur = document.documentElement.getAttribute('data-theme') ?? 'enu';
     return d.fb_theme + '"' + cur + '"';
   }
   if (setTheme(name)) {
@@ -353,7 +353,7 @@ export function setStatusLeft(text: string): void {
 }
 
 function pagerStatusEl(): HTMLElement | null {
-  return document.getElementById('nu-status-left');
+  return document.getElementById('enu-status-left');
 }
 
 function renderPagerPrompt(): void {
@@ -367,7 +367,7 @@ function renderPagerPrompt(): void {
   el.textContent = char + buffer;
   // Cursor bloque al final del prompt.
   const cur = document.createElement('span');
-  cur.className = 'nu-cursor';
+  cur.className = 'enu-cursor';
   el.appendChild(cur);
 }
 
@@ -429,7 +429,7 @@ function pagerKey(e: KeyboardEvent, opts: PagerOpts): void {
         return;
       case '/':
         // Delega el overlay de búsqueda a otra fase.
-        window.dispatchEvent(new CustomEvent('nu:search-open'));
+        window.dispatchEvent(new CustomEvent('enu:search-open'));
         e.preventDefault();
         return;
       case '?':

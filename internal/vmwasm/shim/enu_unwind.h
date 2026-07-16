@@ -18,10 +18,10 @@
 
 struct lua_State;
 
-__attribute__((import_module("nu"), import_name("host_try")))
+__attribute__((import_module("enu"), import_name("host_try")))
 extern int nu_host_try(struct lua_State *L,
                           void (*f)(struct lua_State *, void *), void *ud);
-__attribute__((import_module("nu"), import_name("host_throw")))
+__attribute__((import_module("enu"), import_name("host_throw")))
 extern void nu_host_throw(void);
 
 #define luai_jmpbuf     int  /* dummy, como en el modo C++ oficial */

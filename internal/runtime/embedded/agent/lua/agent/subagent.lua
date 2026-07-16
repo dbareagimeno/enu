@@ -8,7 +8,7 @@
 --     principal —comparte el registro de tools, los permisos y los hooks; barato—.
 --     Es, literalmente, una `agent.session` hija con `meta.parent` cuyo turno se
 --     ejecuta con el motor de S39.
---   - `worker = true`: el **loop** corre en un `nu.worker` (api.md §13) con `caps`
+--   - `worker = true`: el **loop** corre en un `enu.worker` (api.md §13) con `caps`
 --     RECORTADAS (G6/S34) —paralelismo real y la versión DURA del aislamiento: la
 --     superficie no concedida NO EXISTE dentro del worker (p. ej. sin `fs.write`
 --     ni `ui`)—. Pero los **handlers de tools se ejecutan en el estado principal
@@ -37,7 +37,7 @@
 -- En modo worker cruza la frontera como valor JSON-able (api.md §13: copiado, sin
 -- closures/Blocks): el worker manda datos digeridos, el padre los integra.
 --
--- ADR-003: Lua puro sobre la API pública (api.md §13 nu.worker + nu.task + nu.json)
+-- ADR-003: Lua puro sobre la API pública (api.md §13 enu.worker + enu.task + enu.json)
 -- + las extensiones providers/sessions. Sin privilegio de kernel.
 
 local M = {}
@@ -93,7 +93,7 @@ local function default_worker_caps(agent)
   local caps = {}
   for _, c in ipairs(agent.caps.FS_RO) do caps[#caps + 1] = c end
   for _, c in ipairs(agent.caps.SEARCH) do caps[#caps + 1] = c end
-  -- nu.task y nu.json son necesarios DENTRO del worker para correr el loop y
+  -- enu.task y enu.json son necesarios DENTRO del worker para correr el loop y
   -- serializar el digesto/los mensajes del proxy. Sin caps explícitas el worker
   -- tendría toda la API [W]; con caps recortadas hay que incluir lo que el loop usa.
   caps[#caps + 1] = "task"
@@ -129,7 +129,7 @@ local function normalize_caps(opts_caps, agent)
   for _, c in ipairs(opts_caps) do add(c) end
   -- Mínimos del loop (siempre): el worker debe poder orquestar (task), serializar
   -- (json) y resolver el modelo —`providers.resolve` lee `providers.toml` del disco
-  -- con `nu.fs.read`+`nu.toml.decode` desde `nu.config.dir`—; `log` para diagnósticos.
+  -- con `enu.fs.read`+`enu.toml.decode` desde `enu.config.dir`—; `log` para diagnósticos.
   add("task"); add("json"); add("toml"); add("config.dir"); add("log"); add("fs.read")
   return out
 end
@@ -193,7 +193,7 @@ function M.attach(agent)
     -- (los tests inyectan un stub require-able). Son NOMBRES DE MÓDULO (require).
     local adapter_modules = opts.adapter_modules or { "providers.adapter_anthropic" }
 
-    local w = nu.worker.spawn("agent.subagent_worker", { caps = caps })
+    local w = enu.worker.spawn("agent.subagent_worker", { caps = caps })
 
     return setmetatable({
       mode            = "worker",

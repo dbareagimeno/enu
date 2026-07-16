@@ -4,7 +4,7 @@ import (
 	"github.com/rivo/uniseg"
 )
 
-// `nu.text` — render y procesado de texto (api.md §10, sesión S22, inventario
+// `enu.text` — render y procesado de texto (api.md §10, sesión S22, inventario
 // 🔒). En S22 se implementan las tres primitivas fundacionales del layout:
 // `width` (la lógica 🔒, base de TODO el cálculo de tamaños), `wrap` (word-wrap a
 // un Block) y `truncate` (recorte con elipsis). `markdown`/`highlight`/`diff`/

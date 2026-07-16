@@ -18,13 +18,13 @@ agent.
 3. **Reuses the canonical model.** Messages are serialized exactly as
    defined by [providers.md](providers.md) (blocks, `meta` included): a
    resumed session produces requests identical to the original's.
-4. **The core only provides `nu.fs` and `nu.json`.** None of this is a
+4. **The core only provides `enu.fs` and `enu.json`.** None of this is a
    primitive.
 
 ## 2. Location
 
 ```
-nu.config.data_dir()/
+enu.config.data_dir()/
   sessions/
     <project>/                           # cwd encoded as a slug
       2026-06-11T10-22-07Z-a3f9.jsonl    # one session = one file
@@ -96,7 +96,7 @@ versions can add types).
 
 Nothing is written during response streaming: the deltas are for the
 screen. When the turn completes (the adapter's `done`), **one**
-`nu.fs.append` is done with the whole `message` entry. A session never
+`enu.fs.append` is done with the whole `message` entry. A session never
 contains half-finished messages; if the process dies mid-response, the turn
 simply doesn't exist (and the request can be relaunched on resume).
 
@@ -123,12 +123,12 @@ Two processes appending to the same JSONL = interleaved corruption. Rule:
 - `<session>.jsonl.lock` next to the transcript, content
   `{ pid, hostname, started }`. It's acquired on opening for writing
   (create/resume) with **exclusive** creation
-  (`nu.fs.write(..., { exclusive = true })`, atomic: two processes can't
+  (`enu.fs.write(..., { exclusive = true })`, atomic: two processes can't
   win at the same time — [api.md](api.md) §5), and released on exit. The
-  writer identity recorded is that of the current `nu` process: `pid`,
-  from `nu.sys.pid()` (G32); `hostname`, from `nu.sys.hostname()` (G17);
-  `started`, from `nu.sys.now_ms()`. When *verifying* someone else's lock,
-  its `pid` is checked with `nu.proc.alive` (existence on this machine, not
+  writer identity recorded is that of the current `enu` process: `pid`,
+  from `enu.sys.pid()` (G32); `hostname`, from `enu.sys.hostname()` (G17);
+  `started`, from `enu.sys.now_ms()`. When *verifying* someone else's lock,
+  its `pid` is checked with `enu.proc.alive` (existence on this machine, not
   identity — G17). **Reading never requires a lock** (an append-only file
   is safe to read mid-write).
 - **Orphan lock** (crash): if the `pid` isn't alive on this machine, it's

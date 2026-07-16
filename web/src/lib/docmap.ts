@@ -47,7 +47,7 @@ const DEF: { id: GrupoId; i18nKey: Grupo['i18nKey']; entradas: DefEntrada[] }[] 
     id: 'empezar',
     i18nKey: 's1',
     entradas: [
-      { slug: 'que-es-nu', collection: 'empezar' },
+      { slug: 'que-es-enu', collection: 'empezar' },
       { slug: 'instalacion', collection: 'empezar' },
       { slug: 'inicio-rapido', collection: 'empezar' },
       { slug: 'primer-script', collection: 'empezar' },
@@ -81,14 +81,14 @@ const DEF: { id: GrupoId; i18nKey: Grupo['i18nKey']; entradas: DefEntrada[] }[] 
   },
 ];
 
-// El `base` del sitio es '/nu' SIN barra final (astro.config). Se normaliza
-// aquí para construir URLs correctas (`/nu/docs/<slug>`) sea cual sea la forma
+// El `base` del sitio es '/enu' SIN barra final (astro.config). Se normaliza
+// aquí para construir URLs correctas (`/enu/docs/<slug>`) sea cual sea la forma
 // del valor: robustece frente a un `base` con o sin barra final. Igual que hace
 // el plugin remark de la wiki con sus enlaces.
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 // Prefijo de idioma para la URL: '' en ES, 'en/' en EN. Las páginas EN cuelgan
-// de rutas estáticas paralelas (`/nu/en/docs/<slug>`) — W-04.
+// de rutas estáticas paralelas (`/enu/en/docs/<slug>`) — W-04.
 function prefijoLang(lang: Lang): string {
   return lang === 'en' ? 'en/' : '';
 }

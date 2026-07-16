@@ -1,6 +1,6 @@
 ---
 title: La extensión mcp
-description: Integra servidores MCP (Model Context Protocol) como tools del agente — Lua puro sobre nu.proc y nu.json, con configuración declarativa en mcp.toml y permisos por servidor.
+description: Integra servidores MCP (Model Context Protocol) como tools del agente — Lua puro sobre enu.proc y enu.json, con configuración declarativa en mcp.toml y permisos por servidor.
 ---
 
 ## Qué hace
@@ -8,8 +8,8 @@ description: Integra servidores MCP (Model Context Protocol) como tools del agen
 `mcp` conecta **servidores MCP** (Model Context Protocol) al agente: cada tool
 que un servidor anuncia queda registrada como una tool más del agente, igual que
 una de fichero. Es Lua puro sobre la API pública —fiel a que el core no sabe qué
-es MCP—: lanza el servidor como subproceso con `nu.proc`, le habla
-JSON-RPC 2.0 por stdio codificando con `nu.json`, y registra las tools con
+es MCP—: lanza el servidor como subproceso con `enu.proc`, le habla
+JSON-RPC 2.0 por stdio codificando con `enu.json`, y registra las tools con
 `agent.tool{...}`. El framing es **newline-delimited** (una línea = un mensaje
 JSON terminado en `\n`), el transporte stdio de MCP.
 
@@ -21,10 +21,10 @@ cuelga para siempre.
 ## Cómo se activa
 
 El `plugin.toml` declara `requires = ["agent"]`, así que activar `mcp` arrastra
-el agente. Añádelo a `nu.toml`:
+el agente. Añádelo a `enu.toml`:
 
 ```toml
-# ~/.config/nu/nu.toml
+# ~/.config/enu/enu.toml
 [plugins]
 enabled = ["providers", "sessions", "agent", "mcp"]
 ```
@@ -37,10 +37,10 @@ ausencia del fichero, que es lo normal).
 ## Configuración
 
 Los servidores se declaran como **datos** en `mcp.toml`, dentro de
-`nu.config.dir()` (normalmente `~/.config/nu/`):
+`enu.config.dir()` (normalmente `~/.config/enu/`):
 
 ```toml
-# ~/.config/nu/mcp.toml
+# ~/.config/enu/mcp.toml
 [servers.github]
 command = ["mcp-server-github"]   # argv del servidor (sin shell), requerido
 cwd     = "/opt/proyecto"          # opcional
@@ -96,15 +96,15 @@ conecta desde una task que vive lo que la sesión.
 ```lua
 local mcp = require("mcp")
 
-nu.task.spawn(function()
+enu.task.spawn(function()
   local conn = mcp.connect{ name = "github", command = { "mcp-server-github" } }
   -- A partir de aquí, las tools mcp__github__* están disponibles para el agente.
   for _, t in ipairs(conn:list_tools()) do
-    nu.log.info("tool MCP disponible: %s", t.name)
+    enu.log.info("tool MCP disponible: %s", t.name)
   end
 end)
 ```
 
 El cliente negocia la versión del protocolo MCP en `initialize` y anuncia sus
-datos como `clientInfo` (`name = "nu"`); v1 cubre las tools de texto, el caso
+datos como `clientInfo` (`name = "enu"`); v1 cubre las tools de texto, el caso
 central de un servidor MCP.

@@ -23,7 +23,7 @@
 //   - referencia/*.md: líneas de las fences SIN etiqueta (las etiquetadas
 //     ```lua/```sh son ejemplos, no firmas). Marcadores: inline en la línea,
 //     o del heading más cercano SI ese heading nombra el callable (o un
-//     prefijo de módulo, p. ej. `nu.json` cubre `nu.json.encode`). Un heading
+//     prefijo de módulo, p. ej. `enu.json` cubre `enu.json.encode`). Un heading
 //     que no nombra (p. ej. "Mensajes") no contagia marcadores: evita falsos
 //     positivos en métodos agrupados bajo el heading de otra función.
 //
@@ -39,7 +39,7 @@ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const API_MD = join(RAIZ, "docs", "api.md");
 const REF_DIR = join(RAIZ, "web", "src", "content", "docs", "referencia");
 // Páginas sin superficie de API: convenciones (la notación de ejemplo
-// `nu.mod.fn(...)` parsearía como callable) y la CLI del binario.
+// `enu.mod.fn(...)` parsearía como callable) y la CLI del binario.
 const PAGINAS_SIN_API = new Set(["convenciones.md", "cli.md"]);
 
 const SUSP = "⏸";
@@ -47,8 +47,8 @@ const W = "[W]";
 
 // --- Parser de firmas -------------------------------------------------------
 
-// Cabeza de un callable: nombre punteado bajo `nu.` o método `Handle:metodo`.
-const RE_CABEZA = /^(nu\.[\w./]+|[A-Z][A-Za-z]*:[a-z_]\w*)/;
+// Cabeza de un callable: nombre punteado bajo `enu.` o método `Handle:metodo`.
+const RE_CABEZA = /^(enu\.[\w./]+|[A-Z][A-Za-z]*:[a-z_]\w*)/;
 
 // Escanea paréntesis balanceados desde s[i] === "(". Devuelve el índice del
 // cierre o -1 (necesario porque los tipos anidan: `(string | Span[])[]`).
@@ -61,9 +61,9 @@ function cierreBalanceado(s, i) {
   return -1;
 }
 
-// Parsea UNA firma ("nu.fs.read(path) -> string", "Task:cancel()",
-// "nu.version -> {...}"). Devuelve lista de callables (la forma compacta
-// `nu.log.debug/info/warn/error(fmt, ...)` expande a varios) o [] si el
+// Parsea UNA firma ("enu.fs.read(path) -> string", "Task:cancel()",
+// "enu.version -> {...}"). Devuelve lista de callables (la forma compacta
+// `enu.log.debug/info/warn/error(fmt, ...)` expande a varios) o [] si el
 // texto no es una firma (prosa, salidas de ejemplo, opts sueltos).
 function parseFirma(texto) {
   let s = texto.trim();
@@ -90,7 +90,7 @@ function parseFirma(texto) {
   else if (resto.trim() !== "") return []; // basura tras la firma: no es firma
   if (args === null && ret === null) return []; // nombre pelado: mención, no firma
 
-  // Alternativas compactas en la cabeza: nu.log.debug/info/warn/error.
+  // Alternativas compactas en la cabeza: enu.log.debug/info/warn/error.
   let nombres = [cabeza];
   if (cabeza.includes("/")) {
     const partes = cabeza.split("/");
@@ -119,7 +119,7 @@ function parseApi() {
   for (const linea of texto.split("\n")) {
     numLinea++;
     if (/^## /.test(linea)) {
-      moduloW = linea.includes(W); // [W] a nivel de módulo (p. ej. §5 nu.fs)
+      moduloW = linea.includes(W); // [W] a nivel de módulo (p. ej. §5 enu.fs)
       continue;
     }
     const l = linea.trim();
@@ -219,7 +219,7 @@ function parseWeb() {
       for (const seg of segmentos(sinComentario)) {
         for (const c of parseFirma(seg)) {
           // El heading contagia marcadores solo si nombra el callable o un
-          // prefijo de módulo suyo (`nu.json` cubre `nu.json.encode`).
+          // prefijo de módulo suyo (`enu.json` cubre `enu.json.encode`).
           const nombrado = heading.nombres.some(
             (n) => n === c.nombre || c.nombre.startsWith(n + ".")
           );

@@ -1,13 +1,13 @@
 ---
 title: La extensión toolkit
-description: El toolkit de widgets sobre nu.ui y nu.text — contenedores de layout, foco, composición entre plugins y un sistema de themes con nombres semánticos de color.
+description: El toolkit de widgets sobre enu.ui y enu.text — contenedores de layout, foco, composición entre plugins y un sistema de themes con nombres semánticos de color.
 ---
 
 ## Qué hace
 
 El core expone una API de UI deliberadamente de bajo nivel (celdas, regiones y un
-compositor; `nu.ui`, ADR-007). El `toolkit` es la extensión Lua oficial que aporta
-lo de alto nivel encima de `nu.ui` y `nu.text`:
+compositor; `enu.ui`, ADR-007). El `toolkit` es la extensión Lua oficial que aporta
+lo de alto nivel encima de `enu.ui` y `enu.text`:
 
 - **slots** — contenedores de layout (`vbox`/`hbox`/`stack`) que colocan a sus
   hijos;
@@ -25,18 +25,18 @@ pintar.
 
 ## Cómo se activa
 
-El `plugin.toml` no declara `requires`. En `nu.toml`:
+El `plugin.toml` no declara `requires`. En `enu.toml`:
 
 ```toml
-# ~/.config/nu/nu.toml
+# ~/.config/enu/enu.toml
 [plugins]
 enabled = ["toolkit"]
 ```
 
-El toolkit **no existe sin `nu.ui`**: en headless (sin TTY) las funciones que
+El toolkit **no existe sin `enu.ui`**: en headless (sin TTY) las funciones que
 pintan no se pueden usar. Cargar la extensión solo expone la maquinaria (las
 funciones puras de árbol, layout y theme); montar una app de verdad exige
-comprobar `nu.has("ui")` antes. Activar `chat` arrastra el toolkit por
+comprobar `enu.has("ui")` antes. Activar `chat` arrastra el toolkit por
 dependencia.
 
 ## Configuración
@@ -55,7 +55,7 @@ gestiona el foco, enruta el input (apila un `on_input` que entrega la tecla al
 widget enfocado) y repinta por nodos sucios. `opts`: `region` (una `Region` ya
 creada) **o** `x/y/w/h/z?` para que la app cree la suya; `root?` (el contenedor
 raíz, por defecto un `vbox`); `theme?`; `manage_input?` (por defecto `true`).
-Sin `nu.ui` es `EINVAL` accionable.
+Sin `enu.ui` es `EINVAL` accionable.
 
 Métodos de `App`: `relayout()`, `resize(w, h)`, `set_focus(w)`, `focus_next()` /
 `focus_prev()`, `handle_key(ev) -> boolean`, `paint()` y `close()`.
@@ -109,7 +109,7 @@ y un cambio de theme repinta la UI sin tocar los widgets.
 Métodos de `Theme`: `color(name) -> literal`, `style(spec) -> Style` (convierte
 los `fg`/`bg` semánticos de un spec a literales), `with(overrides) -> Theme`
 (deriva un theme con algunos colores sustituidos) y `markdown_opts()` (la tabla
-de estilos por elemento que `nu.text.markdown` acepta).
+de estilos por elemento que `enu.text.markdown` acepta).
 
 La paleta por defecto define, entre otros, `fg`, `bg`, `dim`, `secondary`,
 `accent`, `error`, `warn`, `success`, `info`, `bg_surface`, `overlay`, `border`,
@@ -134,7 +134,7 @@ reservado al core, que emite su propio `ui:focus` con otra semántica.
 ```lua
 local toolkit = require("toolkit")
 
-if nu.has("ui") then
+if enu.has("ui") then
   local column = toolkit.vbox{ id = "root" }
   local output = toolkit.text{ markdown = true }
   output.flex = 1

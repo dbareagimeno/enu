@@ -44,7 +44,7 @@ const ogImage = `${site}${base}og.png`;
 <!doctype html>
 <html
   lang={lang}
-  data-theme="nu"
+  data-theme="enu"
   data-lang={lang}
   data-lang-mode={langMode}
   data-lang-home-es={langHome?.es}
@@ -73,15 +73,15 @@ const ogImage = `${site}${base}og.png`;
     <script is:inline>
       (function () {
         try {
-          var t = localStorage.getItem('nu-theme');
-          if (['nu', 'dracula', 'gruvbox', 'solarized'].indexOf(t) === -1) t = 'nu';
+          var t = localStorage.getItem('enu-theme');
+          if (['enu', 'dracula', 'gruvbox', 'solarized'].indexOf(t) === -1) t = 'enu';
           document.documentElement.setAttribute('data-theme', t);
           var fixed = document.documentElement.getAttribute('data-lang-mode') === 'fixed';
           if (fixed) {
             var pageLang = document.documentElement.getAttribute('data-lang') === 'en' ? 'en' : 'es';
-            localStorage.setItem('nu-lang', pageLang);
+            localStorage.setItem('enu-lang', pageLang);
           } else {
-            var l = localStorage.getItem('nu-lang') === 'en' ? 'en' : 'es';
+            var l = localStorage.getItem('enu-lang') === 'en' ? 'en' : 'es';
             document.documentElement.setAttribute('data-lang', l);
             document.documentElement.setAttribute('lang', l);
           }

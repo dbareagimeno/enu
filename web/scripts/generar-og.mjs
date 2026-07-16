@@ -22,13 +22,13 @@ const svg = `
   <rect width="1200" height="630" fill="${BG}"/>
   <rect x="510" y="210" width="180" height="90" fill="${BRIGHT}"/>
   <text x="600" y="256" font-family="monospace" font-size="64" font-weight="700"
-        fill="${BG}" text-anchor="middle" dominant-baseline="middle">nu</text>
+        fill="${BG}" text-anchor="middle" dominant-baseline="middle">enu</text>
   <text x="600" y="370" font-family="monospace" font-size="34" font-weight="600"
         fill="${BRIGHT}" text-anchor="middle">Tu agente de código.</text>
   <text x="600" y="416" font-family="monospace" font-size="34" font-weight="600"
         fill="${KEY}" text-anchor="middle">Tus reglas.</text>
   <text x="600" y="486" font-family="monospace" font-size="20"
-        fill="${DIM}" text-anchor="middle">curl -fsSL nu.sh/install | sh</text>
+        fill="${DIM}" text-anchor="middle">curl -fsSL enu.sh/install | sh</text>
 </svg>`;
 
 await sharp(Buffer.from(svg)).png().toFile(OUT);

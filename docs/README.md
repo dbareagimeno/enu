@@ -13,7 +13,7 @@ es el código. Orden de lectura sugerido:
 
 | Documento | Rol |
 |---|---|
-| [filosofia.md](filosofia.md) | Principios fundacionales y "lo que nu no es". El *porqué* del proyecto. |
+| [filosofia.md](filosofia.md) | Principios fundacionales y "lo que enu no es". El *porqué* del proyecto. |
 | [arquitectura.md](arquitectura.md) | Vista estática: las capas, el inventario de primitivas del kernel. |
 | [modelo-ejecucion.md](modelo-ejecucion.md) | Vista dinámica: concurrencia, comunicación, limitaciones. |
 | [api.md](api.md) | **La API v1 del core — la "superficie sagrada".** Firmas y semánticas. |
@@ -77,7 +77,7 @@ La transformación fuente→web es **mecánica y en build**, sin duplicar conten
 —`docs/` sigue siendo la única fuente de verdad—:
 
 - Una sección de un contrato que no debe publicarse se envuelve entre los
-  marcadores `<!-- nu:interno -->` y `<!-- /nu:interno -->`. El plugin
+  marcadores `<!-- enu:interno -->` y `<!-- /enu:interno -->`. El plugin
   `web/src/lib/markdown/remark-limpieza-interno.mjs` la elimina al renderizar.
 - Los **marcadores de proceso** —referencias parentéticas `(G##)`, `(P##)`,
   `(S##)`, `(ADR-NNN)`, incluso en títulos, y los blockquotes de estado
@@ -87,7 +87,7 @@ La transformación fuente→web es **mecánica y en build**, sin duplicar conten
   solo en el pipeline de la web.
 
 Dos gates lo blindan en CI: `check:limpieza:fuente` verifica en `docs/` que los
-pares `nu:interno` estén balanceados **antes** del build; el gate
+pares `enu:interno` estén balanceados **antes** del build; el gate
 `check-limpieza-html` (`check:limpieza`) recorre el HTML de `dist/` **después** y
 falla si se filtró cualquier marcador. Para dar de alta o retirar una página de
 la wiki, la skill [/alta-wiki](../.claude/skills/alta-wiki/SKILL.md).

@@ -9,19 +9,19 @@ signatures are in [api.md](api.md) and the extension contracts are in
 ## 1. On load, a module only declares; the work happens when it's called
 
 Loading means executing the top-level lines. If your setup touches
-something that only exists in the main state (`nu.ui`, `nu.events`), your
+something that only exists in the main state (`enu.ui`, `enu.events`), your
 module will blow up on `require` in any worker — even if the worker only
 wanted to use some other, innocent function from the same module.
 
 ```lua
 -- BAD: runs on load; explodes in workers
-local bar = nu.ui.region{ x = 0, y = 0, w = 40, h = 1 }
+local bar = enu.ui.region{ x = 0, y = 0, w = 40, h = 1 }
 
 -- GOOD: lazy; only fails whoever calls notify() where they shouldn't
 local bar = nil
 function M.notify(text)
-  bar = bar or nu.ui.region{ x = 0, y = 0, w = 40, h = 1 }
-  bar:blit(0, 0, nu.ui.block({ text }))
+  bar = bar or enu.ui.region{ x = 0, y = 0, w = 40, h = 1 }
+  bar:blit(0, 0, enu.ui.block({ text }))
 end
 ```
 
@@ -37,17 +37,17 @@ functions, userdata, or Blocks. A worker returns *digested* results ("the
 
 - ⏸ functions (IO) can only be called inside tasks. A synchronous handler
   (input, event, timer) that needs IO **spawns a task**:
-  `nu.task.spawn(function() ... end)`.
+  `enu.task.spawn(function() ... end)`.
 - Heavy CPU work in Lua? Your tool is a worker — never the main state. The
   watchdog aborts slices that exceed their budget (~100 ms) and flags your
   plugin as suspicious.
 - Work proportional to the screen or the repo? Don't do it in Lua: there's
-  already a Go primitive (`nu.text.*`, `nu.search.*`). If there isn't one,
+  already a Go primitive (`enu.text.*`, `enu.search.*`). If there isn't one,
   it's probably a gap in the core — report it before reimplementing it
   slowly.
 - To wait for a value that other code will produce (a dialog, a picker, a
-  response), use `nu.task.future()` — never polling with `task.sleep`.
-- **Every resource you create, register it with `nu.task.cleanup`**
+  response), use `enu.task.future()` — never polling with `task.sleep`.
+- **Every resource you create, register it with `enu.task.cleanup`**
   (killing the process, destroying the region, popping the input
   handler). Cleanups always run — success, error, or cancellation; it's
   the only way not to leave garbage behind when the user hits `esc` mid-way
@@ -90,17 +90,17 @@ error({ code = "EINVAL", message = "empty filter", detail = { arg = "filter" } }
 
 ## 6. UI: blocks, not cells; and clean up on exit
 
-- Request Blocks from `nu.text.*` (markdown, wrap, highlight) and place
+- Request Blocks from `enu.text.*` (markdown, wrap, highlight) and place
   them with `Region:blit`. If you're writing cell by cell on a hot path,
   you're doing the compositor's job — and slowly.
 - Use the official toolkit unless you have a reason not to; if you go to
-  raw `nu.ui`, you're responsible for your region: `input:pop()` and
+  raw `enu.ui`, you're responsible for your region: `input:pop()` and
   `Region:destroy()` too on error paths (wrap in `pcall` and clean up).
 - No hardcoded colors: request colors from the toolkit's theme (`accent`,
   `error`, `dim`...) when building your Blocks — the toolkit resolves them
   to literals, because the core only accepts literals (G22). A plugin that
   hardcodes `#ff0000` breaks every theme but the author's. And if you cache
-  Blocks or use theme colors over raw `nu.ui`, re-render on the toolkit's
+  Blocks or use theme colors over raw `enu.ui`, re-render on the toolkit's
   theme-change event — same treatment as `ui:resize`: your region, your
   repaint.
 - Modal input: your handler returns `true` (consume) while it's active, and
@@ -130,7 +130,7 @@ error({ code = "EINVAL", message = "empty filter", detail = { arg = "filter" } }
 
 ## 7. Living together in the ecosystem
 
-- **Storage**: only under `nu.config.data_dir()/plugins/<your-name>/`.
+- **Storage**: only under `enu.config.data_dir()/plugins/<your-name>/`.
   Sessions (`sessions/`) are read, not written — they belong to the agent.
   Credentials and tokens: in your own directory, `0600`, and never in the
   user's repo or in tool results (they'd end up in the transcript).
@@ -163,7 +163,7 @@ error({ code = "EINVAL", message = "empty filter", detail = { arg = "filter" } }
   exchange you get real integers (integer division `//`, integer `%`),
   native bitwise operators (`&`, `|`, `~`, `<<`, `>>`), and `goto`. Don't
   detect the version by hand: just write Lua 5.4.
-- Detect capabilities with `nu.has()` and `nu.ui.caps()`, never by checking
+- Detect capabilities with `enu.has()` and `enu.ui.caps()`, never by checking
   versions.
 - Declare dependencies on other plugins in `plugin.toml` (`requires`) — the
   topological load order depends on it.

@@ -1,23 +1,23 @@
 ---
-title: nu — root
-description: Runtime version, API level, and capability detection with nu.has.
+title: enu — root
+description: Runtime version, API level, and capability detection with enu.has.
 ---
 
 The root namespace exposes the runtime version and capability detection. It's
 the first thing any plugin that wants to be portable touches.
 
-## `nu.version` [W]
+## `enu.version` [W]
 
 ```
-nu.version -> { major, minor, patch, api: integer }
+enu.version -> { major, minor, patch, api: integer }
 ```
 
 Runtime version and **API level** of the core. `api` is the number that grows
 with every addition to the sacred surface; use it to require a minimum, but
-prefer [`nu.has`](#nuhas-w) to detect concrete capabilities.
+prefer [`enu.has`](#enuhas-w) to detect concrete capabilities.
 
 ```sh
-nu -e 'return nu.json.encode(nu.version)'
+enu -e 'return enu.json.encode(enu.version)'
 ```
 
 ```
@@ -26,35 +26,35 @@ nu -e 'return nu.json.encode(nu.version)'
 
 ```lua
 -- Require a minimum API level.
-assert(nu.version.api >= 2, "this plugin needs api >= 2")
+assert(enu.version.api >= 2, "this plugin needs api >= 2")
 ```
 
-## `nu.has` [W]
+## `enu.has` [W]
 
 ```
-nu.has(cap: string) -> boolean
+enu.has(cap: string) -> boolean
 ```
 
 Capability detection for portable extensions. Returns whether a capability is
 available in this runtime/environment. It covers both fine-grained traits
-(`"ui.images"`, `"net.tcp"`) and **whole modules**: in headless mode `nu.ui`
-doesn't exist, and `nu.has("ui")` is the correct way to know that — never
+(`"ui.images"`, `"net.tcp"`) and **whole modules**: in headless mode `enu.ui`
+doesn't exist, and `enu.has("ui")` is the correct way to know that — never
 probe and catch the error.
 
 ```sh
-nu -e 'return nu.has("ui")'
+enu -e 'return enu.has("ui")'
 ```
 
 ```
 false
 ```
 
-(In `nu -e` there's no TTY, so `nu.ui` doesn't exist and `nu.has("ui")` is
+(In `enu -e` there's no TTY, so `enu.ui` doesn't exist and `enu.has("ui")` is
 `false`.)
 
 ```lua
 -- Degrade gracefully depending on the environment.
-if nu.has("ui") then
+if enu.has("ui") then
   -- paint a region
 else
   -- headless mode: text only, to stdout/log
@@ -62,7 +62,7 @@ end
 ```
 
 :::tip[Capabilities, not versions]
-`nu.has` is the recommended detection mechanism over comparing
-`nu.version.api`. A capability can be absent because of the *environment*
+`enu.has` is the recommended detection mechanism over comparing
+`enu.version.api`. A capability can be absent because of the *environment*
 (headless, terminal without image support), not just the API level.
 :::

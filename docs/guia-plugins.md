@@ -9,19 +9,19 @@ exactas están en [api.md](api.md) y los contratos de extensión en
 ## 1. Al cargarse, un módulo solo declara; el trabajo se hace al llamarlo
 
 Cargar es ejecutar las líneas de nivel superior. Si tus preparativos tocan
-algo que solo existe en el estado principal (`nu.ui`, `nu.events`), tu
+algo que solo existe en el estado principal (`enu.ui`, `enu.events`), tu
 módulo reventará en el `require` de cualquier worker — aunque el worker
 quisiera usar otra función inocente del mismo módulo.
 
 ```lua
 -- MAL: se ejecuta al cargar; explota en workers
-local barra = nu.ui.region{ x = 0, y = 0, w = 40, h = 1 }
+local barra = enu.ui.region{ x = 0, y = 0, w = 40, h = 1 }
 
 -- BIEN: perezoso; solo falla quien llama a avisar() donde no debe
 local barra = nil
 function M.avisar(texto)
-  barra = barra or nu.ui.region{ x = 0, y = 0, w = 40, h = 1 }
-  barra:blit(0, 0, nu.ui.block({ texto }))
+  barra = barra or enu.ui.region{ x = 0, y = 0, w = 40, h = 1 }
+  barra:blit(0, 0, enu.ui.block({ texto }))
 end
 ```
 
@@ -38,16 +38,16 @@ masivos; el principal renderiza.
 
 - Las funciones ⏸ (IO) solo se llaman dentro de tasks. Un handler síncrono
   (input, evento, timer) que necesite IO **lanza una task**:
-  `nu.task.spawn(function() ... end)`.
+  `enu.task.spawn(function() ... end)`.
 - ¿CPU pesada en Lua? Tu herramienta es un worker — nunca el estado
   principal. El watchdog aborta slices que excedan su presupuesto (~100 ms)
   y marca tu plugin como sospechoso.
 - ¿Trabajo proporcional a la pantalla o al repo? No lo hagas en Lua: ya hay
-  primitiva Go (`nu.text.*`, `nu.search.*`). Si no la hay, probablemente es
+  primitiva Go (`enu.text.*`, `enu.search.*`). Si no la hay, probablemente es
   un hueco del core — repórtalo antes de reimplementarla lenta.
 - Para esperar un valor que otro código producirá (diálogo, picker,
-  respuesta), usa `nu.task.future()` — jamás polling con `task.sleep`.
-- **Todo recurso que crees, regístralo en `nu.task.cleanup`** (matar el
+  respuesta), usa `enu.task.future()` — jamás polling con `task.sleep`.
+- **Todo recurso que crees, regístralo en `enu.task.cleanup`** (matar el
   proceso, destruir la región, desapilar el input handler). Los cleanups
   corren siempre — éxito, error o cancelación; es la única forma de no
   dejar basura cuando el usuario pulsa `esc` a mitad de tu código.
@@ -89,17 +89,17 @@ error({ code = "EINVAL", message = "filtro vacío", detail = { arg = "filter" } 
 
 ## 6. UI: bloques, no celdas; y limpia al salir
 
-- Pide los Blocks a `nu.text.*` (markdown, wrap, highlight) y colócalos con
+- Pide los Blocks a `enu.text.*` (markdown, wrap, highlight) y colócalos con
   `Region:blit`. Si estás escribiendo celda a celda en un camino caliente,
   estás haciendo el trabajo del compositor — y lento.
-- Usa el toolkit oficial salvo que tengas una razón; si vas a `nu.ui` crudo,
+- Usa el toolkit oficial salvo que tengas una razón; si vas a `enu.ui` crudo,
   eres responsable de tu región: `input:pop()` y `Region:destroy()` también
   en los caminos de error (envuelve en `pcall` y limpia).
 - Nada de colores hardcodeados: pide los colores al theme del toolkit
   (`accent`, `error`, `dim`...) al construir tus Blocks — el toolkit los
   resuelve a literales, porque el core solo acepta literales (G22). Un
   plugin que hardcodea `#ff0000` rompe todos los themes menos el del
-  autor. Y si cacheas Blocks o usas colores del theme sobre `nu.ui`
+  autor. Y si cacheas Blocks o usas colores del theme sobre `enu.ui`
   crudo, re-renderiza al evento de cambio de theme del toolkit — mismo
   trato que `ui:resize`: tu región, tu repintado.
 - Input modal: tu handler devuelve `true` (consume) mientras esté activo, y
@@ -128,7 +128,7 @@ error({ code = "EINVAL", message = "filtro vacío", detail = { arg = "filter" } 
 
 ## 7. Convivencia en el ecosistema
 
-- **Almacenamiento**: solo bajo `nu.config.data_dir()/plugins/<tu-nombre>/`.
+- **Almacenamiento**: solo bajo `enu.config.data_dir()/plugins/<tu-nombre>/`.
   Las sesiones (`sessions/`) se leen, no se escriben — son del agente.
   Credenciales y tokens: en tu directorio, `0600`, y jamás en el repo del
   usuario ni en resultados de tools (acabarían en el transcript).
@@ -160,7 +160,7 @@ error({ code = "EINVAL", message = "filtro vacío", detail = { arg = "filter" } 
   ganas enteros de verdad (división entera `//`, `%` entero), operadores de bits
   nativos (`&`, `|`, `~`, `<<`, `>>`) y `goto`. No detectes la versión a mano:
   escribe Lua 5.4 y ya.
-- Detecta capacidades con `nu.has()` y `nu.ui.caps()`, nunca mirando
+- Detecta capacidades con `enu.has()` y `enu.ui.caps()`, nunca mirando
   versiones.
 - Declara dependencias de otros plugins en `plugin.toml` (`requires`) — el
   orden de carga topológico depende de ello.

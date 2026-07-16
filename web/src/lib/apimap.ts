@@ -4,9 +4,9 @@
 // navegación; el contenido sale de los .md tal cual.
 //
 // Decisiones ante el mock (que listaba módulos inexistentes: http, ws, re,
-// workers): manda el contenido REAL. El grupo `nu.*` ordena por la §N de
-// docs/api.md (nu raíz §2 … log §15); `convenciones` va suelta arriba y `cli`
-// suelta al final (es superficie CLI, no `nu.*`, pero tiene página). El grupo
+// workers): manda el contenido REAL. El grupo `enu.*` ordena por la §N de
+// docs/api.md (enu raíz §2 … log §15); `convenciones` va suelta arriba y `cli`
+// suelta al final (es superficie CLI, no `enu.*`, pero tiene página). El grupo
 // `extensiones/` enlaza a las páginas de la WIKI que las especifican —no hay
 // páginas /api para ellas y no se inventan—.
 
@@ -14,7 +14,7 @@ import type { Lang } from './i18n';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
-// Prefijo de idioma para la URL: '' en ES, 'en/' en EN (rutas /nu/en/api/… — W-04).
+// Prefijo de idioma para la URL: '' en ES, 'en/' en EN (rutas /enu/en/api/… — W-04).
 function prefijoLang(lang: Lang): string {
   return lang === 'en' ? 'en/' : '';
 }
@@ -44,9 +44,9 @@ export interface ApiGroup {
   items: ApiItem[];
 }
 
-// El grupo `nu.*` en el orden de las secciones de docs/api.md.
-const NU_MODULOS: ApiItem[] = [
-  { label: 'nu', slug: 'nu' }, // §2 raíz
+// El grupo `enu.*` en el orden de las secciones de docs/api.md.
+const ENU_MODULOS: ApiItem[] = [
+  { label: 'enu', slug: 'enu' }, // §2 raíz
   { label: 'task', slug: 'task' }, // §3
   { label: 'events', slug: 'events' }, // §4
   { label: 'fs', slug: 'fs' }, // §5
@@ -64,7 +64,7 @@ const NU_MODULOS: ApiItem[] = [
 
 export const API_SIDEBAR: ApiGroup[] = [
   { label: null, items: [{ label: 'convenciones', slug: 'convenciones' }] },
-  { label: 'nu.*', items: NU_MODULOS },
+  { label: 'enu.*', items: ENU_MODULOS },
   { label: null, items: [{ label: 'cli', slug: 'cli' }] },
   {
     label: 'extensiones/',
@@ -81,7 +81,7 @@ export const API_SIDEBAR: ApiGroup[] = [
 // la statusline). Las extensiones enlazan fuera de /api y no cuentan.
 export const API_ORDER: string[] = [
   'convenciones',
-  ...NU_MODULOS.map((m) => m.slug!),
+  ...ENU_MODULOS.map((m) => m.slug!),
   'cli',
 ];
 

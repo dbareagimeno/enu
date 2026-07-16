@@ -3,18 +3,18 @@ title: Las extensiones oficiales
 description: Índice de las extensiones que vienen embebidas en el binario — el harness (providers, sessions, agent, chat), las piezas de apoyo (mcp, toolkit, repl) y la guía para escribir las tuyas.
 ---
 
-`nu` es un runtime desnudo: un kernel diminuto de primitivas más un intérprete
+`enu` es un runtime desnudo: un kernel diminuto de primitivas más un intérprete
 Lua. Todo lo demás —el agente, el chat, los providers de LLM, el puente con
 MCP— son **extensiones Lua**, y las oficiales no son ninguna excepción: vienen
 embebidas en el binario pero **inactivas por defecto** y **sin
 privilegio de kernel**, de modo que una alternativa de terceros puede sustituir
-cualquiera. Se activan por nombre en `plugins.enabled` de `nu.toml`; las
+cualquiera. Se activan por nombre en `plugins.enabled` de `enu.toml`; las
 dependencias se resuelven solas en orden topológico (activar `chat` arrastra
 `agent`, `providers`, `sessions` y `toolkit`).
 
 ## El harness
 
-El conjunto de producto —lo que activa `nu --default-config`— es un coding
+El conjunto de producto —lo que activa `enu --default-config`— es un coding
 harness completo, repartido en cuatro contratos:
 
 - **[providers](../providers.md)** — el registro de modelos (TOML) y los
@@ -34,8 +34,8 @@ por sí solas:
 
 - **[mcp](mcp.md)** — integra servidores MCP (Model Context Protocol) como tools
   del agente: cada tool remota se registra igual que una propia. Lua puro sobre
-  `nu.proc` y `nu.json`.
-- **[toolkit](toolkit.md)** — el toolkit de widgets sobre `nu.ui` y `nu.text`:
+  `enu.proc` y `enu.json`.
+- **[toolkit](toolkit.md)** — el toolkit de widgets sobre `enu.ui` y `enu.text`:
   contenedores de layout, foco, composición entre plugins y themes. Es lo que el
   chat usa para pintar.
 - **[repl](repl.md)** — un intérprete de Lua interactivo sobre la API pública,

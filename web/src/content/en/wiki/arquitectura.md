@@ -105,7 +105,7 @@ Neovim — and robustness is obtained with two core guards:
 
 - **Layer 1 — Embedded Lua.** The universal mechanism: lifecycle hooks,
   commands, UI, keybindings, and also the agent itself and the LLM
-  protocol adapters. v1 distribution: `~/.config/nu/plugins/` + git clone;
+  protocol adapters. v1 distribution: `~/.config/enu/plugins/` + git clone;
   no package manager of its own for now.
 - **Layer 2 — External processes.** Heavy tools or tools in other
   languages via subprocess (JSON-RPC/stdio). MCP lives here,
@@ -136,7 +136,7 @@ recompile. The adapter contract and the registry format are in
 - Official extensions embedded with `go:embed` but **inactive by
   default** (ADR-010): explicit activation (bare runtime screen with a
   TTY — api.md §14 —, the `nu --default-config` flag without a TTY, or a
-  hand-written `nu.toml`), no network; overridable by the user from
+  hand-written `enu.toml`), no network; overridable by the user from
   their config directory. The **official product set** is the embedded
   extensions minus the `example` scaffolding and the `mesh` (ADR-015;
   [malla.md](malla.md) §1.4): besides the
@@ -144,8 +144,8 @@ recompile. The adapter contract and the registry format are in
   REPL over the public API, standalone-activatable, the starting point for
   extension authors who don't want the harness (G21)—. With a TTY, **a
   single primary UI owns the screen**: the repl **yields to chat** (it
-  only auto-mounts its UI if chat isn't active, via `nu.plugin.list`), so
-  `nu` with the official set opens a single TUI and not chat *and* the
+  only auto-mounts its UI if chat isn't active, via `enu.plugin.list`), so
+  `enu` with the official set opens a single TUI and not chat *and* the
   REPL overlapping ([G36](problemas.md#g36), [ADR-018](adr.md)). The
   **`mesh`** ([malla.md](malla.md), born from pseudocode round 8) ships
   embedded but activates explicitly: it's the agent-mesh orchestration
@@ -159,7 +159,7 @@ public convention readable by other extensions, not a core primitive.
 Full contract in [sesiones.md](sesiones.md). The rest of the extensions
 write under `data_dir()/plugins/<name>/`.
 
-<!-- nu:interno -->
+<!-- enu:interno -->
 
 ## Open questions
 
@@ -173,7 +173,7 @@ write under `data_dir()/plugins/<name>/`.
    work is a Go primitive), so **the veto did NOT fire** and the toolkit
    is built in Lua. ADR-007 was promoted to Accepted.
 2. **Fine-grained watchdog policy**: the base budget is already fixed
-   (100 ms, configurable in `nu.toml` — api.md §1.3); what's left is the
+   (100 ms, configurable in `enu.toml` — api.md §1.3); what's left is the
    fine print: whether it's configurable per plugin and the
    disabling/user-notification flow after `core:plugin.misbehaved`.
 3. **Design of the official toolkit's public API** (widget vocabulary,
@@ -187,13 +187,13 @@ write under `data_dir()/plugins/<name>/`.
    The contract was fixed while building it —pure Lua on top of the public
    API, without touching the core (the completeness corollary satisfied)—:
    - **Configuration** (data/code split, ADR-005): servers are DECLARED in
-     `mcp.toml` (`nu.config.dir()`), format
+     `mcp.toml` (`enu.config.dir()`), format
      `[servers.<name>] command = [...] cwd? env?`. Absent → nothing
      connects. They can also be connected by hand with `mcp.connect{ name,
      command, cwd?, env? } ⏸ -> Conn`.
-   - **Process lifecycle**: the server is launched with `nu.proc.spawn`,
+   - **Process lifecycle**: the server is launched with `enu.proc.spawn`,
      lives as long as its `Conn` exists, and is killed cleanly
-     (`Proc:kill` registered in `nu.task.cleanup` + idempotent
+     (`Proc:kill` registered in `enu.task.cleanup` + idempotent
      `Conn:close()`, [api.md](api.md) §6). A server that dies (EOF on
      stdout) wakes up every pending request with `EMCP` (nobody hangs).
      The dialogue is JSON-RPC 2.0 over stdio with **line framing** (one
@@ -209,19 +209,19 @@ write under `data_dir()/plugins/<name>/`.
      headless mode without it they're DENIED with an actionable error.
      There's no special case: an MCP tool goes through the same fence as
      any other.
-5. ~~**CLI surface**: `nu -e` and `--auto-permissions` appear in the
+5. ~~**CLI surface**: `enu -e` and `--auto-permissions` appear in the
    contracts without a specification of their own (flags, subcommands,
    headless behavior, exit codes). The resume sugar (a `--continue` over
    `agent.session{ resume }`) will be decided here: G18 deliberately left
    it out of the contracts.~~ **RESOLVED** by the S45 implementation
    ([implementacion.md](implementacion.md)). The CLI surface lives in the
-   **binary** (`main.go`), NOT in the sacred `nu.*` API (api.md): it's the
+   **binary** (`main.go`), NOT in the sacred `enu.*` API (api.md): it's the
    command-line interface of the executable, and the core still doesn't
    know what an agent is (ADR-003) — the CLI orchestrates the extensions
    (`agent`, `sessions`) through the public API, as a user's `init.lua`
    could. What was fixed:
-   - **Flags**: `nu -e '<lua>'` (evaluates a headless Lua chunk and prints
-     its returns, since S01); `nu -p '<prompt>'` (runs a **headless agent
+   - **Flags**: `enu -e '<lua>'` (evaluates a headless Lua chunk and prints
+     its returns, since S01); `enu -p '<prompt>'` (runs a **headless agent
      turn** — agente.md §1, "free scripting/CI mode" — and prints the
      assistant's final text to stdout); `--auto-permissions` (agent
      permissions in `"auto"` mode, agente.md §5 amortizer 3 — without it,
@@ -230,11 +230,11 @@ write under `data_dir()/plugins/<name>/`.
      `--continue`/`-c` (resume sugar, below); `--default-config`
      (activates the **official product set** without a TTY —the onramp
      that G21's bare screen didn't cover—: standalone, writes
-     `plugins.enabled` in `nu.toml` —and active templates of
+     `plugins.enabled` in `enu.toml` —and active templates of
      `agent.toml`/`providers.toml` if they don't exist, to leave the
      harness usable, ADR-017/G35— and exits; with `-p`/`-e`, it activates
      it only for that process without touching disk. ADR-015, G33).
-   - **Headless / exit codes**: `nu -e` and agent mode run WITHOUT a TTY
+   - **Headless / exit codes**: `enu -e` and agent mode run WITHOUT a TTY
      (G20) with exit codes consistent for CI/scripts — **0** success;
      **1** execution error (the chunk, the turn, or the provider threw, or
      startup failed); **2** invalid usage (flags/arguments); **3**
@@ -250,9 +250,9 @@ write under `data_dir()/plugins/<name>/`.
      belonging to this surface.
    - **Startup** (S33): no args and with a TTY → normal startup (bare
      runtime screen if there are no plugins, G21); no args and without a
-     TTY → usage (code 2); `nu -e`/`-p`/`--continue` → headless mode.
+     TTY → usage (code 2); `enu -e`/`-p`/`--continue` → headless mode.
      `--default-config` alone (no headless action) writes the product set
-     to `nu.toml` —plus `agent.toml`/`providers.toml` templates if
+     to `enu.toml` —plus `agent.toml`/`providers.toml` templates if
      missing (ADR-017/G35)— and exits (G33): the onramp without a TTY that
      the bare screen didn't give.
    The headless executor for the suspending modes (the agent turn is ⏸)
@@ -262,4 +262,4 @@ write under `data_dir()/plugins/<name>/`.
    corollary satisfied: the public API + the extensions were enough,
    without a `G##` finding).
 
-<!-- /nu:interno -->
+<!-- /enu:interno -->

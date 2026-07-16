@@ -13,12 +13,12 @@ export const GITHUB_URL = 'https://github.com/dbareagimeno/enu';
 export const RELEASES_URL = `${GITHUB_URL}/releases`;
 
 // Versión visible (footer, chrome). La versión sin `v` la usa el REPL
-// (`nu.version` → "0.1.3").
+// (`enu.version` → "0.1.3").
 export const VERSION = 'v0.1.3';
 
 export const LICENSE = 'apache-2.0';
 
 // Primeras páginas de cada sección: destino de [d] (docs) y [a] (api) desde la
 // portada. Las páginas se montan en fases posteriores.
-export const DOCS_FIRST = 'que-es-nu'; // primera página del orden lineal del docmap
+export const DOCS_FIRST = 'que-es-enu'; // primera página del orden lineal del docmap
 export const API_FIRST = 'fs';

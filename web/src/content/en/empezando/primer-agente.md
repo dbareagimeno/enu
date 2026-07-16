@@ -1,9 +1,9 @@
 ---
 title: Your first agent
-description: Activate the official extensions, configure an LLM provider, and run a headless agent turn with nu -p.
+description: Activate the official extensions, configure an LLM provider, and run a headless agent turn with enu -p.
 ---
 
-The coding harness is `nu`'s *killer app*, but —true to the principle that
+The coding harness is `enu`'s *killer app*, but —true to the principle that
 the core doesn't know what an agent is— the agent is an **extension**. This
 page takes you from a bare runtime to a working agent turn.
 
@@ -17,17 +17,17 @@ depends on your provider.
 
 The official extensions ship embedded in the binary but **inactive by
 default**. The agent needs three: `providers`, `sessions`, and `agent`.
-Activate them in `nu.toml`, inside `nu.config.dir()` (normally
-`~/.config/nu/`):
+Activate them in `enu.toml`, inside `enu.config.dir()` (normally
+`~/.config/enu/`):
 
 ```toml
-# ~/.config/nu/nu.toml
+# ~/.config/enu/enu.toml
 [plugins]
 enabled = ["providers", "sessions", "agent"]
 ```
 
 If you launch the agent without activating them, the error is actionable: it
-names exactly this line of `nu.toml`.
+names exactly this line of `enu.toml`.
 
 ## 2. Declare a provider
 
@@ -35,7 +35,7 @@ LLM providers are declared as **data** (TOML), not code. Edit
 `providers.toml` in the same config directory:
 
 ```toml
-# ~/.config/nu/providers.toml
+# ~/.config/enu/providers.toml
 [providers.anthropic]
 adapter     = "anthropic"
 base_url    = "https://api.anthropic.com"
@@ -56,20 +56,20 @@ export ANTHROPIC_API_KEY="sk-..."
 
 A model is named `"provider/id-or-alias"`: `"anthropic/opus"`.
 
-## 3. A headless turn with `nu -p`
+## 3. A headless turn with `enu -p`
 
-`nu -p '<prompt>'` runs **a single headless agent turn** and writes the
+`enu -p '<prompt>'` runs **a single headless agent turn** and writes the
 assistant's final text to stdout. It's the scripting/CI mode: the agent
 engine is headless by design, so it doesn't need an interactive terminal.
 
 ```sh
-nu -p 'summarize the README of this project in three lines'
+enu -p 'summarize the README of this project in three lines'
 ```
 
 Select the model with `--model` (overrides the one in `agent.toml`):
 
 ```sh
-nu -p 'what does this repo do?' --model anthropic/opus
+enu -p 'what does this repo do?' --model anthropic/opus
 ```
 
 ### Permissions in headless mode
@@ -80,10 +80,10 @@ To grant them in a non-interactive run, use `--auto-permissions` (the risk
 is chosen, not inherited):
 
 ```sh
-nu -p 'create an initial CHANGELOG.md file' --auto-permissions
+enu -p 'create an initial CHANGELOG.md file' --auto-permissions
 ```
 
-If a tool is denied for lack of permission, `nu` exits with **code 3**
+If a tool is denied for lack of permission, `enu` exits with **code 3**
 (distinct from the 1 for a runtime error) so a script can distinguish "the
 model couldn't act due to permissions" from a real failure.
 
@@ -93,20 +93,20 @@ model couldn't act due to permissions" from a real failure.
 before sending the prompt:
 
 ```sh
-nu -p 'now add tests' --continue
+enu -p 'now add tests' --continue
 ```
 
 ## 4. The same thing from Lua
 
-`nu -p` is sugar over the `agent` extension's public API. This is,
+`enu -p` is sugar over the `agent` extension's public API. This is,
 essentially, what it does under the hood —and what you'd write yourself in
 an `init.lua` or a script—:
 
 ```lua
 local agent = require("agent")
 
-nu.task.spawn(function()
-  local s = agent.session{ model = "anthropic/opus", cwd = nu.fs.cwd() }
+enu.task.spawn(function()
+  local s = agent.session{ model = "anthropic/opus", cwd = enu.fs.cwd() }
   local final = s:send("summarize the README in three lines")  -- ⏸ runs the turn
   s:close()
 
@@ -115,7 +115,7 @@ nu.task.spawn(function()
   for _, b in ipairs(final.content) do
     if b.type == "text" then text = text .. b.text end
   end
-  nu.fs.write(nu.fs.tmpdir() .. "/respuesta.txt", text)
+  enu.fs.write(enu.fs.tmpdir() .. "/respuesta.txt", text)
 end)
 ```
 
@@ -127,5 +127,5 @@ incomplete.
 ## Next step
 
 You now have the harness working. From here, the [API
-reference](/nu/en/api/convenciones/) documents every core primitive that
+reference](/enu/en/api/convenciones/) documents every core primitive that
 all of this is built on.

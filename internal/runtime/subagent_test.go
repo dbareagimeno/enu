@@ -6,7 +6,7 @@ package runtime
 // modos (agente.md §9):
 //   - `worker = false`: el subagente corre como TASK en el estado principal,
 //     compartiendo tools/permisos/hooks (barato). Es una `agent.session` hija.
-//   - `worker = true`: el LOOP corre en un `nu.worker` con `caps` RECORTADAS
+//   - `worker = true`: el LOOP corre en un `enu.worker` con `caps` RECORTADAS
 //     (G6/S34: la superficie no concedida NO EXISTE —p. ej. `fs.write`/`ui`—),
 //     pero las tools se ejecutan en el ESTADO PRINCIPAL vía proxy de mensajes (la
 //     seguridad queda centralizada). El digesto cruza la frontera como valor
@@ -14,7 +14,7 @@ package runtime
 //
 // Blinda el criterio de hecho de S40: "un subagente corre aislado con API
 // recortada y devuelve resultado digerido":
-//   - AISLAMIENTO (caps): el worker reporta que `nu.fs.write`/`nu.ui` NO existen.
+//   - AISLAMIENTO (caps): el worker reporta que `enu.fs.write`/`enu.ui` NO existen.
 //   - TURNO AISLADO: corre con un adaptador stub require-able (sin red).
 //   - DIGESTO: el padre recibe { text, message, stop_reason, usage } y lo integra.
 //   - PROXY DE TOOLS: una tool que el subagente-worker pide se ejecuta en el
@@ -77,14 +77,14 @@ return {
 // `fs.read`, `task`, `json`, `toml`.
 const wsProbeModule = `
 local function has(path)
-  local cur = nu
+  local cur = enu
   for part in string.gmatch(path, "[^.]+") do
     if type(cur) ~= "table" then return false end
     cur = cur[part]
   end
   return cur ~= nil
 end
-nu.worker.parent.send({
+enu.worker.parent.send({
   fs_read  = has("fs.read"),
   fs_write = has("fs.write"),
   fs_mod   = has("fs"),
@@ -194,7 +194,7 @@ func TestSubagentSpawnSuperficie(t *testing.T) {
 	h, _ := bootSubagent(t)
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				local s = agent.session{ model = "test/m", no_store = true }
@@ -218,7 +218,7 @@ func TestSubagentTaskModeDigest(t *testing.T) {
 	h, _ := bootSubagent(t)
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				-- registra el adaptador stub en el estado principal (modo task: el turno
@@ -255,7 +255,7 @@ func TestSubagentWorkerIsolationAndDigest(t *testing.T) {
 	h, _ := bootSubagent(t)
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				local parent = agent.session{ model = "test/m", no_store = true }
@@ -296,7 +296,7 @@ func TestSubagentWorkerTranscriptPersistidoA21(t *testing.T) {
 	h, dataDir := bootSubagent(t)
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				local parent = agent.session{ model = "test/m", no_store = true }
@@ -358,7 +358,7 @@ func TestSubagentWorkerThinkingYSystemA22(t *testing.T) {
 	h, _ := bootSubagent(t)
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				local parent = agent.session{ model = "test2/e", no_store = true }
@@ -389,9 +389,9 @@ func TestSubagentWorkerThinkingYSystemA22(t *testing.T) {
 
 // TestSubagentWorkerCapsDenyWrite (AISLAMIENTO, G6): el worker del subagente corre
 // con caps recortadas (solo-lectura por defecto). Verificamos DESDE DENTRO DEL
-// WORKER que `nu.fs.write` y `nu.ui` NO existen, pero `nu.fs.read` y `nu.task` SÍ.
+// WORKER que `enu.fs.write` y `enu.ui` NO existen, pero `enu.fs.read` y `enu.task` SÍ.
 // Para auditar el interior del worker sin acoplarnos al loop del subagente, usamos
-// directamente `nu.worker.spawn` con las MISMAS caps por defecto que un subagente,
+// directamente `enu.worker.spawn` con las MISMAS caps por defecto que un subagente,
 // expuestas inspeccionablemente por la extensión (agent.caps + los mínimos).
 func TestSubagentWorkerCapsDenyWrite(t *testing.T) {
 	h, _ := bootSubagent(t)
@@ -401,7 +401,7 @@ func TestSubagentWorkerCapsDenyWrite(t *testing.T) {
 	// la extensión expone los paquetes de caps con nombre y que NO incluyen fs.write.
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				-- Paquetes de caps con nombre (agente.md §9): inspeccionables.
@@ -435,12 +435,12 @@ func TestSubagentWorkerProbeAPI(t *testing.T) {
 	h.eval(`
 		out, errc = nil, nil
 		REP = nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				-- Las caps por defecto de un subagente, expuestas inspeccionablemente.
 				local caps = agent._subagent.default_caps()
-				local w = nu.worker.spawn("wprobe", { caps = caps })
+				local w = enu.worker.spawn("wprobe", { caps = caps })
 				REP = w:recv()
 				w:terminate()
 			end)
@@ -452,7 +452,7 @@ func TestSubagentWorkerProbeAPI(t *testing.T) {
 	// DENTRO del worker: solo-lectura. Lo no concedido no existe (deny-by-default).
 	h.expectEval(`return tostring(REP.fs_read == true)`, "true")
 	h.expectEval(`return tostring(REP.fs_write == true)`, "false") // ¡sin escritura!
-	// `nu.fs` existe pero PODADO a solo-lectura (granularidad de función, G6): la
+	// `enu.fs` existe pero PODADO a solo-lectura (granularidad de función, G6): la
 	// tabla está, pero `fs.write` no. Lo que importa para el aislamiento es que la
 	// superficie de ESCRITURA no exista, ya comprobado arriba.
 	h.expectEval(`return tostring(REP.http == true)`, "false")   // ni red
@@ -468,7 +468,7 @@ func TestSubagentWorkerCapsRejectBad(t *testing.T) {
 	h, _ := bootSubagent(t)
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				local parent = agent.session{ model = "test/m", no_store = true }
@@ -496,7 +496,7 @@ func TestSubagentWorkerToolProxy(t *testing.T) {
 	h.eval(`
 		out, errc = nil, nil
 		PROXY_RAN_IN_PARENT = false
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local agent = require("agent")
 				-- Tool registrada en el PRINCIPAL. Su handler marca una global del

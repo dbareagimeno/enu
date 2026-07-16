@@ -3,8 +3,8 @@ package runtime
 // Tests de la extensión oficial `mcp` (S41, embebida en
 // internal/runtime/embedded/mcp). Es la **capa 2** de arquitectura.md (procesos
 // externos vía JSON-RPC/stdio): Lua sobre la API pública congelada (Fase 8,
-// ADR-003 — el core NO sabe lo que es MCP), construida sobre `nu.proc` (S16),
-// `nu.json` (S18) y la extensión `agent` (S39).
+// ADR-003 — el core NO sabe lo que es MCP), construida sobre `enu.proc` (S16),
+// `enu.json` (S18) y la extensión `agent` (S39).
 //
 // Blinda el CICLO COMPLETO (criterio de hecho de S41): un servidor MCP de prueba
 // se LANZA por la extensión, ANUNCIA sus tools (tools/list), se REGISTRAN en el
@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbareagimeno/nu/internal/vmwasm"
+	"github.com/dbareagimeno/enu/internal/vmwasm"
 )
 
 // ---------------------------------------------------------------------------
@@ -149,7 +149,7 @@ var (
 func buildMCPServer(t *testing.T) string {
 	t.Helper()
 	mcpServerOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "nu-mcpserver-")
+		dir, err := os.MkdirTemp("", "enu-mcpserver-")
 		if err != nil {
 			mcpServerErr = err
 			return
@@ -227,7 +227,7 @@ func TestMCPConnectListAndRegister(t *testing.T) {
 
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local mcp = require("mcp")
 				local agent = require("agent")
@@ -265,7 +265,7 @@ func TestMCPAgentInvokesTool(t *testing.T) {
 
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local mcp = require("mcp")
 				local agent = require("agent")
@@ -288,7 +288,7 @@ func TestMCPAgentInvokesTool(t *testing.T) {
 			out = "done"
 		end)
 		-- cerramos la conexión tras el turno (vida del proceso).
-		nu.task.spawn(function() if CONN then CONN:close() end end)`)
+		enu.task.spawn(function() if CONN then CONN:close() end end)`)
 	h.expectEval(`return tostring(out)`, "done")
 	h.expectEval(`return tostring(errc)`, "nil")
 	h.expectEval(`return tostring(IS_ERROR)`, "false")
@@ -305,7 +305,7 @@ func TestMCPToolTrustHeadlessDeny(t *testing.T) {
 
 	h.eval(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local mcp = require("mcp")
 				local agent = require("agent")
@@ -325,7 +325,7 @@ func TestMCPToolTrustHeadlessDeny(t *testing.T) {
 			if not ok then errc = (type(e) == "table" and (e.message or e.code)) or tostring(e) end
 			out = "done"
 		end)
-		nu.task.spawn(function() if CONN2 then CONN2:close() end end)`)
+		enu.task.spawn(function() if CONN2 then CONN2:close() end end)`)
 	h.expectEval(`return tostring(out)`, "done")
 	h.expectEval(`return tostring(errc)`, "nil")
 	h.expectEval(`return tostring(IS_ERROR)`, "true")
@@ -401,7 +401,7 @@ func runMCPServerErrorScenario(t *testing.T, bin string) (bool, string) {
 
 	if _, err := h.rt.EvalString(`
 		out, errc = nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local mcp = require("mcp")
 				local agent = require("agent")
@@ -421,7 +421,7 @@ func runMCPServerErrorScenario(t *testing.T, bin string) (bool, string) {
 			if not ok then errc = (type(e) == "table" and (e.message or e.code)) or tostring(e) end
 			out = "done"
 		end)
-		nu.task.spawn(function() if CONN3 then CONN3:close() end end)`); err != nil {
+		enu.task.spawn(function() if CONN3 then CONN3:close() end end)`); err != nil {
 		return false, fmt.Sprintf("el escenario lanzó un error inesperado: %v", err)
 	}
 
@@ -477,12 +477,12 @@ func TestMCPProcessLifecycle(t *testing.T) {
 
 	h.eval(`
 		out, errc, ALIVE_BEFORE, LIFE_PID = nil, nil, nil, nil
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local ok, e = pcall(function()
 				local mcp = require("mcp")
 				local conn = mcp.connect{ name = "life", command = { "` + bin + `" } }
 				LIFE_PID = ` + pidExpr + `
-				ALIVE_BEFORE = nu.proc.alive(LIFE_PID)
+				ALIVE_BEFORE = enu.proc.alive(LIFE_PID)
 				conn:close()
 			end)
 			if not ok then errc = (type(e) == "table" and (e.message or e.code)) or tostring(e) end

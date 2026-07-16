@@ -3,7 +3,7 @@ package runtime
 // Tests de la extensión oficial `sessions` (S38, embebida en
 // internal/runtime/embedded/sessions). Es Lua sobre la API pública congelada
 // (Fase 8, ADR-003: el core NO sabe lo que es una sesión), así que la prueba es
-// Go que arranca un Runtime con la extensión ACTIVADA por `nu.toml`
+// Go que arranca un Runtime con la extensión ACTIVADA por `enu.toml`
 // (`plugins.enabled = ["sessions"]`, igual que el gating de S12) y ejercita el
 // contrato desde Lua, requiriendo el módulo con `require("sessions")`.
 //
@@ -13,7 +13,7 @@ package runtime
 //     (replay) recupera las entradas en orden, con el `Message` canónico intacto;
 //   - **lockfile exclusivo (§6, G5/G17/G32)**: dos `open` de escritura sobre la
 //     misma sesión chocan (el segundo recibe ESESSION busy); el lock graba el pid
-//     de `nu.sys.pid()` (G32) y el hostname de `nu.sys.hostname()` (G17);
+//     de `enu.sys.pid()` (G32) y el hostname de `enu.sys.hostname()` (G17);
 //   - **lock huérfano (§6)**: un lock con un pid muerto (en esta máquina) se
 //     reclama en silencio; uno con pid vivo no.
 
@@ -134,7 +134,7 @@ func TestSessionsLockExclusivo(t *testing.T) {
 // TestSessionsLockHuerfano (§6): un lockfile dejado por un crash (mismo hostname,
 // pid MUERTO) es huérfano: el siguiente `open` lo reclama EN SILENCIO y adquiere
 // el lock. Se simula escribiendo a mano un lock con un pid imposible (1<<30, que
-// `nu.proc.alive` reporta muerto, cf. proc_test) y un id de sesión existente.
+// `enu.proc.alive` reporta muerto, cf. proc_test) y un id de sesión existente.
 func TestSessionsLockHuerfano(t *testing.T) {
 	h, dataDir := bootSessions(t)
 
@@ -175,9 +175,9 @@ func TestSessionsLockHuerfano(t *testing.T) {
 }
 
 // TestSessionsLockGrababPidPropio (G32): el contenido del lock que escribe la
-// extensión lleva el pid de ESTE proceso (`nu.sys.pid()` == os.Getpid) y su
-// hostname (`nu.sys.hostname()`). Se lee el lock DESDE LA MISMA task, antes del
-// `close` —el lock se suelta al terminar la task vía `nu.task.cleanup` (§6), así
+// extensión lleva el pid de ESTE proceso (`enu.sys.pid()` == os.Getpid) y su
+// hostname (`enu.sys.hostname()`). Se lee el lock DESDE LA MISMA task, antes del
+// `close` —el lock se suelta al terminar la task vía `enu.task.cleanup` (§6), así
 // que inspeccionarlo después desde Go sería tarde—.
 func TestSessionsLockGrababPidPropio(t *testing.T) {
 	h, _ := bootSessions(t)
@@ -186,17 +186,17 @@ func TestSessionsLockGrababPidPropio(t *testing.T) {
 		local sessions = require("sessions")
 		local s = sessions.open({ cwd = "/repo/lockcheck" })
 		-- El lock vive junto al transcript: <path>.lock. Lo leemos en esta task.
-		local raw = nu.fs.read(s.path .. ".lock")
-		local meta = nu.json.decode(raw)
+		local raw = enu.fs.read(s.path .. ".lock")
+		local meta = enu.json.decode(raw)
 		LOCK_PID = meta.pid
 		LOCK_HOST = meta.hostname
 		LOCK_HAS_STARTED = (meta.started ~= nil)
-		MY_PID = nu.sys.pid()
-		MY_HOST = nu.sys.hostname()
+		MY_PID = enu.sys.pid()
+		MY_HOST = enu.sys.hostname()
 		s:close()
 		out = "ok"`))
 	h.expectEval(`return tostring(out)`, "ok")
-	// El pid del lock es el propio (nu.sys.pid) y coincide con os.Getpid del test.
+	// El pid del lock es el propio (enu.sys.pid) y coincide con os.Getpid del test.
 	h.expectEval(`return tostring(LOCK_PID == MY_PID)`, "true")
 	h.expectEval(`return tostring(LOCK_HOST == MY_HOST)`, "true")
 	h.expectEval(`return tostring(LOCK_HAS_STARTED)`, "true")
@@ -237,8 +237,8 @@ func TestSessionsList(t *testing.T) {
 }
 
 // TestSessionsListA38 (A-38): `sessions.list` obtiene la línea `meta` de cada
-// transcript vía `nu.search.grep` —solo esa línea cruza la frontera wasm— en vez
-// de leer el fichero ENTERO con `nu.fs.read`. Antes, listar costaba O(bytes
+// transcript vía `enu.search.grep` —solo esa línea cruza la frontera wasm— en vez
+// de leer el fichero ENTERO con `enu.fs.read`. Antes, listar costaba O(bytes
 // totales del proyecto) en IO y memoria (un transcript de MB se copiaba a Lua
 // solo para mirar su primera línea). Se blindan las tres invariantes del cambio:
 //

@@ -2,7 +2,7 @@
 
 Status: **draft for discussion — v0.1 built**. Born from [Round 8 of
 pseudocode](pseudocodigo.md) ("kubernetes for agents"): a mesh of headless
-`nu` nodes that run declarative jobs over git branches, with the human at
+`enu` nodes that run declarative jobs over git branches, with the human at
 the two boundaries that matter (Roles and merges). Like the rest of the
 official extensions, it is NOT sacred core API: it is the public contract
 of the `mesh` plugin, versioned separately, built **entirely** on top of
@@ -22,7 +22,7 @@ before building (G38-G40, resolved).
    a product on top of the product — when hand-writing it starts to hurt,
    it gets reopened.
 2. **Pull-only.** nu only acts as a **client** (git, and in the future
-   outbound `nu.ws`): no listener, [P1/P19](pospuesto.md) stay dormant.
+   outbound `enu.ws`): no listener, [P1/P19](pospuesto.md) stay dormant.
 3. **Git is the only v0.1 substrate**: transport, storage and coordination
    (claim by CAS on refs). Round 8 (scenario 36) validated that the
    Role/Job layer is substrate-agnostic; the broker stays postponed with a
@@ -84,10 +84,10 @@ mesh.claim_info(job_id, opts?) ⏸ -> { hostname, ts }?  -- nil if there's no cl
 mesh.release(job_id, opts?) ⏸               -- deletes the claim-ref (job finished or abandoned)
 ```
 
-- `opts`: `{ cwd?, remote? = "origin" }`. Everything via `nu.proc.run(["git", ...])`;
+- `opts`: `{ cwd?, remote? = "origin" }`. Everything via `enu.proc.run(["git", ...])`;
   git is a declared dependency of the extension, not of the core.
 - The content of the claim/heartbeat commit is `{ hostname, ts }`
-  (`nu.sys.hostname/now_ms`). **Node clocks are not synchronized**: the
+  (`enu.sys.hostname/now_ms`). **Node clocks are not synchronized**: the
   staleness threshold a re-claimer applies over `claim_info().ts` must be
   generous (minutes, not seconds). The local lock in
   [sesiones.md](sesiones.md) §6 (pid + `proc.alive`) doesn't cross
@@ -104,7 +104,7 @@ mesh.worktree.remove(dir, opts?) ⏸        -- git worktree remove --force
 
 One worktree per job and per tournament variant: the remedy for G16
 (last-write-wins between parallel writers) is to allocate physical
-territory. `dir` defaults to under `nu.fs.tmpdir()`.
+territory. `dir` defaults to under `enu.fs.tmpdir()`.
 
 ## 5. The runner: `mesh.run_job`
 
@@ -196,20 +196,20 @@ hash**, and that pin was written by the human who reviewed the Role. If
 the worktree's hash matches, the runner marks the worktree as trusted
 (`agent.trust.set(dir, true)`) **only for that job**; if it doesn't match,
 `EMESH` and the job dies before opening a session. A Role **without**
-pinned skills trusts nothing: the repo's `nu.md` and skills are not
+pinned skills trusts nothing: the repo's `enu.md` and skills are not
 injected (the §11.2 headless default holds).
 
 ## 10. The node, as a pattern (not API)
 
 ```lua
--- node.lua — runs with `nu -e node.lua` on each machine
+-- node.lua — runs with `enu -e node.lua` on each machine
 local mesh = require("mesh")
 while true do
-  for _, jf in ipairs(nu.search.files(JOBS_DIR, { glob = "*.toml" })) do
+  for _, jf in ipairs(enu.search.files(JOBS_DIR, { glob = "*.toml" })) do
     local job = mesh.job.load(jf)
     if mesh.claim(job.id) then                       -- CAS: only one node wins
-      local hb = nu.task.every(60000, function()
-        nu.task.spawn(function() mesh.heartbeat(job.id) end)
+      local hb = enu.task.every(60000, function()
+        enu.task.spawn(function() mesh.heartbeat(job.id) end)
       end)
       local role = mesh.role.load(repo_path(job.role))
       local r = mesh.run_job(job, role)              -- allSettled: never throws
@@ -217,7 +217,7 @@ while true do
       log_result(r)                                  -- r.denials → Role amendments
     end
   end
-  nu.task.sleep(POLL_MS)
+  enu.task.sleep(POLL_MS)
 end
 ```
 
@@ -237,7 +237,7 @@ end
 
 ## 12. Relationship to what's postponed
 
-- **Broker as a second substrate** (outbound `nu.ws`): validated as
+- **Broker as a second substrate** (outbound `enu.ws`): validated as
   expressible (Round 8, scenario 36); it will be built when a real mesh
   exists where git polling isn't enough.
 - **Parallel tool calls** ([P12](pospuesto.md)): a job is still sequential

@@ -1,35 +1,35 @@
 ---
-title: nu.fs — filesystem
+title: enu.fs — filesystem
 description: Reading, atomic writing, stat, listing, file manipulation, and filesystem watching.
 ---
 
-`nu.fs` is filesystem access. Almost everything is **⏸** (suspending: it goes
-inside a task) and **[W]** (available in workers), except `nu.fs.watch`, which
+`enu.fs` is filesystem access. Almost everything is **⏸** (suspending: it goes
+inside a task) and **[W]** (available in workers), except `enu.fs.watch`, which
 belongs only to the main state.
 
-## `nu.fs.read` ⏸ [W]
+## `enu.fs.read` ⏸ [W]
 
 ```
-nu.fs.read(path) -> string
+enu.fs.read(path) -> string
 ```
 
 Reads the whole file as a string. Throws `ENOENT` if it doesn't exist.
 
 ```sh
-nu -e '
-nu.task.spawn(function()
-  local txt = nu.fs.read("README.md")
-  nu.fs.write(nu.fs.tmpdir().."/n.txt", tostring(#txt))  -- number of bytes
+enu -e '
+enu.task.spawn(function()
+  local txt = enu.fs.read("README.md")
+  enu.fs.write(enu.fs.tmpdir().."/n.txt", tostring(#txt))  -- number of bytes
 end)
 return "ok"
 '
 ```
 
-## `nu.fs.write` / `nu.fs.append` ⏸ [W]
+## `enu.fs.write` / `enu.fs.append` ⏸ [W]
 
 ```
-nu.fs.write(path, data, opts?)
-nu.fs.append(path, data)
+enu.fs.write(path, data, opts?)
+enu.fs.append(path, data)
 ```
 
 **Atomic** write (via temp file + rename: you never leave a half-written
@@ -38,50 +38,50 @@ single indivisible operation (`O_EXCL`); if it already exists it throws
 `EEXIST`. It's the building block for lockfiles.
 
 ```lua
-nu.task.spawn(function()
-  nu.fs.write("output.txt", "content\n")
-  nu.fs.append("output.txt", "another line\n")
+enu.task.spawn(function()
+  enu.fs.write("output.txt", "content\n")
+  enu.fs.append("output.txt", "another line\n")
 
   -- Lockfile: only one wins the creation.
   local ok = pcall(function()
-    nu.fs.write("app.lock", nu.sys.pid()..":"..nu.sys.hostname(), { exclusive = true })
+    enu.fs.write("app.lock", enu.sys.pid()..":"..enu.sys.hostname(), { exclusive = true })
   end)
   if not ok then error({ code = "EEXIST", message = "a process is already running" }) end
 end)
 ```
 
-## `nu.fs.stat` ⏸ [W]
+## `enu.fs.stat` ⏸ [W]
 
 ```
-nu.fs.stat(path) -> { size, mtime_ms, is_dir, mode }?
+enu.fs.stat(path) -> { size, mtime_ms, is_dir, mode }?
 ```
 
 File metadata, or **`nil` if it doesn't exist** (it doesn't throw `ENOENT`:
 that's the idiomatic way to check existence).
 
 ```lua
-nu.task.spawn(function()
-  local st = nu.fs.stat("config.json")
+enu.task.spawn(function()
+  local st = enu.fs.stat("config.json")
   if st and not st.is_dir then
     -- it exists and is a file
   end
 end)
 ```
 
-## `nu.fs.list` ⏸ [W]
+## `enu.fs.list` ⏸ [W]
 
 ```
-nu.fs.list(dir) -> { name, is_dir }[]
+enu.fs.list(dir) -> { name, is_dir }[]
 ```
 
 Lists the directory **non-recursively**. For recursive listing that respects
-`.gitignore`, use [`nu.search.files`](/nu/en/api/search/).
+`.gitignore`, use [`enu.search.files`](/enu/en/api/search/).
 
 ```sh
-nu -e '
-nu.task.spawn(function()
-  local entries = nu.fs.list("docs")
-  nu.fs.write(nu.fs.tmpdir().."/c.txt", tostring(#entries))
+enu -e '
+enu.task.spawn(function()
+  local entries = enu.fs.list("docs")
+  enu.fs.write(enu.fs.tmpdir().."/c.txt", tostring(#entries))
 end)
 return "ok"
 '
@@ -90,33 +90,33 @@ return "ok"
 ## Manipulation ⏸ [W]
 
 ```
-nu.fs.mkdir(path) ⏸ [W]
-nu.fs.remove(path, opts?) ⏸ [W]  -- opts.recursive=true for non-empty dirs
-nu.fs.rename(from, to) ⏸ [W]
-nu.fs.copy(from, to) ⏸ [W]
+enu.fs.mkdir(path) ⏸ [W]
+enu.fs.remove(path, opts?) ⏸ [W]  -- opts.recursive=true for non-empty dirs
+enu.fs.rename(from, to) ⏸ [W]
+enu.fs.copy(from, to) ⏸ [W]
 ```
 
 ```lua
-nu.task.spawn(function()
-  nu.fs.mkdir("build")
-  nu.fs.copy("template.txt", "build/copy.txt")
-  nu.fs.rename("build/copy.txt", "build/final.txt")
-  nu.fs.remove("build", { recursive = true })
+enu.task.spawn(function()
+  enu.fs.mkdir("build")
+  enu.fs.copy("template.txt", "build/copy.txt")
+  enu.fs.rename("build/copy.txt", "build/final.txt")
+  enu.fs.remove("build", { recursive = true })
 end)
 ```
 
-## `nu.fs.tmpdir` ⏸ [W]
+## `enu.fs.tmpdir` ⏸ [W]
 
 ```
-nu.fs.tmpdir() -> string
+enu.fs.tmpdir() -> string
 ```
 
 Temporary directory **scoped to the session** (cleaned up along with it).
 
-## `nu.fs.cwd` [W]
+## `enu.fs.cwd` [W]
 
 ```
-nu.fs.cwd() -> string
+enu.fs.cwd() -> string
 ```
 
 Working directory, **immutable** during the session (subprocesses can receive
@@ -124,17 +124,17 @@ a different one via `opts.cwd`). Note: it's not ⏸, it can be called without a
 task.
 
 ```sh
-nu -e 'return nu.fs.cwd() ~= nil'
+enu -e 'return enu.fs.cwd() ~= nil'
 ```
 
 ```
 true
 ```
 
-## `nu.fs.watch`
+## `enu.fs.watch`
 
 ```
-nu.fs.watch(path, opts?, fn) -> Watcher
+enu.fs.watch(path, opts?, fn) -> Watcher
   Watcher:stop()
 ```
 
@@ -151,9 +151,9 @@ of files arrives as **a single batch**. The handler is synchronous.
 `Watcher:stop()` stops it.
 
 ```lua
-local w = nu.fs.watch("src", { recursive = true, gitignore = true }, function(events)
+local w = enu.fs.watch("src", { recursive = true, gitignore = true }, function(events)
   for _, e in ipairs(events) do
-    nu.log.info("%s: %s", e.kind, e.path)
+    enu.log.info("%s: %s", e.kind, e.path)
   end
 end)
 -- ...

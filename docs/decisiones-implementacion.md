@@ -6,7 +6,7 @@ entrada por sesión. No sustituye al flujo de diseño (`problemas.md`/`adr.md`):
 recoge lo operativo que no llega a hallazgo `G##` pero que la sesión siguiente
 debe poder reconstruir.
 
-## S05 — `nu.task.sleep`/`defer`/`every` + `Timer:stop` (api.md §3)
+## S05 — `enu.task.sleep`/`defer`/`every` + `Timer:stop` (api.md §3)
 
 ### Semántica de quiescencia con timers activos (decisión clave)
 
@@ -70,7 +70,7 @@ flaky.
 El modelo de S04 (goroutine-por-task + token) bastó para S05 sin ampliar la API.
 No se abrió ningún `G##`.
 
-## S06 — `nu.task.future` (rendez-vous de un solo uso, api.md §3)
+## S06 — `enu.task.future` (rendez-vous de un solo uso, api.md §3)
 
 ### Desviación de procedimiento: rama desde `origin/main`
 
@@ -117,12 +117,12 @@ es resolver.
 
 El modelo de S04/S05 bastó para S06 sin ampliar la API. No se abrió ningún `G##`.
 
-## S07 — `nu.task.all` / `nu.task.race` (api.md §3)
+## S07 — `enu.task.all` / `enu.task.race` (api.md §3)
 
 ### La frontera S07/S08: substrato de cancelación interno (decisión clave)
 
 `all`/`race` necesitan "cancelar el resto", pero la cancelación PÚBLICA es S08
-(`Task:cancel()`, `nu.task.cleanup` con pila LIFO, `ECANCELED` observable en
+(`Task:cancel()`, `enu.task.cleanup` con pila LIFO, `ECANCELED` observable en
 `await`, y la garantía formal de que el desenrollado **no es capturable** por un
 `pcall` de usuario). S07 implementa solo el **substrato interno mínimo** que esos
 dos combinadores requieren, diseñado para que S08 lo **reutilice y extienda, no lo
@@ -164,7 +164,7 @@ reescriba**:
    lo trague). El tipo `abortSignal` se dejó distinguible para que S08 lo reconozca
    y reinyecte.
 
-2. **`nu.task.cleanup` (pila LIFO) durante el aborto.** No existe aún; S08 correrá
+2. **`enu.task.cleanup` (pila LIFO) durante el aborto.** No existe aún; S08 correrá
    los liberadores registrados durante el desenrollado.
 
 3. **`ECANCELED` observable.** Una task cancelada hoy simplemente no entrega
@@ -215,7 +215,7 @@ El modelo de S04/S06 más el substrato de cancelación interno bastaron para S07
 ampliar la API ni tocar `api.md` §3. La frontera S07/S08 es **orden de
 implementación**, no un `G##`: se resolvió con el substrato mínimo descrito arriba.
 
-## S08 — Cancelación pública: `Task:cancel` + `nu.task.cleanup` + desenrollado no capturable (api.md §1.3, §3)
+## S08 — Cancelación pública: `Task:cancel` + `enu.task.cleanup` + desenrollado no capturable (api.md §1.3, §3)
 
 S08 está en el inventario 🔒 y es un **hito de veto** (valida ADR-008). El punto
 difícil —y el que podía vetar el plan— era hacer el aborto **no capturable por
@@ -290,7 +290,7 @@ misma es legal (surte efecto en el siguiente ⏸ propio).
 
 ### Pila LIFO de `cleanup`: corre en los TRES finales (decisión)
 
-`task.cleanups []*lua.LFunction`; `nu.task.cleanup(fn)` apila (fuera de task →
+`task.cleanups []*lua.LFunction`; `enu.task.cleanup(fn)` apila (fuera de task →
 `EINVAL`, no hay task a la que atar el liberador). `runCleanups` (en `runTask`,
 con el token tomado, tras el `CallByParam`) corre TODOS en orden inverso al de
 registro —semántica `defer`— pase lo que pase: éxito, error o aborto. Cada
@@ -304,9 +304,9 @@ proceso.
 Siguen intactos `cancelCh`/`cancelTask`/`abortSignal`/`coToTask` y los `select`
 sobre `cancelCh` en `suspend`/`Task:await`/`Future:await`. S08 **añade**: el flag
 `aborting`, el `abortReason` (`abortCancel` vs `abortBudget`, este último para S09),
-la pila `cleanups`, los métodos públicos `Task:cancel`/`nu.task.cleanup`, el
+la pila `cleanups`, los métodos públicos `Task:cancel`/`enu.task.cleanup`, el
 `ECANCELED` en `await`, y los wrappers de `pcall`/`xpcall`. Superficie pública
-nueva = SOLO `Task:cancel` y `nu.task.cleanup` (API sagrada, §3).
+nueva = SOLO `Task:cancel` y `enu.task.cleanup` (API sagrada, §3).
 
 ### Sin hallazgos ni veto
 
@@ -354,7 +354,7 @@ token**—, por eso puede cortar a una task que lo monopoliza mientras otras tas
 y timers esperan: tras el corte, la víctima desenrolla hasta `runTask`, suelta el
 token, y el resto progresa. El presupuesto es 100 ms por defecto, configurable con
 `WithSliceBudget` (`Option` del Runtime; gancho que S11/S12 cablearán a
-`nu.toml`); `<=0` desactiva el watchdog.
+`enu.toml`); `<=0` desactiva el watchdog.
 
 ### Cada slice se mide aparte: arm/disarm en cada ⏸ (decisión)
 
@@ -388,10 +388,10 @@ que `errValue` (una task abortada nunca tiene `errValue`).
 
 ### `core:plugin.misbehaved` por gancho interno (decisión; lo cablea S10)
 
-El bus `nu.events` es S10 (aún no existe). La emisión se hace por un **gancho
+El bus `enu.events` es S10 (aún no existe). La emisión se hace por un **gancho
 interno** `rt.emitMisbehaved(owner, reason)` que hoy loguea best-effort (como el
 resto de fallos de task). **S10 lo cableará** a
-`nu.events.emit("core:plugin.misbehaved", {plugin = owner, reason = ...})` sin
+`enu.events.emit("core:plugin.misbehaved", {plugin = owner, reason = ...})` sin
 tocar el watchdog (el punto de llamada ya es único). NO se inventó superficie
 pública: §1.3 dice que el watchdog es transparente.
 
@@ -411,7 +411,7 @@ puro de forma limpia e integrable con el desenrollado de S08. El hito de veto
 S08+S09 queda validado a favor de ADR-008 (aislamiento por tarea). CP-2 verde
 cierra la Fase 1.
 
-## S10 — bus de eventos `nu.events` (api.md §4)
+## S10 — bus de eventos `enu.events` (api.md §4)
 
 ### La cola de emits: drenado plano (decisión clave de G10)
 
@@ -476,7 +476,7 @@ abortada—), así que no se engancha al borde cooperativo del watchdog del dren
 
 ### Sin superficie de más, sin hallazgo
 
-Superficie nueva = exactamente `nu.events.on/once/emit` + `Sub:cancel` (§4). El
+Superficie nueva = exactamente `enu.events.on/once/emit` + `Sub:cancel` (§4). El
 bus es **solo estado principal** (no [W]); en un worker no existe (S34). El modelo
 de S04–S09 (token + watchdog + desenrollado no capturable) bastó: la vigilancia
 del watchdog en el drenado reusa `claimBudgetAbort`/`abort`, no inventa nada.
@@ -484,8 +484,8 @@ APILevel sigue en 1 (api.md ya describía §4; no es una adición post-congelado
 
 ## S11 — loader de plugins (api.md §14)
 
-Superficie nueva exacta: `nu.plugin.current()`, `nu.plugin.list()`,
-`nu.config.dir()` [W] y `nu.config.data_dir()` [W] (§14). El arranque canónico
+Superficie nueva exacta: `enu.plugin.current()`, `enu.plugin.list()`,
+`enu.config.dir()` [W] y `enu.config.data_dir()` [W] (§14). El arranque canónico
 (carga de plugins, `init.lua` del usuario, `core:ready`) lo dispara `Runtime.Boot`,
 método Go interno, no superficie Lua. APILevel sigue en 1 (api.md ya describía §14;
 no es una adición post-congelado). Sin hallazgo: el modelo de S04–S10 (token +
@@ -496,7 +496,7 @@ estado principal + bus de eventos) bastó.
 `github.com/BurntSushi/toml` (resuelto a v1.6.0 por `go get`; TOML **puro-Go**,
 coherente con `CGO_ENABLED=0`/ADR-001). Se usa para parsear `plugin.toml` (campos
 `name`, `version`, `requires?`) **internamente en el loader**: NO es la API Lua
-`nu.toml` (eso es S18, que reusará esta misma librería para `nu.toml.encode/decode`).
+`enu.toml` (eso es S18, que reusará esta misma librería para `enu.toml.encode/decode`).
 `go mod tidy` deja go.mod/go.sum coherentes.
 
 ### Modelo del loader
@@ -533,12 +533,12 @@ es para módulos de plugins, no un agujero para cargar ficheros arbitrarios del 
 `L.LoadFile` para ejecutar los `init.lua` (es el único autorizado a tocar el disco
 así, §1.2); `dofile`/`loadfile` siguen deshabilitados como globales.
 
-### Pila de owner para `nu.plugin.current` y el log
+### Pila de owner para `enu.plugin.current` y el log
 
 `rt.owner` (string, S03) se sustituyó por `rt.ownerStack []*pluginInfo` +
 `rt.currentOwner()` (tope de la pila, o `"user"` si vacía). El loader empuja el
 contexto del plugin antes de su `init.lua` y lo saca al terminar (defer). Así,
-DURANTE el `init.lua` de un plugin, `nu.plugin.current()` y el owner del log son ese
+DURANTE el `init.lua` de un plugin, `enu.plugin.current()` y el owner del log son ese
 plugin; fuera (chunk de `-e`, `init.lua` del usuario, handlers) son `"user"`. La
 pila se muta **solo bajo el token** (el arranque es síncrono) y se lee solo desde
 código Lua (que también exige el token): sin candado ni carrera (`-race` verde).
@@ -550,39 +550,39 @@ verá owner "user" — el etiquetado fiable de handles por dueño es trabajo de 
 
 ### Frontera con S12/S13
 
-- **S12** (activación por `nu.toml` + embebidas `go:embed`): el campo
+- **S12** (activación por `enu.toml` + embebidas `go:embed`): el campo
   `pluginInfo.Source` (`"user"`/`"builtin"`) y `pluginInfo.Enabled` están previstos
   pero en S11 son siempre `"user"`/`true`. `WithSliceBudget`/`WithDataDir`/
-  `WithConfigDir`/`WithPluginDir` son los ganchos que S12 cableará a `nu.toml`. El
+  `WithConfigDir`/`WithPluginDir` son los ganchos que S12 cableará a `enu.toml`. El
   gancho de activación (qué plugins se cargan) vive en `loader.discover`/`Boot` sin
   adelantar su lógica.
-- **S13** (`nu.plugin.reload`): se apoya en `ownerStack`/`currentOwner` para
+- **S13** (`enu.plugin.reload`): se apoya en `ownerStack`/`currentOwner` para
   etiquetar handles por dueño (G2); la recarga en sí (vaciar caché de require,
   `core:plugin.unload`, re-correr init) NO se implementa en S11.
 
-## S12 — activación de extensiones embebidas gobernada por `nu.toml` (api.md §14, ADR-010)
+## S12 — activación de extensiones embebidas gobernada por `enu.toml` (api.md §14, ADR-010)
 
 S12 monta lo que ADR-010 exige: las extensiones oficiales se distribuyen DENTRO
 del binario (`go:embed`) pero están **INACTIVAS por defecto** —enu instalado es un
 runtime desnudo; el harness se activa, no se presupone—. La activación la gobierna
-`config.dir()/nu.toml`.
+`config.dir()/enu.toml`.
 
-### `nu.toml` es config del core, no la API Lua `nu.toml`
+### `enu.toml` es config del core, no la API Lua `enu.toml`
 
-`config.dir()/nu.toml` (config_toml.go) configura al PROPIO runtime: no se confunde
-con `nu.toml` el codec (API Lua de S18). Ambos reusan la misma librería TOML pura-Go
+`config.dir()/enu.toml` (config_toml.go) configura al PROPIO runtime: no se confunde
+con `enu.toml` el codec (API Lua de S18). Ambos reusan la misma librería TOML pura-Go
 añadida en S11 (BurntSushi), pero son cosas distintas. Campos v1 leídos:
 `plugins.enabled` (lista de activación), `plugins.dirs` (rutas extra), y
 `watchdog.slice_budget_ms`. Claves desconocidas se ignoran (forward-compat, igual
-que `plugin.toml`). Un `nu.toml` AUSENTE es lo normal del runtime desnudo: no activa
+que `plugin.toml`). Un `enu.toml` AUSENTE es lo normal del runtime desnudo: no activa
 nada y no es error.
 
 ### Parseo en `New`, error de config APLAZADO a `Boot`
 
-`nu.toml` se parsea en `New` (ahí ya se conoce `config.dir()` y sus valores deben
+`enu.toml` se parsea en `New` (ahí ya se conoce `config.dir()` y sus valores deben
 estar listos antes de `Boot`: el budget del watchdog va al scheduler que `New`
 construye, y la lista de activación al loader). Pero `New` **no devuelve error** (su
-firma es sagrada, §17). Decisión: un `nu.toml` mal formado se guarda en
+firma es sagrada, §17). Decisión: un `enu.toml` mal formado se guarda en
 `loader.configErr` y lo devuelve `Boot` (cuya firma sí lo permite), **antes** de
 tocar plugin alguno. Así el error de config no deja el arranque a medias y llega a
 `main`/tests con el camino que ya existía para los errores de grafo.
@@ -592,7 +592,7 @@ tocar plugin alguno. Así el error de config no deja el arranque a medias y lleg
 `slice_budget_ms` es `*int` (no `int`) para distinguir "no especificado" (nil → rige
 el default 100 ms o `WithSliceBudget`) de "especificado como 0" (0 → desactiva el
 watchdog explícitamente, semántica de S09). Precedencia: **Option explícita
-`WithSliceBudget` > nu.toml > default**. Se añadió `config.sliceBudgetSet` (lo pone
+`WithSliceBudget` > enu.toml > default**. Se añadió `config.sliceBudgetSet` (lo pone
 `WithSliceBudget`) para que un test que fija su budget no lo pise la config de disco.
 `plugins.dirs` simplemente se **suma** a las rutas de `WithPluginDir`.
 
@@ -627,18 +627,18 @@ Tras descubrir los plugins de disco (S11, sin cambios), por cada nombre de
   (`source="user"`), no coexisten;
 - si es una embebida del catálogo → se extrae y carga con `source="builtin"`;
 - si no es ni una cosa ni otra → `EINVAL` **accionable** que nombra la extensión y la
-  **línea `plugins.enabled` de `nu.toml`** que lo arregla (§14).
+  **línea `plugins.enabled` de `enu.toml`** que lo arregla (§14).
 
 Decisión de alcance: los plugins de disco (`WithPluginDir`/`plugins.dirs`) siguen
 cargándose como en S11, sin gating. ADR-010 habla de las **extensiones oficiales
 embebidas** inactivas por defecto; los plugins explícitos del usuario, por
 definición ya elegidos, se cargan. Esto además evita regresionar los tests de S11
-(que arrancan sin `nu.toml`). Los casos de prueba de S12 (gating de embebidas,
+(que arrancan sin `enu.toml`). Los casos de prueba de S12 (gating de embebidas,
 sustitución por nombre, errores accionables) quedan todos cubiertos.
 
 ### Sin superficie Lua nueva
 
-S12 es config/loader interno. `nu.plugin.list()` ya reflejaba `source`/`enabled`
+S12 es config/loader interno. `enu.plugin.list()` ya reflejaba `source`/`enabled`
 desde S11; una embebida activada sale `{source="builtin", enabled=true}`. No se tocó
 `api.md` (§14/ADR-010 bastaron); APILevel sigue en 1. Sin hallazgos.
 
@@ -646,10 +646,10 @@ desde S11; una embebida activada sale `{source="builtin", enabled=true}`. No se 
 
 La **pantalla de runtime desnudo** (render TTY del catálogo de embebidas +
 activar/salir, sin red) es UI: NO se hizo en S12. Es S30/S33. S12 dejó listos el
-catálogo (`embeddedNames`) y la activación por `nu.toml`, que es lo que esa pantalla
+catálogo (`embeddedNames`) y la activación por `enu.toml`, que es lo que esa pantalla
 consumirá.
 
-## S13 — `nu.plugin.reload` (best-effort, G2) (api.md §14)
+## S13 — `enu.plugin.reload` (best-effort, G2) (api.md §14)
 
 ### Registro de handles por dueño: general, no parche events+timers (decisión clave)
 
@@ -666,7 +666,7 @@ llama `untrack`. `reload` itera la lista del dueño y llama `release()` sin cono
 los tipos. Añadir una primitiva nueva = implementar `ownedHandle` + `track`/
 `untrack`; reload la recoge gratis. Consistente con "el core no sabe de producto"
 (filosofía §1) y con la API sagrada (no se añade firma: la superficie nueva es
-solo `nu.plugin.reload`, ya en §14).
+solo `enu.plugin.reload`, ya en §14).
 
 ### `untrack` en el camino manual, no en `stopTimer`/release (sin doble limpieza)
 
@@ -682,7 +682,7 @@ ya no está no da error). Sin fuga y sin carrera (todo bajo el token).
 ### Fix: la auto-cancelación de un `once` también desregistra (sin fuga)
 
 Una revisión encontró un camino de desregistro que faltaba: cuando un
-`nu.events.once` se **dispara**, `dispatch` (events.go) lo auto-cancela
+`enu.events.once` se **dispara**, `dispatch` (events.go) lo auto-cancela
 (`sub.live = false`) y `purge` lo saca de `eventBus.subs`, pero NO pasaba por el
 camino manual (`subCancel`), así que el handle muerto quedaba para siempre en
 `ownerHandles[owner]`. Para un dueño de vida larga (p. ej. "user") que use `once`
@@ -718,7 +718,7 @@ detección es la de §1.3 (`L == host` → `EINVAL`). El `init.lua` del usuario
 (dueño "user") no es recargable por esta vía: re-correrlo sería re-arrancar, fuera
 del alcance de G2 (que es "recargar un plugin").
 
-## S14 — `nu.fs` (api.md §5)
+## S14 — `enu.fs` (api.md §5)
 
 S14 es 🔒. La superficie de §5 se implementó **sin tocar `api.md`** (no hubo
 hallazgo): el puente `suspend` de S04 (ADR-011) bastó para todas las primitivas.
@@ -748,7 +748,7 @@ crudo) y **no construye ni toca ningún `LValue`**; el error del SO se guarda ta
 cual y se traduce a la tabla §1.4 **dentro de la `deliverFn`**, que corre con el
 token recuperado —porque `raiseError`/`L.NewTable` tocan Lua—. Mientras la
 goroutine de fondo trabaja, la task está bloqueada sin el token, así que el loop
-no se congela (otras tasks progresan). **S15 (`fs.watch`), S16 (`nu.proc`) y toda
+no se congela (otras tasks progresan). **S15 (`fs.watch`), S16 (`enu.proc`) y toda
 la red (Fase 4) reusan esta plantilla literalmente**; por eso se documenta como
 patrón y no como detalle de `fs`.
 
@@ -848,16 +848,16 @@ quiera otro dir lo recibe por `opts.cwd` (§6), sin tocar el cwd del proceso—.
 ### No se usa el `io`/`os` de Lua
 
 Todo el IO es Go puro (`os`/`io` de la stdlib de Go). El baseline del sandbox (S01,
-§1.2) dejó fuera `io` y recortó `os` en Lua a propósito; `nu.fs` es la superficie
+§1.2) dejó fuera `io` y recortó `os` en Lua a propósito; `enu.fs` es la superficie
 **controlada** de IO que los reemplaza, con errores estructurados, ⏸ sobre el loop
 y mapeo de códigos. Un plugin nunca toca el sistema de ficheros por la puerta de
 atrás del `os` de Lua.
 
-## S15 — `nu.fs.watch` (api.md §5, §16)
+## S15 — `enu.fs.watch` (api.md §5, §16)
 
 ### `watch` NO es ⏸ y es solo estado principal (§16)
 
-A diferencia del resto de `nu.fs` (todo ⏸), `watch` **no suspende**: arma el
+A diferencia del resto de `enu.fs` (todo ⏸), `watch` **no suspende**: arma el
 observador y devuelve el `Watcher` en el acto. Y es **solo estado principal**
 (§16): el handler es **síncrono** (como `every`/`on`), corre en el loop del estado
 principal; el bus de entrega (token + thread efímero) vive ahí. Por eso `watch` no
@@ -866,7 +866,7 @@ justo lo que NO encaja en ⏸.
 
 **Corrección (retirado el guard host-only):** "solo estado principal" (§16) significa
 **"no en workers"** —donde `fs.watch` ni siquiera se registra (S34)—, **no** "no en
-tasks". Las tasks corren en el event loop del estado principal y comparten el `nu`
+tasks". Las tasks corren en el event loop del estado principal y comparten el `enu`
 global, así que `watch` es invocable indistintamente desde el chunk, un handler
 síncrono, el `init.lua` **o desde dentro de una task**, exactamente igual que sus
 hermanos `every`/`on` (que tampoco distinguen host de task): registra el `Watcher`
@@ -925,7 +925,7 @@ el handler se invoca con el token tomado—. Un `Watcher` activo **no** cuenta p
 quiescencia (no toca `pending`), igual que un `every`: un watcher nunca termina y
 colgaría `enu -e`. `Watcher` implementa `ownedHandle` (handles.go, S13): `watch` lo
 etiqueta con `currentOwner()` y lo `track`-a; `Watcher:stop()` lo `untrack`-a (sin
-fuga en el registro) y `nu.plugin.reload` lo suelta vía `release()` —"reload no deja
+fuga en el registro) y `enu.plugin.reload` lo suelta vía `release()` —"reload no deja
 handlers huérfanos" (G2)—. `stop` (y `Runtime.Close` vía `stopAllWatchers`) corta la
 goroutine (`stopCh`, idempotente con `stopOnce`) y cierra el watcher del SO (`fsw.
 Close`, libera descriptores), sin fuga de goroutines. `deliverBatch` atiende a
@@ -938,14 +938,14 @@ Close`, libera descriptores), sin fuga de goroutines. `deliverBatch` atiende a
 `.gitignore`). Ninguna usa cgo: el binario estático (ADR-001) sigue compilando con
 `CGO_ENABLED=0`.
 
-## S16 — `nu.proc` (api.md §6)
+## S16 — `enu.proc` (api.md §6)
 
 ### La causa del cuelgue del intento previo, y su arreglo (lo central de esta sesión)
 
 El intento previo de S16 escribió `proc.go`/`proc_test.go` correctos pero **se
-colgó corriendo los tests** y nunca commiteó. La causa NO estaba en `nu.proc` sino
+colgó corriendo los tests** y nunca commiteó. La causa NO estaba en `enu.proc` sino
 en una **grieta del desenrollado de cancelación de S08** que el idioma canónico de
-§6 (`spawn` + `nu.task.cleanup(function() p:kill() end)`) fue el primero en
+§6 (`spawn` + `enu.task.cleanup(function() p:kill() end)`) fue el primero en
 destapar.
 
 El mecanismo: un `cleanup` casi siempre **captura un local de la task por upvalue**
@@ -993,7 +993,7 @@ imprime el literal `$HOME`. Quien quiera shell la pone explícita
 
 ### Modelo de vida del proceso (la lógica 🔒, §6)
 
-La vía **principal** es matarlo por `nu.task.cleanup` en quien lo crea: al terminar
+La vía **principal** es matarlo por `enu.task.cleanup` en quien lo crea: al terminar
 la task —éxito, error o cancelación (S08)— el proceso muere con ella. Dos **redes
 de seguridad**, no la vía principal: (1) el **finalizer del GC**
 (`runtime.SetFinalizer`) mata un `Proc` que se quedó sin referencias en Lua —**no
@@ -1029,7 +1029,7 @@ escritura; `close_stdin` lo cierra a mano, señalando EOF).
 
 ### `alive` (G17): existencia, no identidad
 
-`nu.proc.alive(pid)` usa la "señal 0" (`kill(pid, 0)`): sin error o `EPERM` (existe
+`enu.proc.alive(pid)` usa la "señal 0" (`kill(pid, 0)`): sin error o `EPERM` (existe
 pero de otro usuario) → vivo; `ESRCH` → muerto; `pid <= 0` → no vivo. Informa de
 **existencia, no de identidad**: un pid reciclado por el SO da `true` aunque sea
 otro proceso. Es deliberado —para detectar locks de sesión huérfanos (sesiones.md
@@ -1039,12 +1039,12 @@ lock (hostname, §7), no esta llamada—. No es ⏸ (consulta inmediata).
 ### `run`: el código de salida es dato, no error
 
 Un `code != 0` **no lanza** (un `grep` sin coincidencias sale con 1 y eso es
-información, como el `status` de `nu.http`). Lo que sí lanza: arranque fallido
+información, como el `status` de `enu.http`). Lo que sí lanza: arranque fallido
 (`ENOENT`/`EACCES`/`EIO`) o `timeout_ms` excedido (mata con SIGKILL, **drena** el
 `Wait` del proceso muerto para no fugar su goroutine/pipes, y lanza `ETIMEOUT`).
 `env` presente (aunque vacío) **reemplaza** el entorno heredado; ausente lo hereda.
 
-## S17 — `nu.sys` (api.md §7)
+## S17 — `enu.sys` (api.md §7)
 
 Entorno y reloj. Wrappers finos sobre la stdlib (`platform`/`now_ms`/`mono_ms`/
 `hostname`); la única lógica propia es el **overlay de `setenv`** y su precedencia
@@ -1057,13 +1057,13 @@ Nada de `os.Setenv`: mutar el entorno global del proceso es un efecto compartido
 que (a) rompería el aislamiento por tarea (ADR-008) —se vería desde TODO el
 código, no solo desde quien lo pidió— y (b) contradiría el contrato ("afecta solo
 a subprocesos futuros"). En su lugar, `setenv` escribe en un **overlay** del
-Runtime (`sysState.envOver map[string]string`) que `nu.proc` aplica al construir
+Runtime (`sysState.envOver map[string]string`) que `enu.proc` aplica al construir
 el entorno del hijo. El criterio de hecho ("`setenv` se ve en un subproceso
 lanzado después, no en el actual") se cumple por construcción: el `enu` actual
 nunca cambia su entorno; lo único que ve la variable es el hijo.
 
 **Candado, no token, para el overlay.** `setenv` escribe el mapa en el estado
-principal bajo el token, pero lo **leen las goroutines de fondo de `nu.proc`**
+principal bajo el token, pero lo **leen las goroutines de fondo de `enu.proc`**
 (que montan el entorno del hijo SIN el token, fuera del puente ⏸). Por eso el
 overlay lleva su propio `sync.Mutex` —es lo que evita la data race que `-race`
 cazaría—, no el token. Para no compartir el mapa vivo con esas goroutines,
@@ -1123,7 +1123,7 @@ ausencia de shell de S16). El "no en el actual" se comprueba en Go con
 como pide la política para glue sobre la stdlib. `CGO_ENABLED=1 go test -race
 -timeout 120s -count=2 ./internal/...` verde.
 
-## S18 — codecs `nu.json` / `nu.toml` / `nu.yaml` (api.md §12)
+## S18 — codecs `enu.json` / `enu.toml` / `enu.yaml` (api.md §12)
 
 Tres pares `encode`/`decode` (`codecs.go`), **ninguno ⏸** (CPU puro: parsean o
 serializan un string ya en memoria, no hay IO que esperar) y todos **[W]** (§16;
@@ -1170,7 +1170,7 @@ las claves de objeto** (un string-clave inválido rompe el documento igual). Val
 para los tres formatos al codificar. También se rechaza un número no finito
 (NaN/Inf), sin representación en JSON/TOML/YAML.
 
-### Sentinel `nu.json.NULL` — la otra mitad 🔒
+### Sentinel `enu.json.NULL` — la otra mitad 🔒
 
 Un **userdata único** por Runtime (`rt.jsonNull`, creado una vez en
 `registerCodecs`), reconocido por **identidad**. `decode` entrega el sentinel en
@@ -1201,9 +1201,9 @@ el sentinel evita.
 ### CP-4 — adaptación `search.files` → `fs.list` (cierra Fase 3)
 
 El texto de CP-4 ("una herramienta de verdad, solo con primitivas") menciona
-`nu.search.files` para recorrer el repo, pero **esa primitiva es S27 (Fase 5) y
+`enu.search.files` para recorrer el repo, pero **esa primitiva es S27 (Fase 5) y
 aún no existe**. Se sustituye por un **recorrido recursivo en Lua sobre
-`nu.fs.list`** (disponible desde S14): enumerar el directorio + recurrir por los
+`enu.fs.list`** (disponible desde S14): enumerar el directorio + recurrir por los
 subdirectorios (saltando `.git`, como haría el filtrado gitignore de
 `search.files`). Es la sustitución más fiel —el mismo trabajo (enumerar el árbol)
 con la primitiva que SÍ existe en la Fase 3—; `search.files` (recursión +
@@ -1220,7 +1220,7 @@ G##**. Si `git` no está, el test se salta (lo necesita para `git status`).
 
 UTF-8 estricto G11 (byte 0xff suelto, anidado, y como clave de objeto → `EINVAL`;
 ASCII+multibyte+emoji round-trip exacto); sentinel NULL ida y vuelta (clave `a`
-presente como `nu.json.NULL` distinta de nil, iterada con `pairs`; `encode` →
+presente como `enu.json.NULL` distinta de nil, iterada con `pairs`; `encode` →
 `"a":null`; round-trip; contraste con `nil` que pierde la clave); array vs objeto
 y tabla vacía → `{}`; `pretty` indenta y es JSON válido; `decode` inválido →
 `EINVAL`; `toml.decode` de un `plugin.toml` real (name/version/requires) +
@@ -1233,11 +1233,11 @@ round-trip del sentinel NULL, `pretty` y el UTF-8 estricto (G11 → `EINVAL`).
 
 **Sin hallazgos:** §12 bastó tal cual. **CP-4 verde → Fase 3 cerrada.**
 
-## S19 — `nu.http.request` (api.md §8)
+## S19 — `enu.http.request` (api.md §8)
 
-Primera sesión de la **Fase 4 (Red)**. Implementa **solo** `nu.http.request(opts)
+Primera sesión de la **Fase 4 (Red)**. Implementa **solo** `enu.http.request(opts)
 -> {status, headers, body}` ⏸ (§8): una petición HTTP **buffereada** sobre el
-puente `suspend` de S04 (ADR-011), el mismo patrón que `nu.fs`/`nu.proc` —el IO
+puente `suspend` de S04 (ADR-011), el mismo patrón que `enu.fs`/`enu.proc` —el IO
 (la petición) va en la goroutine de fondo, que **jamás toca Lua**; la respuesta o
 el error cruzan a Lua solo en la `deliverFn`, bajo el token recuperado—. `stream`
 (S20) y `ws` (S21) se quedan fuera a propósito. APILevel sigue en 1 (§8 ya estaba
@@ -1276,10 +1276,10 @@ del sistema** (parte de `x509.SystemCertPool` y le añade el PEM —"añadir una
 no reemplazar la confianza—); `insecure=true` desactiva la verificación (entornos
 de prueba, expuesto a sabiendas). `opts.proxy` fija un proxy por petición; sin él,
 `http.ProxyFromEnvironment` respeta `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` del
-entorno. **Defaults globales en `[net]` de `nu.toml`** (`ca_file`, `proxy`),
+entorno. **Defaults globales en `[net]` de `enu.toml`** (`ca_file`, `proxy`),
 sobreescribibles por petición —la precedencia es: opción de la petición > `[net]` >
 entorno/sistema—. La config `[net]` se lee en `New` (config_toml.go) y se pasa a
-`httpState`; un `nu.toml` mal formado no la aplica (su error se aplaza a `Boot`,
+`httpState`; un `enu.toml` mal formado no la aplica (su error se aplaza a `Boot`,
 como el resto de la config).
 
 ### Headers de respuesta con valores múltiples → unir por ", "
@@ -1335,10 +1335,10 @@ parseo de `opts` y el mapeo `ENET`/`ETIMEOUT`.
 
 **Sin hallazgos:** §8 bastó. Puntero ▶ avanza a **S20**.
 
-## S20 — `nu.http.stream` + parser SSE (api.md §8, 🔒)
+## S20 — `enu.http.stream` + parser SSE (api.md §8, 🔒)
 
-`nu.http.stream` es la respuesta HTTP en **streaming**, la otra cara de
-`nu.http.request` (S19, buffereada). Devuelve un `Stream` **al recibir las
+`enu.http.stream` es la respuesta HTTP en **streaming**, la otra cara de
+`enu.http.request` (S19, buffereada). Devuelve un `Stream` **al recibir las
 cabeceras** (`Stream.status`/`Stream.headers`), **sin leer el body**; el cuerpo se
 itera trozo a trozo con `Stream:chunks()` (crudo) o `Stream:events()` (parser SSE
 incorporado, la lógica 🔒). `stream.go` (handle + iteradores + apertura) y `sse.go`
@@ -1399,7 +1399,7 @@ del usuario (fin normal, no error).
 `Stream:close()` cancela el contexto (desbloquea el `Read`), cierra el body, para
 el idle-timer y despierta a los consumidores (que ven `ECLOSED`). Es **idempotente**
 (`closeOnce`) y síncrono (no ⏸). El idioma de vida es el de §6:
-`nu.task.cleanup(function() st:close() end)` —al cancelar/terminar la task, el
+`enu.task.cleanup(function() st:close() end)` —al cancelar/terminar la task, el
 stream se cierra sin fuga de goroutines—. Como red de seguridad, `Runtime.Close`
 cierra todos los streams vivos (`stopAllStreams`, rastreo en `scheduler.streams`,
 gemelo de `procs`/`watchers`; un stream vivo **no** cuenta para la quiescencia).
@@ -1439,11 +1439,11 @@ confirma e2e: status=200 + evento partido en varios writes parseado como uno
 
 **Sin hallazgos:** §8 bastó. Puntero ▶ avanza a **S21**.
 
-## S21 — `nu.ws.connect` (api.md §8; cierra Fase 4 — Red, CP-5)
+## S21 — `enu.ws.connect` (api.md §8; cierra Fase 4 — Red, CP-5)
 
-Websockets: `nu.ws.connect(url, opts?) -> Ws` ⏸, `Ws:send(data)` ⏸,
+Websockets: `enu.ws.connect(url, opts?) -> Ws` ⏸, `Ws:send(data)` ⏸,
 `Ws:recv() -> string?` ⏸ (**`nil` al cerrar**), `Ws:close()` (`ws.go`). Es el
-complemento full-duplex de `nu.http.stream` (S20) y la última pieza de la Fase 4.
+complemento full-duplex de `enu.http.stream` (S20) y la última pieza de la Fase 4.
 
 ### La librería WebSocket: `github.com/coder/websocket`
 
@@ -1511,7 +1511,7 @@ sobre texto, ADR-005); `SetReadLimit(32 MiB)` acota un mensaje entrante gigante
 Idéntico al `Stream` de S20: `Ws:close()` es idempotente (`closeOnce`), marca
 `closed`, manda el frame de cierre normal (best-effort) y cancela el contexto
 (desbloquea cualquier IO colgado). El idioma de vida es
-`nu.task.cleanup(function() w:close() end)`; la red de seguridad es
+`enu.task.cleanup(function() w:close() end)`; la red de seguridad es
 `Runtime.Close` → `stopAllWs` (rastreo en `scheduler.ws`, gemelo de
 `scheduler.streams`). Un `Ws` vivo **no** cuenta para la quiescencia (la otra
 punta puede no cerrar nunca) y NO es un `ownedHandle` por dueño (su vida es la
@@ -1519,7 +1519,7 @@ del turno de IO, se ata con `cleanup`, no con `reload`).
 
 ### Tests (`ws_test.go`, herméticos; CP-5 en `cp5_test.go`)
 
-`nu.ws` NO está en el inventario 🔒 (es un wrapper sobre la lib + el puente ⏸),
+`enu.ws` NO está en el inventario 🔒 (es un wrapper sobre la lib + el puente ⏸),
 pero su lógica propia se blinda igual con servidores **locales**
 (`net/http/httptest` + `websocket.Accept`): eco round-trip (varios mensajes en
 orden), recv → nil tras cierre del servidor (y siguientes recv siguen dando nil),
@@ -1545,7 +1545,7 @@ S01–S20). Binario `enu -e` confirma e2e contra un servidor de eco local: `send
 **Sin hallazgos:** §8 bastó. **Fase 4 (Red) cerrada — CP-5 verde.** Puntero ▶
 avanza a **S22** (Fase 5 — Texto y búsqueda).
 
-## S22 — `nu.text` (width/wrap/truncate) + tipo `Block` + `nu.ui.block`/`caps`/`Style` (api.md §10, §9.2, 🔒)
+## S22 — `enu.text` (width/wrap/truncate) + tipo `Block` + `enu.ui.block`/`caps`/`Style` (api.md §10, §9.2, 🔒)
 
 Abre la **Fase 5 (Texto y búsqueda)**. Sesión fundacional: el tipo `Block` que se
 fija aquí es la moneda común que construyen y consumen S23 (markdown), S24
@@ -1571,7 +1571,7 @@ en `go.mod` tras `go mod tidy`. Alternativas descartadas: `go-runewidth`
 ### La ESTRUCTURA del tipo `Block` (crítica para S23–S29)
 
 Un **Block** es un **handle opaco** (`*lua.LUserData` con metatabla
-`nu.ui.Block`) cuyo `__index` solo expone `.width` y `.height` (números) a Lua;
+`enu.ui.Block`) cuyo `__index` solo expone `.width` y `.height` (números) a Lua;
 el contenido es interno (no se expone como tabla mutable: el Block es opaco,
 §9.2). Internamente (`block.go`):
 
@@ -1582,7 +1582,7 @@ el contenido es interno (no se expone como tabla mutable: el Block es opaco,
   **normalizados como string**: un literal `"#rrggbb"` (validado, a minúsculas) o
   el índice 0-255 como decimal-string (`"42"`). Guardar string (no un tipo color
   resuelto) preserva la intención literal hasta que el compositor (S29) lo degrade
-  a `nu.ui.caps().colors` —el render decide, no el Block (§9.2, G22)—.
+  a `enu.ui.caps().colors` —el render decide, no el Block (§9.2, G22)—.
 - `type block struct { lines [][]span; width, height int }` — una rebanada de
   líneas, cada línea una rebanada de spans. `width` = **máximo ancho de línea en
   celdas** (vía `uniseg.StringWidth`), `height` = nº de líneas. Ambos se calculan
@@ -1598,7 +1598,7 @@ spans deja a S25/S23 construir líneas concatenando tramos sin pensar en celdas,
 mantiene "blit = copia, nunca re-render" (§9.1). Helpers que S23–S29 reusan:
 `newBlock(lines)`, `pushBlock`, `checkBlock(L, idx)`, `lineWidth(spans)`.
 
-### `nu.text.width/wrap/truncate` — CPU puro, [W], **ninguna ⏸**
+### `enu.text.width/wrap/truncate` — CPU puro, [W], **ninguna ⏸**
 
 `text` es [W] (§16) pero **ninguna suspende**: miden/reordenan un string ya en
 memoria, no esperan IO (como los codecs de S18). Por eso NO usan el puente
@@ -1621,29 +1621,29 @@ con S34)—. [W] = "disponible en workers", no "suspende".
   sin elipsis (mejor texto a secas que nada). `width == 0` → "". `width < 0` →
   `EINVAL`.
 
-### `nu.ui.block`/`caps`/`Style` y la NOTA DE FRONTERA (G20 es S32)
+### `enu.ui.block`/`caps`/`Style` y la NOTA DE FRONTERA (G20 es S32)
 
-El contrato dice que sin TTY `nu.ui` **no existe** (G20). Pero ese gating es S32,
-y S23–S31 necesitan `nu.ui.block`/`caps`/`Style` **ya** para construir e
+El contrato dice que sin TTY `enu.ui` **no existe** (G20). Pero ese gating es S32,
+y S23–S31 necesitan `enu.ui.block`/`caps`/`Style` **ya** para construir e
 inspeccionar Blocks en sus tests (markdown/highlight/diff producen Blocks; el
-theme resuelve `Style`). Decisión: en S22 `nu.ui` se cuelga **siempre** (también
+theme resuelve `Style`). Decisión: en S22 `enu.ui` se cuelga **siempre** (también
 headless) con solo `block`/`caps`; S32 añadirá la condición de TTY por encima sin
-tocar estas firmas. `nu.has("ui")` sigue en **false** hasta S32 (no se afirma una
+tocar estas firmas. `enu.has("ui")` sigue en **false** hasta S32 (no se afirma una
 capacidad que aún no se concede). Es deuda explícita, no contradicción de G20.
 
-- `nu.ui.block(lines)` → Block. Cada línea es un **string** (un span sin estilo)
+- `enu.ui.block(lines)` → Block. Cada línea es un **string** (un span sin estilo)
   o un **array de Spans** `{text, style?}`. Calcula `.width`/`.height` al
   construir. Una línea vacía `""` conserva su hueco (afecta a `.height`).
 - `Style` (`parseStyle`/`normalizeColor`): colores **literales** —`"#rrggbb"` (6
   hex) o índice 0-255 (número o string numérica)—; un **nombre semántico**
   (`"accent"`) o un hex mal formado o un índice fuera de rango → `EINVAL` (los
   nombres son vocabulario del theme, G22).
-- `nu.ui.caps()` → `{colors, kitty_keyboard, mouse, images}`. Sin terminal vivo
+- `enu.ui.caps()` → `{colors, kitty_keyboard, mouse, images}`. Sin terminal vivo
   que interrogar (eso es Fase 6), `colors` se estima por entorno
   (`COLORTERM=truecolor` → 16M; `TERM` con "256color" → 256; `TERM` vacío
   headless → 256 default razonable; `dumb` → 0; resto → 16) y los protocolos
   (kitty_keyboard/mouse/images) quedan en `false` (deny-by-default hasta la
-  negociación de Fase 6, como `nu.has`).
+  negociación de Fase 6, como `enu.has`).
 
 ### Tests 🔒 y verificación
 
@@ -1671,15 +1671,15 @@ wrap (height/width), truncate con elipsis, ui.block (width 6/height 2), caps, y
 G22 (`fg="accent"` → EINVAL).
 
 **Sin hallazgos:** §10 y §9.2 bastaron. Puntero ▶ avanza a **S23**
-(`nu.text.markdown`, 🔒).
+(`enu.text.markdown`, 🔒).
 
-## S23 — `nu.text.markdown` (render completo, streaming-safe, themable) (api.md §10, 🔒)
+## S23 — `enu.text.markdown` (render completo, streaming-safe, themable) (api.md §10, 🔒)
 
-`nu.text.markdown(s, opts) -> Block` renderiza markdown completo a un `Block` de
+`enu.text.markdown(s, opts) -> Block` renderiza markdown completo a un `Block` de
 ancho `opts.width`. Es **[W] pero NINGUNA ⏸** (CPU puro, como `width`/`wrap`/
 `truncate` de S22 y los codecs de S18: parsea un string ya en memoria, no espera
 IO; por eso no usa `suspend` ni `requireTask`). Vive en `markdown.go`; se cuelga
-desde `registerText` (text.go) para mantener todo `nu.text` en un sitio.
+desde `registerText` (text.go) para mantener todo `enu.text` en un sitio.
 
 ### Librería: goldmark (puro-Go, CommonMark)
 
@@ -1775,7 +1775,7 @@ por-token).
 ### Punto de extensión para S24 (highlight)
 
 `renderCodeBlock` aplica hoy UN span (`theme.code`) por línea de código y ya
-extrae `lang` con `languageOf`. S24 (`nu.text.highlight`) sustituirá ese span
+extrae `lang` con `languageOf`. S24 (`enu.text.highlight`) sustituirá ese span
 plano por N spans coloreados por token según el lexer del lenguaje, manteniendo
 el MISMO armazón (una entrada por línea del código) — por eso `lang` se pasa ya a
 `renderCodeBlock` aunque hoy se ignore.
@@ -1800,15 +1800,15 @@ width no-número), no-suspende fuera de task.
 S01–S22). Binario `enu -e` confirma e2e: doc completo (height 5, width 23), fence
 incompleto (height 1), theme `fg="accent"` → rechazado (G22).
 
-**Sin hallazgos:** §10 bastó. Puntero ▶ avanza a **S24** (`nu.text.highlight`,
+**Sin hallazgos:** §10 bastó. Puntero ▶ avanza a **S24** (`enu.text.highlight`,
 🔒).
 
-## S24 — `nu.text.highlight` (syntax highlighting, degrada a texto plano) (api.md §10)
+## S24 — `enu.text.highlight` (syntax highlighting, degrada a texto plano) (api.md §10)
 
-`nu.text.highlight(code, lang, opts?) -> Block` resalta un snippet a un `Block`
+`enu.text.highlight(code, lang, opts?) -> Block` resalta un snippet a un `Block`
 con un span por tramo coloreado según su tipo de token. **[W] pero NINGUNA ⏸**
 (CPU puro como S22/S23/S18: tokeniza un string ya en memoria, no espera IO; ni
-`suspend` ni `requireTask`). Vive en `highlight.go` y se cuelga de `nu.text`
+`suspend` ni `requireTask`). Vive en `highlight.go` y se cuelga de `enu.text`
 junto a `width`/`wrap`/`truncate`/`markdown`. Ni una función pública de más.
 
 ### Librería: chroma, y la decisión de versión
@@ -1820,7 +1820,7 @@ encaja con "Lua decide, Go ejecuta" (ADR-004): el léxico pesado va en Go.
 
 **Desviación deliberada — se pinea v2.14.0, no la última (v2.27.0).** La última
 de chroma declara `go >= 1.25` en su `go.mod`; añadirla **subiría la versión `go`
-del módulo `nu` de 1.24.7 a 1.25** (un cambio de toolchain de todo el proyecto,
+del módulo `enu` de 1.24.7 a 1.25** (un cambio de toolchain de todo el proyecto,
 no una decisión que toque a S24). v2.14.0 mantiene `go 1.24.7` intacto y trae los
 mismos lexers/themes necesarios. Trae `github.com/dlclark/regexp2` como dep
 transitiva (puro-Go, `CGO_ENABLED=0` intacto). Si el módulo sube a Go ≥ 1.25 por
@@ -1868,7 +1868,7 @@ literales coherentes con G22. La firma §10 es `highlight(code, lang, opts?)`;
 
 S23 dejó `renderCodeBlock` como "punto de extensión" para que S24 sustituyera su
 span plano por N spans coloreados. **Esa integración se deja para después**: S24
-implementa `nu.text.highlight` standalone y NO modifica `markdown.go`, para no
+implementa `enu.text.highlight` standalone y NO modifica `markdown.go`, para no
 arriesgar el invariante de estabilidad (streaming-safe) de S23. La integración
 highlight-dentro-de-markdown es trabajo futuro reabrible (un `opts.highlight` o
 similar en `markdown`), fuera del alcance de §10 de `highlight`.
@@ -1890,11 +1890,11 @@ text_test.go): Go height/estilo, desconocido→plano, `.height` legible, sin-opt
 S01–S23). Binario `enu -e` confirma e2e: go (height 3), desconocido → plano
 (height 2), `opts.theme` no-string → `EINVAL`.
 
-**Sin hallazgos:** §10 bastó. Puntero ▶ avanza a **S25** (`nu.text.diff`).
+**Sin hallazgos:** §10 bastó. Puntero ▶ avanza a **S25** (`enu.text.diff`).
 
-## S25 — `nu.text.diff` (hunks estructurados + render a Block) (api.md §10, 🔒)
+## S25 — `enu.text.diff` (hunks estructurados + render a Block) (api.md §10, 🔒)
 
-`nu.text.diff(a, b, opts?) -> {hunks, block?}` compara `a` (viejo) y `b`
+`enu.text.diff(a, b, opts?) -> {hunks, block?}` compara `a` (viejo) y `b`
 (nuevo) **línea a línea** y devuelve sus hunks (regiones de cambio) y,
 opcionalmente, un `Block` pintado. **[W] pero NINGUNA ⏸** (CPU puro, como
 `width`/`wrap`/`markdown`/`highlight` de S22–S24 y los codecs de S18): no usa el
@@ -2002,11 +2002,11 @@ contexto = 5 → 1 hunk, = 6 → 1 hunk (el que fallaba, con rangos old/new 1,8
 comprobados), = 7 → 2 hunks; coherente con `diff -U3`.
 
 **Sin hallazgos:** §10 bastó (`diff(a, b, opts?)` se implementó tal cual; `opts`
-usa `render?`/`theme?`). Puntero ▶ avanza a **S26** (`nu.re`).
+usa `render?`/`theme?`). Puntero ▶ avanza a **S26** (`enu.re`).
 
-## S26 — `nu.re` (RE2: compile/match/find_all/replace)
+## S26 — `enu.re` (RE2: compile/match/find_all/replace)
 
-`nu.re` implementa la fila de §10 (`nu.re.compile(pattern) -> Re` + el handle
+`enu.re` implementa la fila de §10 (`enu.re.compile(pattern) -> Re` + el handle
 `Re` con `match`/`find_all`/`replace`) sobre el `regexp` de la stdlib de Go,
 que **es RE2**. Tres decisiones de diseño propias —la forma de las capturas,
 las unidades de los rangos y la sintaxis de `repl`— y una observación sobre la
@@ -2026,7 +2026,7 @@ escape inválida), no un fallo silencioso. **Cero dependencias nuevas**
 concurrente** (lo garantiza su doc), así que un mismo `Re` se casa desde varias
 tasks sin candado (encaja con el modelo de concurrencia del navegador,
 ADR-004). Es **[W] pero NINGUNA ⏸** (CPU puro: compila/casa un string en
-memoria, sin IO; como `nu.text` y los codecs de S18): ni `suspend` ni
+memoria, sin IO; como `enu.text` y los codecs de S18): ni `suspend` ni
 `requireTask`.
 
 ### Decisión: forma de `caps` en `Re:match` — array 1-based + grupos con nombre
@@ -2112,9 +2112,9 @@ nombrado, no-match→nil, find_all que reconstruye por `s:sub`, replace
 `${b}-${a}`, backreference→`EINVAL`.
 
 **Sin hallazgos:** §10 bastó (`compile`/`match`/`find_all`/`replace` se
-implementaron tal cual). Puntero ▶ avanza a **S27** (`nu.search.files`).
+implementaron tal cual). Puntero ▶ avanza a **S27** (`enu.search.files`).
 
-## S27 — `nu.search` (files/grep/fuzzy) (api.md §11, 🔒; cierra Fase 5 — CP-6)
+## S27 — `enu.search` (files/grep/fuzzy) (api.md §11, 🔒; cierra Fase 5 — CP-6)
 
 Búsqueda a escala de repo: las tres primitivas de §11 en `search.go`. **[W]**
 (§16; hoy estado principal, workers S34). **Ni una función pública de más**
@@ -2166,7 +2166,7 @@ El patrón es el del iterador de stream (S20) generalizado a N productores:
 - **EOF:** una goroutine cerradora hace `wg.Wait()` (todos los workers
   terminaron) y `close(results)`; el `next` distingue "fin" (`ok=false`) de
   "siguiente match".
-- **Cancelación (S08):** al crear el iterador se registra un `nu.task.cleanup`
+- **Cancelación (S08):** al crear el iterador se registra un `enu.task.cleanup`
   (`registerGrepCleanup`, manipula la pila LIFO de la task bajo el token) que
   cierra el `context`. Cancelar/terminar la task → repartidor y workers paran
   (`ctx.Done`) y la cerradora cierra `results`, desbloqueando un `next` colgado.
@@ -2176,7 +2176,7 @@ El patrón es el del iterador de stream (S20) generalizado a N productores:
   (`closeOnce`).
 - **`ranges` coherentes con S26:** byte 1-based inclusive (`FindAllStringIndex`
   +1 en el inicio, fin tal cual), de modo que `line:sub(start,end)` reconstruye
-  el match — el mismo convenio que `nu.re.find_all`.
+  el match — el mismo convenio que `enu.re.find_all`.
 - **`opts.root` OBLIGATORIO** (¿dónde buscar?); `case` por string
   `"sensitive"|"insensitive"` (insensitive antepone `(?i)` a la regex). Ficheros
   ilegibles/binarios se saltan en silencio (como `grep -r`).
@@ -2190,7 +2190,7 @@ no el orden.
 ### `fuzzy` — síncrono, scorer propio, orden estable
 
 **NO ⏸** (la primitiva caliente del picker, §11): CPU puro sobre datos en memoria,
-como `nu.re`/codecs — no usa el puente `suspend`. `fuzzyScore`: subsecuencia
+como `enu.re`/codecs — no usa el puente `suspend`. `fuzzyScore`: subsecuencia
 case-insensitive con base por carácter + bonus de contigüidad + bonus de inicio de
 palabra (tras separador `/\_-. ` o cambio minúscula→mayúscula camelCase) + bonus
 de primer carácter. `query` vacío casa todo (score 0: picker recién abierto).
@@ -2228,7 +2228,7 @@ aquí van las decisiones de diseño del spike que no son de espec.
 ### Alcance: interno y desechable, NO la API pública §9
 
 El spike construye una versión **mínima e interna** de lo que S29 expondrá como
-`nu.ui` (celdas, regiones, blit, diff→ANSI), pero **no se cuelga del global
+`enu.ui` (celdas, regiones, blit, diff→ANSI), pero **no se cuelga del global
 `enu`**: vive en `internal/runtime/spike_compositor.go` (la primitiva) y
 `spike_shim.go` (el puente a Lua, registrado solo desde los tests vía
 `registerSpikeShim`, NUNCA desde `registerNu`). Así el veto se mide sin congelar
@@ -2305,7 +2305,7 @@ frame. Toolkit en Lua (S42); Fase 8 sin reordenar; ADR-007 → Aceptada.
 roza/supera el presupuesto, pero el outlier es la pulsación de **1 carácter**
 (casa ~todos los 100k) y el coste vive en `fuzzyScore` (primitiva Go que recorre
 100k), **no** en el cruce a Lua. Si en producción molesta, el arreglo es de
-`nu.search.fuzzy` (paralelizar el scoring, o umbral de longitud mínima de query
+`enu.search.fuzzy` (paralelizar el scoring, o umbral de longitud mínima de query
 en el toolkit), no de la arquitectura de UI. Se anota en ADR-012 como nota de
 optimización futura.
 
@@ -2318,13 +2318,13 @@ veredicto) + 3 benchmarks. `CGO_ENABLED=0 go build`/`go vet`/`gofmt -l` limpios;
 `CGO_ENABLED=1 go test -race -timeout 120s ./internal/...` verde (no regresiona
 S01–S27). **APILevel sigue en 1.** Puntero ▶ avanza a **S29** (compositor real).
 
-## S29 — `nu.ui` compositor real (§9.1)
+## S29 — `enu.ui` compositor real (§9.1)
 
 - **Modelo de composición (una rejilla por región).** El compositor mantiene una rejilla de pantalla (back/front para el diff) y una lista de regiones; cada región tiene **su propia rejilla** de su tamaño lógico. `blit`/`fill`/`clear` escriben en la rejilla de la región (persisten entre frames, como una ventana). Cada pintado compone apilando las regiones por z-order sobre la rejilla de pantalla, recortando cada una al rectángulo visible. Separar contenido (rejilla de región) de presentación (composite) hace G1 y G28 triviales y correctas por construcción.
 - **G1 (resize):** región fuera de pantalla no se toca; el composite la recorta; reaparece al crecer la pantalla (coords y rejilla intactas).
 - **G28 (blit = copia, nunca re-render):** `blit` copia la ventana visible del Block (offset negativo recorta el inicio, exceso el final); otro offset = otra copia; nunca reconstruye el Block (scroll barato).
 - **Coalescing:** los cambios se acumulan y se pintan como mucho cada ~30 ms (sin flush manual); el diff por runs emite solo lo cambiado; un frame idéntico emite 0 bytes. En headless/test se expone una vía interna (no pública) para forzar/inspeccionar el frame compuesto.
-- **`size()` headless:** con TTY real se lee del terminal; sin TTY un default inyectable para los tests (el gating de "nu.ui no existe sin TTY", G20, es S32).
+- **`size()` headless:** con TTY real se lee del terminal; sin TTY un default inyectable para los tests (el gating de "enu.ui no existe sin TTY", G20, es S32).
 - **Spike de S28 eliminado:** `spike_compositor.go`/`spike_shim.go`/`spike_*_test.go` borrados; el modelo se promovió a `compositor.go` de producción. ADR-012 conserva las mediciones del veto.
 - **Solo estado principal (ADR-008):** todas las mutaciones bajo el token Lua; sin candado propio. `Region` es `ownedHandle` (reload S13 la destruye).
 - **Frontera:** S30 (ciclo de vida de Region), S31 (input), S32 (gating headless G20) NO adelantados. api.md intacto (APILevel 1).
@@ -2334,7 +2334,7 @@ S01–S27). **APILevel sigue en 1.** Puntero ▶ avanza a **S29** (compositor re
 
 Sesión sin desviaciones de la espec: §9.1 bastó para las ocho firmas, que se
 implementaron exactas sobre el `uiRegion`/`compositor` de S29 (no se amplió api.md,
-`nu.version.api` sigue en 1; **sin hallazgos `G##`**). Decisiones de modelado
+`enu.version.api` sigue en 1; **sin hallazgos `G##`**). Decisiones de modelado
 (donde §9.1 deja libertad) y su porqué:
 
 - **raise/lower por reasignación de `z`, no por reordenar una lista.** `raise()`
@@ -2351,7 +2351,7 @@ implementaron exactas sobre el `uiRegion`/`compositor` de S29 (no se amplió api
   intersección** (copiar la esquina (0,0) común al nuevo lienzo; lo que excede se
   descarta, lo nuevo es fondo) en vez de reiniciar el lienzo. Razón: coherencia con
   el modelo "la región es una ventana" de S29 —agrandar una ventana real no borra
-  lo que ya mostraba—. `w/h<0` → `EINVAL`, igual que `nu.ui.region`.
+  lo que ya mostraba—. `w/h<0` → `EINVAL`, igual que `enu.ui.region`.
 
 - **hide conserva lienzo y coordenadas; show la devuelve tal cual.** `hide` no
   destruye nada: conmuta un flag `visible` que `composite` consulta para saltarse la
@@ -2392,7 +2392,7 @@ implementaron exactas sobre el `uiRegion`/`compositor` de S29 (no se amplió api
   con `CGO_ENABLED=1 go test -race -timeout 120s -count=2 ./internal/...` (verde, sin
   data races, incluida la goroutine viva del painter `TestUIPainterLive`).
 
-## S31 — input (`nu.ui.on_input` / `keymap`) (api.md §9.3)
+## S31 — input (`enu.ui.on_input` / `keymap`) (api.md §9.3)
 
 Sesión 🔒 (pila de input + resolución de secuencias con timeout). Sin hallazgos
 `G##`: §9.3 bastó para implementar las dos firmas exactas; la lógica de
@@ -2411,8 +2411,8 @@ api.md (APILevel sigue en 1). Decisiones:
   (estado principal, bajo el token). El timeout es un timer de UN disparo nuevo
   (`oneShot` en `timers.go`): un `time.Timer` en Go puro cuya goroutine, al vencer,
   **toma el token** y ejecuta el callback —el mismo patrón que el painter de S29, que
-  ya toma el token para pintar—. No reusé `nu.task.every` (es periódico y su `fn` es
-  Lua) ni un `nu.fs` ⏸ (el despacho de input es síncrono, no una task): el callback
+  ya toma el token para pintar—. No reusé `enu.task.every` (es periódico y su `fn` es
+  Lua) ni un `enu.fs` ⏸ (el despacho de input es síncrono, no una task): el callback
   del timeout es Go puro y corre una vez. **El contador de generación (`pendingGen`)**
   es la pieza anti-carrera: un timer que ya disparó pero cuya secuencia se resolvió/
   re-armó antes de que tomara el token comprueba `pendingGen != gen` y no hace nada.
@@ -2437,11 +2437,11 @@ api.md (APILevel sigue en 1). Decisiones:
   timeout + G30) se blinda aquí con eventos inyectados.
 
 - **G30 (paste de imagen): volcado SÍNCRONO con write directo de Go.** §9.3/G30: un
-  paste de contenido no-texto se vuelca a `nu.fs.tmpdir` y se entrega como `paste` con
+  paste de contenido no-texto se vuelca a `enu.fs.tmpdir` y se entrega como `paste` con
   `path`, no `text`; los bytes nunca cruzan a Lua (coherente con G11). El evento de
   input llega de forma SÍNCRONA al despacho (bajo el token, NO en una task ⏸), así que
-  el volcado no puede ser un `nu.fs.write` ⏸. Lo resolví con `writePasteImage`: reusa
-  `fs.ensureTmpdir` (la maquinaria de `nu.fs.tmpdir`) y un `os.WriteFile` directo de
+  el volcado no puede ser un `enu.fs.write` ⏸. Lo resolví con `writePasteImage`: reusa
+  `fs.ensureTmpdir` (la maquinaria de `enu.fs.tmpdir`) y un `os.WriteFile` directo de
   Go (`paste-N.bin`, 0600). El coste es una escritura de unos KB/MB de una imagen
   pegada, despreciable frente a la latencia humana de pegar. Si el volcado falla, el
   evento se entrega como un paste inerte (sin `text` ni `path`) y queda constancia en
@@ -2456,17 +2456,17 @@ api.md (APILevel sigue en 1). Decisiones:
   el `oneShot` toma el token al disparar. Verificado con `CGO_ENABLED=1 go test -race
   -timeout 120s -count=2 ./internal/...` (verde, sin data races, sin flaky).
 
-## S32 — resto de `nu.ui`: clipboard OSC 52 + eventos `ui:*` + gating headless G20 (api.md §9.2, §9, §4, §2)
+## S32 — resto de `enu.ui`: clipboard OSC 52 + eventos `ui:*` + gating headless G20 (api.md §9.2, §9, §4, §2)
 
 ### GATING HEADLESS (G20, la decisión central)
 
-§9/G20: sin TTY interactivo (`enu -e`, CI, salida redirigida) el módulo `nu.ui`
-**directamente NO EXISTE**, y la detección es `nu.has("ui")` (nunca probar-y-capturar),
+§9/G20: sin TTY interactivo (`enu -e`, CI, salida redirigida) el módulo `enu.ui`
+**directamente NO EXISTE**, y la detección es `enu.has("ui")` (nunca probar-y-capturar),
 el mismo modelo que las caps de los workers ("la superficie no concedida no está").
 Lo implementé así:
 
 - **`registerUI` se llama solo si `rt.uiActive`** (en `registerNu`). En headless ni se
-  cuelga `nu.ui` del global ni se construye el compositor (`rt.ui = nil` vía
+  cuelga `enu.ui` del global ni se construye el compositor (`rt.ui = nil` vía
   `maybeUIState`); `armPainter`/`stopPainter`/`Close` ya toleraban `rt.ui == nil`.
 - **`uiActive` lo decide `New`:** `WithForceUI(active)` manda (precedencia, `forceUISet`);
   sin ella, `detectTTY()`. Así el binario `enu` (que llama `runtime.New()` sin Options)
@@ -2474,13 +2474,13 @@ Lo implementé así:
 - **`detectTTY()` exige stdout Y stdin TTY** (`golang.org/x/term.IsTerminal`): una UI a
   pantalla completa escribe el render (stdout) y lee teclas (stdin); si cualquiera está
   redirigida no hay superficie viable. `x/term` es puro-Go (sin CGO, ADR-001).
-- **`nu.has` pasa a per-runtime** (`rt.caps()`), no un mapa global: `"ui"` depende del
+- **`enu.has` pasa a per-runtime** (`rt.caps()`), no un mapa global: `"ui"` depende del
   runtime concreto (uiActive). `"ui.images"`/`"net.tcp"` siguen false (deny-by-default;
   el protocolo de imágenes lo negociará el driver de S33+).
 
 ### Activación forzada para test (NO romper S22–S31)
 
-Los tests corren headless (sin TTY), así que con el gating real `nu.ui` no existiría y
+Los tests corren headless (sin TTY), así que con el gating real `enu.ui` no existiría y
 toda la suite de UI de S22–S31 (block/region/input) fallaría. La vía: la Option
 **`WithForceUI(true)`**, que el arnés base (`newHarness`) y los harness de UI
 (`newHarnessUI`/`newHarnessBudget`) activan. Ajusté también las pocas pruebas que
@@ -2513,7 +2513,7 @@ runtime con `WithForceUI(false)` para observar el comportamiento headless).
 
 §4: el core emite `ui:resize`/`ui:focus`/`ui:suspend`/`ui:resume`; §9.1: cambios de
 tamaño → `ui:resize`. La FUENTE real (SIGWINCH, secuencias de foco, SIGTSTP) es el
-DRIVER de TTY (S33+, CP-7 manual). S32 cabla la EMISIÓN por `nu.events` y deja las vías:
+DRIVER de TTY (S33+, CP-7 manual). S32 cabla la EMISIÓN por `enu.events` y deja las vías:
 
 - **`resizeUI(w,h)`** redimensiona el compositor (recorta regiones, G1) y emite
   `ui:resize {w,h}` —**solo si el tamaño cambió** (no un evento espurio)—.
@@ -2531,9 +2531,9 @@ presente. `go mod tidy` coherente; `CGO_ENABLED=0 go build ./...` verde.
 
 ### Sin ampliar la API
 
-NO se tocó `api.md` ni `nu.version.api` (APILevel sigue en 1): las firmas
+NO se tocó `api.md` ni `enu.version.api` (APILevel sigue en 1): las firmas
 `clipboard_set`/`clipboard_get`, los eventos `ui:*` y el gating ya estaban
-especificados. `nu.has` per-runtime es implementación, no cambia la firma `nu.has(cap)
+especificados. `enu.has` per-runtime es implementación, no cambia la firma `enu.has(cap)
 -> boolean`. Sin hallazgos `G##`. `CGO_ENABLED=1 go test -race -timeout 120s -count=2
 ./internal/...` verde, sin data races.
 
@@ -2541,7 +2541,7 @@ especificados. `nu.has` per-runtime es implementación, no cambia la firma `nu.h
 
 Cuando enu arranca con un TTY interactivo y NINGÚN plugin activo, el kernel pinta —ANTES
 de correr Lua de producto— una pantalla FIJA hecha solo de sus capacidades: versión +
-nivel de API (`nu.version`), rutas de config y de plugins (`config.dir`, `pluginDirs`),
+nivel de API (`enu.version`), rutas de config y de plugins (`config.dir`, `pluginDirs`),
 catálogo de extensiones embebidas DISPONIBLES (`embeddedNames`, embed.go) y las acciones
 (activar el conjunto oficial / activar sueltas / salir). Render FIJO (Block sobre el
 compositor de S29), pre-Lua, sin widgets ni lógica de producto (filosofía §2: el kernel
@@ -2562,9 +2562,9 @@ cargando plugins + init del usuario + `core:ready`): la pantalla es una decisió
 binario, que es donde vive el TTY. Sin TTY (`enu` sin `-e` en CI) → `BareScreenActive`
 es false → se imprime el uso (arranca desnudo), confirmado con el binario.
 
-### Acciones: activar → escribir nu.toml → continuar Boot (sin red)
+### Acciones: activar → escribir enu.toml → continuar Boot (sin red)
 
-`activateAndBoot(names)` escribe `names` en `plugins.enabled` de `config.dir()/nu.toml`,
+`activateAndBoot(names)` escribe `names` en `plugins.enabled` de `config.dir()/enu.toml`,
 relee la config en el loader, resetea `booted` y llama a **`rt.Boot()`** (no `ldr.Boot()`,
 para armar también el painter del compositor: tras activar, la UI de las extensiones debe
 repintarse). `ActivateOfficial()` = `activateAndBoot(embeddedNames())`; activar suelta =
@@ -2572,13 +2572,13 @@ repintarse). `ActivateOfficial()` = `activateAndBoot(embeddedNames())`; activar 
 reusa `extractEmbedded`/`discover` de S12). La elección con el TECLADO la cablea el driver
 de TTY (S33+/CP-7 manual); la lógica queda invocable por una vía interna testeable.
 
-### Escritura de nu.toml: preservar el resto del fichero, atómica
+### Escritura de enu.toml: preservar el resto del fichero, atómica
 
-`writeEnabledPlugins` lee el `nu.toml` existente a un **`map[string]any`** genérico (NO a
+`writeEnabledPlugins` lee el `enu.toml` existente a un **`map[string]any`** genérico (NO a
 `runtimeConfig`, que perdería las claves que el core ignora por forward-compat), fija
 `plugins.enabled` conservando el resto de `[plugins]` y de las demás secciones/claves
 desconocidas, y reescribe TODO con BurntSushi de forma **atómica** reusando `writeAtomic`
-de S14 (temporal en el mismo dir + `rename`: no deja un `nu.toml` a medias). Un `nu.toml`
+de S14 (temporal en el mismo dir + `rename`: no deja un `enu.toml` a medias). Un `enu.toml`
 MAL FORMADO **no se sobrescribe a ciegas** (perdería config del usuario): devuelve `EINVAL`
 accionable y deja el fichero intacto. Un fichero ausente se crea (primer arranque); el
 `config.dir` se crea si falta.
@@ -2596,27 +2596,27 @@ por tests automáticos (`bare_screen_test.go`):
 - **Contenido / render FIJO a buffer**: el modelo y la **rejilla del compositor** (`back`)
   contienen versión+API, rutas (config y dir de plugins), el catálogo de embebidas
   (`example`) y las acciones; el frame ANSI emitido no es vacío.
-- **Activar conjunto oficial → nu.toml → Boot**: escribe `plugins.enabled` con el catálogo,
+- **Activar conjunto oficial → enu.toml → Boot**: escribe `plugins.enabled` con el catálogo,
   y el Boot que continúa carga la embebida con `source="builtin"` y corre su init (sin red).
 - **Activar suelta** (`example`): escribe solo esa.
 - **Preservar config**: escribir `enabled` conserva `dirs`, `watchdog` y claves/secciones
-  ajenas; el resultado es un `nu.toml` válido.
-- **nu.toml mal formado** no se sobrescribe (EINVAL, fichero intacto).
+  ajenas; el resultado es un `enu.toml` válido.
+- **enu.toml mal formado** no se sobrescribe (EINVAL, fichero intacto).
 - **No regresión**: `enu -e` headless sigue funcionando; `enu` sin `-e` sin TTY imprime el uso.
 
 QUEDA PENDIENTE de un humano con TTY (CP-7 manual): la interacción de TECLADO para elegir
 una acción, el streaming visible token a token, y el resize/paste VISIBLES. El render de la
-pantalla, la condición y la cadena activar→nu.toml→Boot están automatizadas; el tablero
+pantalla, la condición y la cadena activar→enu.toml→Boot están automatizadas; el tablero
 marca `[x] Fase 6` con esta nota.
 
 `CGO_ENABLED=0 go build ./...` y `go vet ./...` verdes; `gofmt -l` limpio;
 `CGO_ENABLED=1 go test -race -timeout 120s -count=2 ./internal/...` verde, sin data races
 (no regresiona S01–S32).
 
-## S34 — `nu.worker.spawn` + caps (G6) + send/recv con colas acotadas (api.md §13, 🔒; abre Fase 7)
+## S34 — `enu.worker.spawn` + caps (G6) + send/recv con colas acotadas (api.md §13, 🔒; abre Fase 7)
 
 Primera sesión de la Fase 7 (Workers). Implementa el **paralelismo opt-in** (ADR-008):
-`nu.worker.spawn` levanta un estado Lua NUEVO y aislado en su propia goroutine, con su
+`enu.worker.spawn` levanta un estado Lua NUEVO y aislado en su propia goroutine, con su
 propio scheduler, comunicado con el padre por colas acotadas de mensajes JSON-ables
 copiados. El filtrado de `caps` (G6) y el backpressure de las colas son la lógica 🔒.
 
@@ -2630,13 +2630,13 @@ motor que el principal —estado Lua sandboxeado (`applySandbox`) + scheduler pr
 event loop**; el worker REUSA la maquinaria de S04 (token/`suspend`/`runTask`/`waitIdle`).
 El módulo del worker corre **como una task** (no como chunk sobre `host`): un chunk no
 podría suspender (`requireTask` exige `L != rt.L`), y el patrón natural del worker es un
-bucle de `nu.worker.parent.recv()` (⏸). Por eso `run` hace `s.spawn(require(module))` y
+bucle de `enu.worker.parent.recv()` (⏸). Por eso `run` hace `s.spawn(require(module))` y
 luego `waitIdle`. Un worker es headless siempre (`uiActive=false`, `ui=nil`): nada de
-`nu.ui`.
+`enu.ui`.
 
 ### El filtrado de caps (G6): deny-by-default, dos granularidades
 
-`registerWorkerNu` registra TODA la superficie [W] en el `nu` del worker reusando las
+`registerWorkerNu` registra TODA la superficie [W] en el `enu` del worker reusando las
 mismas `registerXxx` del principal (un solo punto de verdad), y DESPUÉS **poda el árbol**
 por `caps` (`pruneByCaps`). Registrar-y-podar es más simple y robusto que registrar función
 a función. Tres granularidades de decisión por módulo `M`:
@@ -2646,20 +2646,20 @@ a función. Tres granularidades de decisión por módulo `M`:
 - ni una ni otra → M eliminado (deny-by-default).
 
 Sin `caps` (`capsGiven=false`) → toda la API [W]. Con `caps={}` (vacío) → casi nada. Lo no
-concedido **NO EXISTE** (es `nil`), el mismo modelo que el gating de `nu.ui` (G20): no se
+concedido **NO EXISTE** (es `nil`), el mismo modelo que el gating de `enu.ui` (G20): no se
 "lanza EACCES", la superficie simplemente no está, así que un plugin no puede ni nombrarla.
 **Deny-by-default para superficie nueva**: una función añadida luego a un módulo NO queda
 concedida por una `caps` antigua de granularidad de función (solo lo enumerado sobrevive);
 `"M"` entero sí concede lo futuro de M, por diseño. NO son [W] (nunca llegan al worker):
-`nu.ui`, `nu.events`, `nu.fs.watch`, `nu.worker.spawn` (sin anidar) ni `nu.plugin` (§16).
-`nu.version`/`nu.has` y `nu.worker.parent` van SIEMPRE (no son superficie recortable: la
-detección de capacidades y el canal con el padre). `nu.config.dir`/`data_dir` son [W] (§14).
+`enu.ui`, `enu.events`, `enu.fs.watch`, `enu.worker.spawn` (sin anidar) ni `enu.plugin` (§16).
+`enu.version`/`enu.has` y `enu.worker.parent` van SIEMPRE (no son superficie recortable: la
+detección de capacidades y el canal con el padre). `enu.config.dir`/`data_dir` son [W] (§14).
 
 ### Las colas acotadas / backpressure (§13)
 
 Dos canales Go acotados (`workerQueueCap=16`) por worker: `toWorker` (padre→worker) y
 `fromWorker` (worker→padre), más un `done` que se cierra al terminar. `Worker:send` (padre)
-y `nu.worker.parent.send` (worker) son ⏸: encolan SUSPENDIENDO si la cola está llena
+y `enu.worker.parent.send` (worker) son ⏸: encolan SUSPENDIENDO si la cola está llena
 (backpressure, §13/§8) —el envío real ocurre FUERA del token, en la goroutine de fondo del
 puente `suspend`, así otra task del MISMO estado progresa mientras el send espera hueco—.
 A diferencia de los streams de §8 (que fallan con `EIO` al desbordar), el send del worker
@@ -2675,7 +2675,7 @@ que valida que sea JSON-able y rechaza closures/userdata/threads/Blocks con `EIN
 valor Go neutro (no un LValue) es lo único que cruza el canal entre goroutines; el receptor
 lo reconstruye con `goToLua` bajo SU token. Así una tabla se COPIA (mutarla tras enviarla no
 afecta al otro lado) y los dos estados Lua nunca comparten memoria. `useNull=false`: los
-mensajes son valores JSON-ables corrientes, no documentos JSON (el sentinel `nu.json.NULL`
+mensajes son valores JSON-ables corrientes, no documentos JSON (el sentinel `enu.json.NULL`
 es userdata por-estado y no podría cruzar de todas formas). De aquí sale "cero data races"
 con DOS schedulers: cada `*lua.LState` solo lo toca su goroutine bajo su token; el cruce es
 copia + happens-before por canal.
@@ -2684,7 +2684,7 @@ copia + happens-before por canal.
 
 `Worker:terminate()` debe ser **inmediato y seguro** (§13). El primer corte de S34 solo
 cerraba `done`, que únicamente observan `send`/`recv` en las colas: una task del worker
-suspendida en `nu.task.sleep`/`http`/`proc`/`await`/... NO se despertaba, así que
+suspendida en `enu.task.sleep`/`http`/`proc`/`await`/... NO se despertaba, así que
 `driveUntilDone`→`waitIdle` bloqueaba hasta la quiescencia y un `sleep(60000)` colgaba ~60 s.
 Resultado: tras `terminate()`+`Close()` la goroutine del worker seguía viva (FUGA); como el
 worker comparte el `log`/`data_dir` del padre y su `Close` no cierra el log (`isWorker`), la
@@ -2752,7 +2752,7 @@ api.md). Sin hallazgos `G##`: la división Go/Lua y el puente `suspend` de S04 d
 - validación de args (`TestWorkerSpawnValidation`), `requireTask` (`TestWorkerSendRecvRequireTask`),
   `recv` tras `terminate` → `nil` (`TestWorkerRecvAfterTerminate`).
 - **`terminate` inmediato y sin fuga (review)** (`TestWorkerTerminateInterruptsSleep`): un worker
-  suspendido en `nu.task.sleep(60000)` es cortado al acto por `terminate()` —`terminate`+`Close`
+  suspendido en `enu.task.sleep(60000)` es cortado al acto por `terminate()` —`terminate`+`Close`
   completan MUY por debajo del sleep— y `runtime.NumGoroutine()` tras `Close` vuelve al nivel
   previo al spawn (la goroutine del worker terminó, no quedó colgada tocando el `data_dir`/`log`).
   (`TestWorkerTerminateInterruptsCPULoop`): un worker en bucle de CPU pura (`while true do end`,
@@ -2776,7 +2776,7 @@ implementado y S35 lo BLINDA por test. Ni una función pública de más: §13 ya
 `Worker:on_message(fn) -> Sub` es la ALTERNATIVA por CALLBACK en el ESTADO PRINCIPAL a
 `Worker:recv`. La pregunta de diseño era "cómo se drena la cola worker→padre y se llama
 `fn(msg)` en el estado principal sin fugas". La respuesta, coherente con el modelo y sin
-pieza nueva, espeja el ticker de `nu.task.every` (timers.go):
+pieza nueva, espeja el ticker de `enu.task.every` (timers.go):
 
 - Un **drenador en goroutine de fondo** (`luaWorker.drainOnMessage`) hace
   `select` sobre `fromWorker`/`done`/`stopCh`. Por cada mensaje toma el token del padre
@@ -2803,7 +2803,7 @@ lo suelta vía `releaseOwnerHandles`; un `cancel` a mano hace `untrack` para no 
 colgando en `ownerHandles`. Solo estado principal (no [W]: en el worker no hay `Worker`).
 
 El `Sub` de `on_message` es un handle PROPIO (`workerSubTypeName`, lleva `*workerSub`), NO
-el `Sub` de `nu.events` (lleva `*subscriber`): mismo método público `:cancel()`, distinto
+el `Sub` de `enu.events` (lleva `*subscriber`): mismo método público `:cancel()`, distinto
 tipo. Se eligió un tipo nuevo en vez de reusar el de eventos porque `subCancel` valida el
 tipo concreto del userdata (`*subscriber`) y mezclar tipos sería frágil.
 
@@ -2825,7 +2825,7 @@ del padre (que la serializa, sin candado):
 ### tasks/timers/futures dentro del worker (G15) y `terminate`: blindados, nada que arreglar
 
 El mini-runtime del worker (scheduler propio de S34, reuso de S04) ya soporta todo
-`nu.task` [W]. S35 lo BLINDA por test (`TestWorkerInternalTasksTimersFutures`): un worker
+`enu.task` [W]. S35 lo BLINDA por test (`TestWorkerInternalTasksTimersFutures`): un worker
 corre varias tasks (`spawn`/`await`), un `future` (`set`/`await`), `sleep` y un `every`
 periódico, SIN watchdog. No hizo falta tocar el scheduler del worker. `terminate` quedó
 inmediato y seguro en S34 (`cancelAllTasks` + `Close` espera la goroutine);
@@ -2834,8 +2834,8 @@ inmediato y seguro en S34 (`cancelAllTasks` + `Close` espera la goroutine);
 ### CP-8 (cierra la Fase 7)
 
 `TestCP8WorkerIndexesRepo`: un worker con `caps={"fs.read","search"}` indexa un repo de
-prueba (recorre con `nu.search.files`, lee con `nu.fs.read`) y devuelve un digesto al
-principal vía `send`/`recv`; DENTRO del worker `nu.fs.write` y `nu.ui` NO existen
+prueba (recorre con `enu.search.files`, lee con `enu.fs.read`) y devuelve un digesto al
+principal vía `send`/`recv`; DENTRO del worker `enu.fs.write` y `enu.ui` NO existen
 (deny-by-default, G6, comprobado con `assert` desde el propio worker); un segundo worker
 `terminate`-ado a mitad no afecta al padre. El backpressure de `send` al llenar la cola
 acotada lo cubre `TestWorkerBackpressure` (S34), coherente con CP-5; no se duplica.
@@ -2870,8 +2870,8 @@ el loader como cualquier plugin (mecanismo de S12, ADR-010: INACTIVO por defecto
 - `lua/providers/adapter_stub.lua` — adaptador STUB que materializa y prueba el contrato §3
   contra una petición simulada (sin red).
 
-**Por qué módulo `require`-able y no namespace `nu.providers`:** el core reserva el
-namespace `nu`; las extensiones exponen su API por `require(<nombre-plugin>)` (api.md §14,
+**Por qué módulo `require`-able y no namespace `enu.providers`:** el core reserva el
+namespace `enu`; las extensiones exponen su API por `require(<nombre-plugin>)` (api.md §14,
 convención namespace = nombre del plugin). El agente y la UI consumirán
 `require("providers")`. El namespace de eventos de la extensión sería `providers:` (no se
 emiten eventos en S36, pero queda reservado por convención).
@@ -2879,9 +2879,9 @@ emiten eventos en S36, pero queda reservado por convención).
 ### Decisiones de interpretación de providers.md
 
 1. **`providers.toml` se lee perezosamente y por eso `resolve`/`list` SUSPENDEN (⏸).**
-   providers.md §1 dice "vive en `nu.config.dir()`" pero no fija *cuándo* se lee. Se lee con
-   `nu.fs.read` (⏸, api.md §5) la primera vez que alguien resuelve o lista, y se cachea;
-   `reload()` invalida la caché. Consecuencia heredada de la API: como `nu.fs.read`
+   providers.md §1 dice "vive en `enu.config.dir()`" pero no fija *cuándo* se lee. Se lee con
+   `enu.fs.read` (⏸, api.md §5) la primera vez que alguien resuelve o lista, y se cachea;
+   `reload()` invalida la caché. Consecuencia heredada de la API: como `enu.fs.read`
    suspende, `resolve`/`list` solo corren dentro de una task — que es exactamente el
    contexto del loop del agente. Es coherente con el resto de la API (IO = ⏸) y no requiere
    primitiva nueva.
@@ -2889,7 +2889,7 @@ emiten eventos en S36, pero queda reservado por convención).
 2. **`providers.toml` ausente = registro vacío, no error.** Un enu recién instalado sin
    modelos configurados debe arrancar limpio; `list()` devuelve `[]`. Se distingue `ENOENT`
    (ausente → vacío) de un fallo de IO real (`EACCES`/`EIO`, se propaga) por el `code` del
-   error estructurado de `nu.fs.read`.
+   error estructurado de `enu.fs.read`.
 
 3. **Errores del registro = `EPROVIDER` accionable** (providers.md §3 acuña `EPROVIDER`;
    CLAUDE.md/api.md §1.4: las extensiones acuñan los suyos con la misma forma). TOML mal
@@ -2899,7 +2899,7 @@ emiten eventos en S36, pero queda reservado por convención).
    error del llamante, no del provider).
 
 4. **`api_key` SIEMPRE del entorno** (providers.md §1: "nunca la clave en el fichero"). Se
-   lee con `nu.sys.env(prov.api_key_env)`. Si el provider no declara `api_key_env` (p. ej.
+   lee con `enu.sys.env(prov.api_key_env)`. Si el provider no declara `api_key_env` (p. ej.
    Ollama local), la `config` va sin `api_key` y no es error: el adaptador decide si la
    necesita.
 
@@ -2926,7 +2926,7 @@ emiten eventos en S36, pero queda reservado por convención).
 
 ### Hallazgo (corolario de completitud) — RESUELTO sin tocar api.md
 
-`nu.toml.decode` **estringaba los array-de-tablas** (`[[providers.x.models]]`), el formato
+`enu.toml.decode` **estringaba los array-de-tablas** (`[[providers.x.models]]`), el formato
 CENTRAL de `providers.toml`. Causa: BurntSushi/toml, al decodificar un array-de-tablas en
 `map[string]interface{}`, entrega el tipo concreto `[]map[string]interface{}` (no el
 `[]interface{}` "abierto"); el puente `goToLua` (codecs.go, S18) solo contemplaba
@@ -2934,7 +2934,7 @@ CENTRAL de `providers.toml`. Causa: BurntSushi/toml, al decodificar un array-de-
 (`models` salía como el string `"[map[id:big-1]]"`). Sin esto la extensión era
 **inconstruible** sobre la API pública (filosofía §2).
 
-**No es un hueco de api.md**: la firma documentada `nu.toml.decode -> v` ya prometía
+**No es un hueco de api.md**: la firma documentada `enu.toml.decode -> v` ya prometía
 convertir el documento a una tabla Lua —incluidos sus array-de-tablas—; era un bug de la
 *implementación* del codec, no de la espec. El arreglo es por tanto MÍNIMO y en el codec,
 no en api.md (que queda INTACTO): un fallback por reflexión en `goToLua` para slices y maps
@@ -2982,7 +2982,7 @@ modelo canónico.
 **SSE → stream canónico (§2.3).** Una **máquina de estados por ÍNDICE de bloque** sobre
 `Stream:events()` (S20). El caso que obliga a estado es el **input de tool_use**: llega
 troceado en `input_json_delta.partial_json`; lo acumulo como texto y lo decodifico con
-`nu.json.decode` AL CERRAR el bloque (`content_block_stop`/`message_stop`). Un JSON de args
+`enu.json.decode` AL CERRAR el bloque (`content_block_stop`/`message_stop`). Un JSON de args
 mal formado no aborta el stream: el bloque canónico queda con `args = {}` (el agente lo ve;
 el adaptador no inventa, §3 obl. 3). `stop_reason` mapeado: `tool_use`→"tool_calls",
 `max_tokens`→"max_tokens", `refusal`→"refusal", el resto→"end". `ping` se ignora
@@ -3012,9 +3012,9 @@ Como no hay red, GRABÉ un SSE de Anthropic realista (`recordedSSE` en
 markdown en 3 deltas, tool_use con input troceado en dos `input_json_delta`, message_delta
 con usage/stop, message_stop) y lo sirvo desde un `httptest` local con flush por línea
 (patrón de los tests de S20). `TestCP9CaminoCaliente` corre el camino caliente COMPLETO:
-una vuelta de conversación → el adaptador consume el SSE vía `nu.http.stream` → emite el
+una vuelta de conversación → el adaptador consume el SSE vía `enu.http.stream` → emite el
 stream canónico → por cada delta de texto recompongo el markdown acumulado con
-`nu.text.markdown` (streaming-safe, S23) y lo blitteo a una región (`Region:blit`, S29).
+`enu.text.markdown` (streaming-safe, S23) y lo blitteo a una región (`Region:blit`, S29).
 
 **Decisión de verificación del render:** el Block es OPACO (api.md §9.2: solo `.width`/
 `.height`, no su contenido). Para confirmar que el render final corresponde al markdown
@@ -3023,7 +3023,7 @@ COMPLETO sin acceder a su interior, comparo su altura con un render fresco del t
 cuerpo). El contenido textual ya se valida aparte (el Message ensamblado del `done`).
 
 **Necesidad de `WithForceUI(true)`:** `bootWithToml` no fuerza la UI, así que en el entorno
-headless de test `nu.ui` no existe (gating G20). Para ejercitar el blit del camino caliente,
+headless de test `enu.ui` no existe (gating G20). Para ejercitar el blit del camino caliente,
 `bootAnthropic` arranca el runtime con `WithForceUI(true)` (mismo recurso que `newHarness`,
 S32); el gating REAL por TTY sigue aplicando al binario.
 
@@ -3036,24 +3036,24 @@ modelo-ejecucion.md) no se dispara.
 
 ### Hallazgo
 
-Ninguno. La API pública bastó exacta (`nu.http.stream`+`Stream:events()` §8, `nu.json` §12,
-`nu.text.markdown` §10, `nu.ui.region`/`Region:blit` §9). api.md INTACTO; APILevel sigue en
+Ninguno. La API pública bastó exacta (`enu.http.stream`+`Stream:events()` §8, `enu.json` §12,
+`enu.text.markdown` §10, `enu.ui.region`/`Region:blit` §9). api.md INTACTO; APILevel sigue en
 1. Puntero ▶ avanza a **S38** (extensión sesiones; depende de S14, S16).
 
-## S38 — Extensión sesiones (JSONL, lockfiles) + nu.sys.pid (G32, APILevel 1→2)
+## S38 — Extensión sesiones (JSONL, lockfiles) + enu.sys.pid (G32, APILevel 1→2)
 
 **Hallazgo G32 (corolario de completitud).** El lockfile de `sesiones.md §6` graba la
 identidad del escritor `{pid, hostname, started}` con el pid del proceso PROPIO, pero la
-API pública no lo exponía: `nu.sys` daba platform/env/setenv/now_ms/mono_ms/hostname y
-`nu.proc.alive(pid)` valida pids AJENOS, no el propio. Es el cabo suelto de G17 (que cerró
+API pública no lo exponía: `enu.sys` daba platform/env/setenv/now_ms/mono_ms/hostname y
+`enu.proc.alive(pid)` valida pids AJENOS, no el propio. Es el cabo suelto de G17 (que cerró
 `fs.write{exclusive}`, `proc.alive` y `sys.hostname` pero olvidó el pid propio). La extensión
 oficial `sessions` era inconstruible sin esto → hallazgo, no atajo.
 
 **Resolución (flujo de diseño: docs primero, luego código).** Adición pura a la superficie
-sagrada: `nu.sys.pid() -> integer` [W] (no ⏸; consulta local sin IO, como `hostname`/`now_ms`),
-wrapper de `os.Getpid()`. Por ser la PRIMERA adición tras el congelado, `nu.version.api` sube
-de 1 a 2 (api.md §17/§2; `APILevel` en `nu.go`). G32 RESUELTO en `problemas.md`; api.md §7
-y §16 actualizados; `sesiones.md §6` usa `nu.sys.pid()`. Es una adición estricta: no cambia
+sagrada: `enu.sys.pid() -> integer` [W] (no ⏸; consulta local sin IO, como `hostname`/`now_ms`),
+wrapper de `os.Getpid()`. Por ser la PRIMERA adición tras el congelado, `enu.version.api` sube
+de 1 a 2 (api.md §17/§2; `APILevel` en `enu.go`). G32 RESUELTO en `problemas.md`; api.md §7
+y §16 actualizados; `sesiones.md §6` usa `enu.sys.pid()`. Es una adición estricta: no cambia
 ninguna firma existente (ADR-003).
 
 **Decisiones de la extensión `sessions`.**
@@ -3062,9 +3062,9 @@ ninguna firma existente (ADR-003).
   daría la misma secuencia entre arranques → dos procesos en el mismo ms colisionarían en el
   sufijo; el pid los separa).
 - **Lockfile** (§6, G5): `<sesión>.jsonl.lock` con `fs.write{exclusive}`; contenido
-  `{pid=nu.sys.pid(), hostname, started}`. Conflicto resuelto por inspección: mismo hostname +
+  `{pid=enu.sys.pid(), hostname, started}`. Conflicto resuelto por inspección: mismo hostname +
   pid muerto (`proc.alive`=false) → huérfano, reclamado en silencio; pid vivo → ESESSION busy;
-  otro hostname → ESESSION foreign (no verificable a distancia). Liberado por `nu.task.cleanup`.
+  otro hostname → ESESSION foreign (no verificable a distancia). Liberado por `enu.task.cleanup`.
 - **read_only** no toma lock (varios lectores concurrentes). Código de error `ESESSION` (forma
   ADR-009, acuñado por la extensión).
 - **replay** descarta la última línea si está truncada (crash a mitad de append): JSONL es
@@ -3082,12 +3082,12 @@ congelada (ADR-003) y sobre las extensiones `providers` (S36/S37) y `sessions` (
 embebido `internal/runtime/embedded/agent/` (`plugin.toml` name="agent", `requires=["providers",
 "sessions"]` —el loader §14 los ordena topológicamente antes—; `init.lua` que cablea + módulo
 `lua/agent/init.lua` + `lua/agent/tools_fs.lua`). INACTIVO por defecto (ADR-010), activable por
-`nu.toml` `plugins.enabled=["providers","sessions","agent"]` (las tres explícitas: `requires`
+`enu.toml` `plugins.enabled=["providers","sessions","agent"]` (las tres explícitas: `requires`
 solo ordena, NO auto-descubre/activa — el loader exige que la dependencia esté en el conjunto
 descubierto, que para embebidas es lo nombrado en `enabled`).
 
-**NO amplía api.md** (corolario de completitud satisfecho): `nu.events` (§4), `nu.task.future`/
-`spawn` (§3), `nu.has("ui")` (§9, G20), `nu.fs`/`nu.toml`/`nu.config.dir` y los módulos
+**NO amplía api.md** (corolario de completitud satisfecho): `enu.events` (§4), `enu.task.future`/
+`spawn` (§3), `enu.has("ui")` (§9, G20), `enu.fs`/`enu.toml`/`enu.config.dir` y los módulos
 `providers`/`sessions` bastaron exactos. APILevel sigue en 2. **Sin hallazgos `G##`.** Código de
 error de la extensión: `EAGENT` (forma ADR-009).
 
@@ -3115,7 +3115,7 @@ call: permisos → `tool.pre` → handler (bajo pcall) → `tool.post` → `tool
 **PERMISOS (agente.md §5), pipeline por tool call:** (1) default="allow" concede directo; (2)
 `deny` de la política corta; (3) `allow` concede; (4) hooks `permission` (deny / `{grant=true}`);
 (5) nadie decidió → si tool default="deny", denegado; si `mode="auto"`, concedido (explícito y
-ruidoso, amortiguador 3); si `mode="ask"` Y `nu.has("ui")` → emite `agent:permission.asked` y
+ruidoso, amortiguador 3); si `mode="ask"` Y `enu.has("ui")` → emite `agent:permission.asked` y
 ESPERA un `future` sin timeout (G3), respondible con `agent.permission.respond(id, granted)`; si
 `mode="ask"` SIN UI (HEADLESS, G20) → **DEFAULT DENY** con error ACCIONABLE (amortiguador 2:
 nombra la tool, el patrón `allow` a añadir, y menciona `--auto-permissions`). Patrones
@@ -3129,7 +3129,7 @@ ascendente, luego registro. Cada hook bajo `pcall` (frontera robusta, ADR-008): 
 loguea y se ignora. `Hook:remove()` lo desactiva. `agent._reset_hooks()` (helper de tests, no
 contractual) limpia el registro entre casos.
 
-**Eventos `agent:*` (agente.md §4, notificaciones por `nu.events`):** session.start/end,
+**Eventos `agent:*` (agente.md §4, notificaciones por `enu.events`):** session.start/end,
 turn.start/end, delta, message, tool.start/progress/end, permission.asked, error. **Atribución
 obligatoria (G3):** un único helper `emit(session_id, name, payload)` pone `payload.session`
 SIEMPRE — imposible olvidarlo. `agent:` es el namespace del plugin (no reserva del core, ADR-003).
@@ -3142,11 +3142,11 @@ replay para el LLM —desde el último `compact`— vive aquí). `Session:set_mo
 providers y escribe una entrada `event` (sesiones.md §3).
 
 **Decisiones / desviaciones.**
-- **`requires` no auto-activa**: el `nu.toml` de test enumera las tres extensiones; `requires`
+- **`requires` no auto-activa**: el `enu.toml` de test enumera las tres extensiones; `requires`
   solo da el orden de carga (verificado leyendo `loader.go`: `topoSort` opera sobre lo descubierto,
   y una embebida solo se descubre si `enabled` la nombra). Documentado para S43/S45.
 - **System prompt (§7) parcial en S39**: solo base + `opts.system`. El índice de skills (§6),
-  `nu.md` del repo y el TOFU/confianza (§11) son trabajo posterior (no en el alcance de S39).
+  `enu.md` del repo y el TOFU/confianza (§11) son trabajo posterior (no en el alcance de S39).
 - **Compactación (§8)** no implementada en S39 (el hook `compact` existe en el registro de puntos,
   pero el disparo automático y la estrategia por defecto son trabajo posterior). No bloquea CP-10.
 - **`ask` del handler (ctx.ask)**: en headless sin UI devuelve `false` (coherente con §5 default
@@ -3162,15 +3162,15 @@ REANUDAR (una sesión reanudada ya contiene tool_results de turnos previos) — 
 un ciclo de depuración en CP-10.
 
 **🔎 CP-10 verde (agente headless mínimo, usable):** `TestCP10AgenteHeadless` arranca el runtime
-HEADLESS (`WithForceUI(false)`, `nu.has("ui")`=false), ejecuta un turno con la tool de fichero
-real `read_file` (lee un fichero de disco con `nu.fs`, se concede por ser solo lectura, su
+HEADLESS (`WithForceUI(false)`, `enu.has("ui")`=false), ejecuta un turno con la tool de fichero
+real `read_file` (lee un fichero de disco con `enu.fs`, se concede por ser solo lectura, su
 contenido se realimenta y el done final cierra), PERSISTE la sesión en JSONL (se verifica que el
 fichero bajo `data_dir/sessions/` contiene `meta`, los `message`, el nombre de la tool, el
 contenido leído y la respuesta final), y luego REANUDA la sesión (replay repuebla el historial) y
 pide `write_file` → permiso DENEGADO accionable (nombra "headless"/"write_file"/"allow"), el turno
 NO se rompe, y el fichero NO se crea. Todo SIN una sola línea de UI (G20).
 
-**Tests** (`agent_test.go`, arnés de S12 con las tres extensiones por `nu.toml`): carga+activa;
+**Tests** (`agent_test.go`, arnés de S12 con las tres extensiones por `enu.toml`): carga+activa;
 turno completo (tool llamada, resultado realimentado, done final, historial de 4 mensajes);
 permiso denegado headless → tool_result is_error accionable; permiso concedido por `allow`; hooks
 tool.pre/post (reescriben args/resultado) y veto por `{deny}`; eventos `agent:*` emitidos con
@@ -3196,9 +3196,9 @@ y verificar build/vet/gofmt/race-count=2 verdes, se commiteó y pusheó SIN demo
 S40 amplía la extensión `agent` (S39) con SUBAGENTES (agente.md §9): un agente que corre AISLADO
 y devuelve al padre un RESULTADO DIGERIDO. El contrato: `Session:spawn(opts) -> Sub`,
 `Sub:run(prompt) ⏸ -> digest`, `Sub:cancel()`, con dos modos (`worker=false`: task en el
-principal compartiendo tools; `worker=true`: loop en un `nu.worker` con `caps` recortadas y los
+principal compartiendo tools; `worker=true`: loop en un `enu.worker` con `caps` recortadas y los
 handlers de tools ejecutados en el principal vía proxy de mensajes), más los paquetes de caps con
-nombre `agent.caps.*`. Todo Lua sobre la API congelada (ADR-003): `nu.worker` §13 + `nu.task` +
+nombre `agent.caps.*`. Todo Lua sobre la API congelada (ADR-003): `enu.worker` §13 + `enu.task` +
 el módulo `providers`. **NO amplía api.md** (APILevel sigue en 2; ni una función pública nueva).
 
 ### Arquitectura elegida (dos módulos)
@@ -3207,7 +3207,7 @@ el módulo `providers`. **NO amplía api.md** (APILevel sigue en 2; ni una funci
   PADRE. Se cablea sobre el módulo `agent` ya construido con `subagent.attach(M)` (inyección para
   evitar require circular), exponiendo `M._subagent.spawn` (usado por `Session:spawn`).
 - `lua/agent/subagent_worker.lua`: el LOOP del subagente que corre DENTRO del worker. Es el
-  `module` que `nu.worker.spawn("agent.subagent_worker", {caps=...})` carga.
+  `module` que `enu.worker.spawn("agent.subagent_worker", {caps=...})` carga.
 
 ### Decisiones de interpretación de agente.md §9
 
@@ -3218,7 +3218,7 @@ el módulo `providers`. **NO amplía api.md** (APILevel sigue en 2; ni una funci
    del worker sin Blocks/closures (api.md §13).
 
 2. **El proxy de tools** (modo worker). El worker NO ejecuta handlers: por cada tool_call manda
-   `{kind="tool_call", id, name, args}` al padre por `nu.worker.parent.send` y espera
+   `{kind="tool_call", id, name, args}` al padre por `enu.worker.parent.send` y espera
    `{kind="tool_result", result}`. El padre corre la tool con `M.run_tool_proxy(proxy_session,
    call)` = el mismo `run_tool` del turno (permisos → hooks → handler → tool_result). Así la
    seguridad queda centralizada (el worker no puede esquivar el pipeline porque la ejecución nunca
@@ -3234,7 +3234,7 @@ el módulo `providers`. **NO amplía api.md** (APILevel sigue en 2; ni una funci
    `SEARCH` + los MÍNIMOS DEL LOOP (`task`/`json`/`toml`/`config.dir`/`log`/`fs.read`). Razón de
    los mínimos: el worker debe poder orquestar (task), serializar el digesto/los mensajes del
    proxy (json) y RESOLVER el modelo —`providers.resolve` lee `providers.toml` del disco con
-   `nu.fs.read`+`nu.toml.decode` desde `nu.config.dir`—. Sin ellos el worker no podría ni correr
+   `enu.fs.read`+`enu.toml.decode` desde `enu.config.dir`—. Sin ellos el worker no podría ni correr
    el turno ni devolver nada. `normalize_caps` siempre los añade a una lista de usuario, sin
    ampliar la superficie de fs/net que el usuario eligió.
 
@@ -3253,16 +3253,16 @@ para inyectar un stub require-able. Es una adición a los opts de UNA extensión
 
 ### Por qué NO hizo falta ampliar api.md
 
-El subagente-worker se expresa enteramente con la API pública: `nu.worker.spawn` con `caps`
-(api.md §13, G6) para el aislamiento DURO; `Worker:send`/`recv` + `nu.worker.parent.send`/`recv`
-para el protocolo init/tool_call/tool_result/done (mensajes JSON-ables copiados); `nu.task` para
+El subagente-worker se expresa enteramente con la API pública: `enu.worker.spawn` con `caps`
+(api.md §13, G6) para el aislamiento DURO; `Worker:send`/`recv` + `enu.worker.parent.send`/`recv`
+para el protocolo init/tool_call/tool_result/done (mensajes JSON-ables copiados); `enu.task` para
 el loop; el módulo `providers` (resolve + register_adapter) y el módulo `agent` (run_tool_proxy,
 caps). El corolario de completitud se satisface: una feature oficial construida sin atajo de
 kernel. APILevel sigue en 2.
 
 ### El subagente-worker es HEADLESS por construcción
 
-Dentro del worker NO existen `nu.events` (bus principal) ni `nu.ui` (api.md §16). El loop del
+Dentro del worker NO existen `enu.events` (bus principal) ni `enu.ui` (api.md §16). El loop del
 subagente-worker, por tanto, DESCARTA los deltas del stream (no hay a quién emitirlos) y solo
 emite el DIGESTO al padre. Coherente con agente.md §9: el padre recibe datos digeridos, no el
 stream crudo. En modo task (worker=false) sí se emiten los `agent:*` (corre en el principal).
@@ -3303,17 +3303,17 @@ extensión MCP: configuración, ciclo de vida, mapeo de tools y confianza).
 
 Plugin embebido nuevo `internal/runtime/embedded/mcp/`: `plugin.toml` (name="mcp",
 `requires=["agent"]`), `init.lua` (cablea + auto-conexión perezosa de `mcp.toml` en una task) y el
-módulo `lua/mcp/init.lua`. INACTIVO por defecto (ADR-010); activable por `nu.toml`
+módulo `lua/mcp/init.lua`. INACTIVO por defecto (ADR-010); activable por `enu.toml`
 `plugins.enabled=[..., "mcp"]`, `source="builtin"`. El `embed.FS` lo descubre solo (cualquier
 subdirectorio de `embedded/` con `plugin.toml`), sin tocar el mecanismo de S12.
 
 ### El cliente JSON-RPC 2.0 sobre stdio (`Conn`)
 
-`mcp.connect{ name, command, cwd?, env? } ⏸ -> Conn` lanza el servidor con `nu.proc.spawn` (S16) y
-le habla por stdin (requests JSON con `nu.json.encode` + `Proc:write`), leyendo responses de
-stdout línea a línea (`Proc:read_line` + `nu.json.decode`). Demultiplexado: una **task lectora
+`mcp.connect{ name, command, cwd?, env? } ⏸ -> Conn` lanza el servidor con `enu.proc.spawn` (S16) y
+le habla por stdin (requests JSON con `enu.json.encode` + `Proc:write`), leyendo responses de
+stdout línea a línea (`Proc:read_line` + `enu.json.decode`). Demultiplexado: una **task lectora
 dedicada** (`dispatch_loop`) lee stdout y reparte cada response a su request pendiente por `id`
-(cada `request` registra un `nu.task.future` que el lector resuelve), permitiendo varios requests
+(cada `request` registra un `enu.task.future` que el lector resuelve), permitiendo varios requests
 en vuelo sin mezclar respuestas. Las notificaciones del servidor (sin id) se ignoran en v1.
 
 ### Decisiones de la extensión (no tocan el core; cierran nº4)
@@ -3339,7 +3339,7 @@ en vuelo sin mezclar respuestas. Las notificaciones del servidor (sin id) se ign
 ### Ciclo de vida del proceso (api.md §6)
 
 El servidor se lanza, vive mientras la `Conn` exista, y se mata limpiamente: `Proc:kill` registrado
-en `nu.task.cleanup` (muere al terminar la task dueña) y `Conn:close()` explícito e idempotente.
+en `enu.task.cleanup` (muere al terminar la task dueña) y `Conn:close()` explícito e idempotente.
 Un servidor que MUERE (EOF en stdout) hace que `dispatch_loop` marque la conexión caída y despierte
 a TODOS los requests pendientes con `EMCP` (nadie cuelga para siempre). Al cerrar, las tools del
 servidor se re-registran con un handler que falla accionable (la extensión `agent` no expone un
@@ -3355,8 +3355,8 @@ otros tipos de bloque quedan para una iteración posterior (v1 cubre texto, el c
 
 ### NO amplía api.md (corolario de completitud satisfecho)
 
-`nu.proc` §6 (spawn/write/read_line/kill) + `nu.json` §12 + `nu.task` §4 (spawn/future/cleanup) +
-`nu.fs`/`nu.toml`/`nu.config.dir` + el módulo `agent` (`agent.tool`, `agent.tools`) bastaron
+`enu.proc` §6 (spawn/write/read_line/kill) + `enu.json` §12 + `enu.task` §4 (spawn/future/cleanup) +
+`enu.fs`/`enu.toml`/`enu.config.dir` + el módulo `agent` (`agent.tool`, `agent.tools`) bastaron
 EXACTOS para construir MCP. APILevel sigue en **2**; ni una función pública del core de más. Error
 de la extensión: `EMCP` (forma ADR-009). Sin hallazgos `G##`.
 
@@ -3451,7 +3451,7 @@ anatomía (chat.md §1: columna transcript/input/statusline + capas modales).
   (literal→intacto; nombre→literal; desconocido→EINVAL accionable: un theme incompleto se nota,
   no degrada en silencio); `theme:style(spec)` convierte `fg`/`bg` semánticos a literales,
   copiando los atributos. `theme.new{colors}` VALIDA que la paleta sean literales (un theme
-  que mapeara "accent" a otro nombre fallaría más tarde dentro de `nu.ui.block`; validarlo al
+  que mapeara "accent" a otro nombre fallaría más tarde dentro de `enu.ui.block`; validarlo al
   construir lo ancla al theme). Se replica `is_literal_color` en Lua (misma forma que
   `normalizeColor` del core) para distinguir "ya es literal" de "es un nombre a resolver" SIN
   intentar construir un Block y capturar el error. `theme.default` trae una paleta mínima con
@@ -3467,9 +3467,9 @@ anatomía (chat.md §1: columna transcript/input/statusline + capas modales).
 ### Widgets base implementados
 
 - **label**: una línea de texto estilizado (statusline, cabeceras). No focusable. `pref_h=1`
-  por defecto (un label ocupa su renglón, no 0). Compone con `nu.ui.block` + `theme:style`.
-- **text**: bloque multilínea de markdown (`nu.text.markdown`, streaming-safe) o word-wrap
-  (`nu.text.wrap`), con SCROLL por viewport. Compone el Block COMPLETO; el scroll es un offset
+  por defecto (un label ocupa su renglón, no 0). Compone con `enu.ui.block` + `theme:style`.
+- **text**: bloque multilínea de markdown (`enu.text.markdown`, streaming-safe) o word-wrap
+  (`enu.text.wrap`), con SCROLL por viewport. Compone el Block COMPLETO; el scroll es un offset
   (`scroll_to` solo pide repintado, no ensucia: "scroll = re-blit con otro offset", api.md §9.1).
 - **input**: editor de UNA línea, FOCUSABLE. `on_key` consume caracteres imprimibles, backspace,
   flechas, home/end y mantiene un caret (en bytes; el editor rico/multilínea es la extensión
@@ -3508,28 +3508,28 @@ al instante (inspeccionando la rejilla del compositor tras `APP:paint()`).
 
 ### NO amplía api.md (corolario de completitud satisfecho)
 
-El toolkit se construyó EXACTAMENTE sobre la API §9 (`nu.ui.region`/`blit`/`fill`/`clear`/
-`cursor`/`size`, `nu.ui.block`/`Style`, `nu.ui.on_input`) + §10 (`nu.text.markdown`/`wrap`/
-`truncate`/`width`) + §4 (`nu.events.emit`, con su evento propio `toolkit:focus` en el namespace
-del plugin) + §2 (`nu.has`). Ni una función pública de más; APILevel sigue en 2. Sin hallazgos `G##`. Confirma que la API de UI de bajo nivel
+El toolkit se construyó EXACTAMENTE sobre la API §9 (`enu.ui.region`/`blit`/`fill`/`clear`/
+`cursor`/`size`, `enu.ui.block`/`Style`, `enu.ui.on_input`) + §10 (`enu.text.markdown`/`wrap`/
+`truncate`/`width`) + §4 (`enu.events.emit`, con su evento propio `toolkit:focus` en el namespace
+del plugin) + §2 (`enu.has`). Ni una función pública de más; APILevel sigue en 2. Sin hallazgos `G##`. Confirma que la API de UI de bajo nivel
 (ADR-007) basta para un toolkit de alto nivel en Lua (ADR-012: el veto de ADR-007 no se ejecutó).
 
 ### Tests y resultado
 
 `toolkit_test.go` (arnés de S12 con `WithForceUI(true)`+`WithUISize` —el toolkit es UI, en
-headless `nu.ui` no existe, G20—; el Block es opaco a Lua, así que el CONTENIDO se inspecciona en
+headless `enu.ui` no existe, G20—; el Block es opaco a Lua, así que el CONTENIDO se inspecciona en
 Go mirando la rejilla del compositor, igual que `compositor_test.go`, y la lógica del toolkit se
 inspecciona desde Lua sobre sus propias tablas): carga+activa (builtin); theme G22; dirty
 tracking; layout+focus entre dos widgets (criterio de hecho); sin colisión entre dos árboles
 (criterio de hecho); input no consumido se deja pasar; reparto del vbox; scroll-viewport;
 **desborde sin scroll** (un `text` más alto que su banda, con `scroll==0`, encima de un label: el
 recorte a banda evita que derrame sobre el de abajo); `app`
-sin `nu.ui`→EINVAL. `CGO_ENABLED=0 go build`/`go vet ./...` verdes; `gofmt -l` limpio;
+sin `enu.ui`→EINVAL. `CGO_ENABLED=0 go build`/`go vet ./...` verdes; `gofmt -l` limpio;
 `CGO_ENABLED=1 go test -race -timeout 120s -count=2 ./internal/...` verde (~55 s; el toolkit
 estable bajo `-race -count=4`). Nota: `TestMCPToolServerError` (S41) es un flake conocido bajo la
 suite completa con `-race -count=2` (compila y lanza un proceso externo; bajo contención de
 CPU/IO del conjunto su handshake JSON-RPC ocasionalmente excede el timing); pasa aislado y en
-re-ejecuciones de la suite completa; es ORTOGONAL a S42 (el toolkit es Lua sobre `nu.ui`/`nu.text`,
+re-ejecuciones de la suite completa; es ORTOGONAL a S42 (el toolkit es Lua sobre `enu.ui`/`enu.text`,
 no toca proc/red). No regresiona S01–S41.
 
 ### Nota de revisión de S42 (dos arreglos antes de aprobar)
@@ -3565,7 +3565,7 @@ eventos —una UI de terceros podría hacer lo mismo—. Plugin embebido
 `internal/runtime/embedded/chat/` (`plugin.toml` name="chat", `requires=["toolkit","agent",
 "providers","sessions"]` —el loader §14 los ordena topológicamente antes—; `init.lua` que
 cablea + arranca en TTY; módulos `lua/chat/{init,transcript,input,statusline,commands,
-permission}.lua`), INACTIVO por defecto (ADR-010), activable por `nu.toml`
+permission}.lua`), INACTIVO por defecto (ADR-010), activable por `enu.toml`
 `plugins.enabled=[...,"chat"]`, `source="builtin"`. Implementa chat.md y, junto a S42, cierra
 la cuestión abierta nº3 (la API pública del toolkit, ahora consumida de verdad).
 
@@ -3576,7 +3576,7 @@ bandas del chat —**transcript** (`toolkit.text{markdown=true}`, `flex=1`: ocup
 sobrante, desplazable por viewport), **input multilínea** (`chat.input`, `pref_h=3`) y
 **statusline** (`hbox` de dos `toolkit.label`, `pref_h=1`)—; y (2) una capa modal
 (`modal_layer`, superpuesta) para el diálogo de permisos y los pickers (chat.md §1/§5). La app
-crea su región a pantalla completa (`nu.ui.size()`), enruta el input al foco (el editor) y
+crea su región a pantalla completa (`enu.ui.size()`), enruta el input al foco (el editor) y
 repinta por nodos sucios (todo de S42, sin tocar el toolkit). El foco arranca en el editor.
 
 ### El flujo de streaming markdown (chat.md §2, EL CORAZÓN de S43)
@@ -3653,7 +3653,7 @@ permisos · contador de asks pendientes de otras sesiones, G3), extensibles por 
 
 ### Theming (chat.md §7, G22)
 
-chat NO hardcodea un solo color: el render final del transcript lo hace `nu.text.markdown`
+chat NO hardcodea un solo color: el render final del transcript lo hace `enu.text.markdown`
 (themable, api.md §10) y los widgets (input/statusline/diálogo) resuelven sus estilos
 SEMÁNTICOS (`accent`/`error`/`dim`/`warn`) contra el theme de la app (`toolkit.theme`, G22), que
 los convierte a literales al componer. La tabla de atajos por defecto `chat.keys` es pública y
@@ -3661,19 +3661,19 @@ remapeable (chat.md §7).
 
 ### Arranque (chat.md §8, G20)
 
-`chat.start(opts?) ⏸ -> Chat` exige `nu.ui` (TTY interactivo): en headless (sin UI,
-`nu.has("ui")`=false, G20) es **EINVAL accionable** (nombra "headless"/"ui"; chat.md §8 — para
+`chat.start(opts?) ⏸ -> Chat` exige `enu.ui` (TTY interactivo): en headless (sin UI,
+`enu.has("ui")`=false, G20) es **EINVAL accionable** (nombra "headless"/"ui"; chat.md §8 — para
 uso headless está el agente directo). Crea/reanuda la sesión (`agent.session`, con `resume` →
 G18: refleja el historial repoblado en el transcript). El `init.lua` solo arranca el chat en
 TTY (suscribe `core:ready` y monta la app en una task, porque `start` suspende); en headless
-deja el módulo accesible por `require("chat")` sin tocar `nu.ui`. Suscribe `ui:resize` ("tu
+deja el módulo accesible por `require("chat")` sin tocar `enu.ui`. Suscribe `ui:resize` ("tu
 región, tu ui:resize", api.md §9.1): rehace el layout al cambiar el tamaño.
 
 ### NO amplía api.md (corolario de completitud satisfecho)
 
-`nu.events.on`/`emit` (§4), `nu.ui` (§9, vía el toolkit), `nu.text.markdown` (§10, vía el
-toolkit), `nu.task.spawn`/`sleep`/`future` (§4), `nu.has("ui")` (§2/§9), `nu.ui.keymap` (§9.3),
-`nu.json` (§12, en el diálogo) + los módulos `toolkit`/`agent`/`providers`/`sessions` bastaron
+`enu.events.on`/`emit` (§4), `enu.ui` (§9, vía el toolkit), `enu.text.markdown` (§10, vía el
+toolkit), `enu.task.spawn`/`sleep`/`future` (§4), `enu.has("ui")` (§2/§9), `enu.ui.keymap` (§9.3),
+`enu.json` (§12, en el diálogo) + los módulos `toolkit`/`agent`/`providers`/`sessions` bastaron
 EXACTOS para el chat. **APILevel sigue en 2; ni una función pública del core de más. Sin
 hallazgos `G##`.** El chat usa los códigos del core (`EINVAL`) para sus errores de uso; no
 acuña código propio (no le hizo falta).
@@ -3704,7 +3704,7 @@ vez de un `httptest`—; el adaptador `anthropic` ya está probado contra red si
 **Fase 8 NO se cierra aún**: faltan S44 (repl) y S45 (CLI). El tablero queda con la Fase 8
 abierta; el puntero avanza a S44.
 
-### Tests (`internal/runtime/chat_test.go`, arnés de S12 con las cinco extensiones por `nu.toml`, `WithForceUI(true)`+`WithUISize`)
+### Tests (`internal/runtime/chat_test.go`, arnés de S12 con las cinco extensiones por `enu.toml`, `WithForceUI(true)`+`WithUISize`)
 
 Carga+activa (builtin, superficie del módulo); `chat.start` headless → EINVAL accionable (G20,
 WithForceUI(false)); LAYOUT (los tres widgets con área, foco en el editor); INPUT MULTILÍNEA
@@ -3723,7 +3723,7 @@ transcript); diálogo de permisos (modal responde con `agent.permission.respond`
    coherente; los renderers enchufables de tool results (chat.md §2) son evolución sobre los
    items ya separados. `chat.renderer` se expone con fallback de texto.
 2. **Pickers difusos (chat.md §3 menciones `@`, §4 `/model`/`/sessions`) por texto en v1**: el
-   picker visual (capa modal `toolkit.stack` + `nu.search.fuzzy`) es mejora posterior; el
+   picker visual (capa modal `toolkit.stack` + `enu.search.fuzzy`) es mejora posterior; el
    contrato (comandos, statusline, capa modal) queda ejercido.
 3. **«Permitir siempre» del diálogo de permisos (chat.md §5) → solo una-vez/denegar en v1**:
    persistir el patrón a `agent.toml` / editar el patrón requiere superficie del agente que S39
@@ -3736,7 +3736,7 @@ transcript); diálogo de permisos (modal responde con `agent.permission.respond`
 Ninguna desviación toca el core ni amplía api.md.
 
 **Lo que reusará S44/S45.** S44 (repl): el toolkit (`toolkit.app`/`input`/`text`) para su UI
-interactiva si la tiene, y el patrón de arranque en TTY (`nu.has("ui")`, suscripción a
+interactiva si la tiene, y el patrón de arranque en TTY (`enu.has("ui")`, suscripción a
 `core:ready`); el repl puede activarse SOLO (sin el harness), igual que el chat se activa solo.
 S45 (CLI): el azúcar `--continue` se apoya en `agent.session{resume}` (G18) que el chat ya
 consume; el chat es el consumidor interactivo del agente que el CLI complementa en modo headless
@@ -3752,14 +3752,14 @@ Noveno eslabón de la Fase 8: **Lua puro sobre la API congelada** (ADR-003, sin 
 kernel — el core NO sabe lo que es un REPL). Plugin embebido nuevo
 `internal/runtime/embedded/repl/` (`plugin.toml` name="repl" **SIN `requires`** —el repl se
 activa SOLO, G21, sin arrastrar el harness—; `init.lua` que cablea + arranca en TTY; módulo
-`lua/repl/init.lua`), INACTIVO por defecto (ADR-010), activable por `nu.toml`
+`lua/repl/init.lua`), INACTIVO por defecto (ADR-010), activable por `enu.toml`
 `plugins.enabled=["repl"]`, `source="builtin"`.
 
 ### CÓMO EVALÚA Lua arbitrario (el punto delicado de S44; corolario de completitud)
 
 La pregunta central: un REPL NECESITA compilar y ejecutar código del usuario, y el baseline del
 sandbox (§1.2, S01) deshabilitó IO bloqueante. ¿Basta la API pública o falta una primitiva
-(`nu.eval`/reabrir `load`) → hallazgo? **Se investigó a fondo ANTES de decidir** (con probes
+(`enu.eval`/reabrir `load`) → hallazgo? **Se investigó a fondo ANTES de decidir** (con probes
 temporales `loadstring`/`load`/`dofile`/`loadfile` contra el runtime real, luego borrados):
 
 - **`sandbox.go` (S01) retira `dofile`/`loadfile`** (cargan FICHEROS de disco saltándose el
@@ -3769,10 +3769,10 @@ temporales `loadstring`/`load`/`dofile`/`loadfile` contra el runtime real, luego
   core"). Quedan disponibles para el Lua de usuario (verificado: `type(load)`/`type(loadstring)`
   == "function"; `dofile`/`loadfile` == nil).
 - **Conclusión: la API pública BASTA exacta para un REPL. NO hizo falta ninguna primitiva nueva
-  (ni `nu.eval` ni reabrir `load` controlado); APILevel sigue en 2, api.md INTACTO.** Sin
+  (ni `enu.eval` ni reabrir `load` controlado); APILevel sigue en 2, api.md INTACTO.** Sin
   hallazgo `G##`. El sandbox ya había dejado la puerta justa abierta: el REPL es expresable con
   lo que hay (corolario de completitud satisfecho, como en S36/S39–S43). El protocolo de "párate
-  y repórtalo" (estilo `nu.sys.pid` en S38) NO se disparó porque la investigación demostró que el
+  y repórtalo" (estilo `enu.sys.pid` en S38) NO se disparó porque la investigación demostró que el
   patrón ya era construible.
 
 ### EL MODELO del REPL (la lógica probada, headless)
@@ -3780,7 +3780,7 @@ temporales `loadstring`/`load`/`dofile`/`loadfile` contra el runtime real, luego
 `repl.eval(src) -> { ok, values?, n, display, error?, incomplete? }` es el núcleo PURO:
 
 1. **Truco return<expr> / sentencia** (`compile`): primero `loadstring("return "..src)` —así una
-   EXPRESIÓN suelta (`1+1`, `nu.version.api`) se evalúa sin que el usuario escriba `return`, el
+   EXPRESIÓN suelta (`1+1`, `enu.version.api`) se evalúa sin que el usuario escriba `return`, el
    truco clásico del REPL de Lua—; si no compila, `loadstring(src)` tal cual (una SENTENCIA:
    `x=5`, `for...`). Ambos disponibles porque `loadstring` lo está.
 2. **Ejecución bajo `pcall`**: el error del usuario se CAPTURA (no tumba el repl — una frontera
@@ -3797,9 +3797,9 @@ temporales `loadstring`/`load`/`dofile`/`loadfile` contra el runtime real, luego
    error (`incomplete=true`), es la señal de "dame otra línea". Es la base del modo multilínea.
 
 `repl.eval_in_task(src, cb)` evalúa la misma lógica DENTRO de una task y entrega el resultado a
-`cb`: así una línea que llama a una función **⏸** del core (`nu.fs.read`, `nu.http.request`,
-`nu.search.grep`…) funciona —solo corren en una task, §1.3—. Es el patrón de `chat:submit`
-(S43) con `Session:send`. La mayoría de la API (no-⏸: `nu.version`, `nu.text.*`, `nu.json.*`) no
+`cb`: así una línea que llama a una función **⏸** del core (`enu.fs.read`, `enu.http.request`,
+`enu.search.grep`…) funciona —solo corren en una task, §1.3—. Es el patrón de `chat:submit`
+(S43) con `Session:send`. La mayoría de la API (no-⏸: `enu.version`, `enu.text.*`, `enu.json.*`) no
 lo necesita y va por `repl.eval` directo.
 
 ### DRIVER TTY vs LÓGICA PROBADA
@@ -3808,7 +3808,7 @@ lo necesita y va por `repl.eval` directo.
   estructurado y plano/sintaxis/incompletitud), `repl.eval_in_task` (⏸ vía task, leyendo un
   fichero real + un ⏸ que lanza), `repl.banner`, la activación SOLA (G21). Es el grueso de S44 y
   donde vive el riesgo (la máquina de compilar/formatear/detectar incompletitud).
-- **DRIVER TTY (`repl.start`, necesita `nu.ui`, G20)**: monta una `toolkit.app` (S42) con un
+- **DRIVER TTY (`repl.start`, necesita `enu.ui`, G20)**: monta una `toolkit.app` (S42) con un
   `vbox` de un `toolkit.text` (transcript: banner + ecos + resultados, flex) y una fila de
   entrada (`hbox` de un label-prompt `>`/`..` + un `toolkit.input`). Enter evalúa (keymap global;
   el input deja pasar enter "pelado", como el editor del chat), ctrl+d sale. El toolkit es
@@ -3828,8 +3828,8 @@ exacta: no se rompen).
 ### NO amplía api.md
 
 Corolario de completitud satisfecho: `load`/`loadstring` del baseline §1.2 (la EVALUACIÓN) +
-`nu.task.spawn` §3 (eval_in_task) + `nu.version`/`nu.has` §2 + el módulo `toolkit` (la UI) +
-`nu.ui.keymap`/`nu.events.on` §9.3/§4 bastaron EXACTOS para un REPL de Lua interactivo activable
+`enu.task.spawn` §3 (eval_in_task) + `enu.version`/`enu.has` §2 + el módulo `toolkit` (la UI) +
+`enu.ui.keymap`/`enu.events.on` §9.3/§4 bastaron EXACTOS para un REPL de Lua interactivo activable
 solo; APILevel sigue en **2**; ni una función pública del core de más. Errores: reusa `EINVAL`
 del core (no acuña código propio; no le hizo falta). **Sin hallazgos `G##`.**
 
@@ -3841,7 +3841,7 @@ del core (no acuña código propio; no le hizo falta). **Sin hallazgos `G##`.**
    que pide el toolkit (activable `plugins.enabled=["toolkit","repl"]`). Decisión de la extensión.
 2. **El formato de salida** (un string con `%q`, retornos unidos por tab, `code: message` para el
    error estructurado, `display=""` para una sentencia) lo fija esta extensión: es vocabulario de
-   producto (cómo IMPRIME un REPL), no del core. Un serializador fiel es `nu.json.encode`, que el
+   producto (cómo IMPRIME un REPL), no del core. Un serializador fiel es `enu.json.encode`, que el
    usuario llama si quiere.
 3. **Comandos mínimos del repl** (`/q`/`/quit`/`/exit` para salir, solo en la primera línea de un
    bloque): conveniencia de la UI, no contrato. ctrl+d es el equivalente por teclado.
@@ -3863,7 +3863,7 @@ CIERRA la Fase 8 (todas las extensiones oficiales).
 
 **Qué es.** El ÚLTIMO eslabón del plan: la superficie de línea de comandos del binario `enu`.
 Cierra la cuestión abierta nº5 de [arquitectura.md](arquitectura.md), la Fase 8 y el plan
-entero (45/45). Vive en `main.go` (el binario), **NO en la API sagrada `nu.*`** (api.md): es la
+entero (45/45). Vive en `main.go` (el binario), **NO en la API sagrada `enu.*`** (api.md): es la
 interfaz del ejecutable, no superficie Lua. El core sigue sin saber lo que es un agente
 (ADR-003): el CLI orquesta las extensiones `agent`/`sessions` por la API pública, exactamente
 como podría hacerlo un `init.lua` de usuario.
@@ -3872,7 +3872,7 @@ como podría hacerlo un `init.lua` de usuario.
 agente es ⏸ (`Session:send`), así que NO puede correr en el chunk principal de `EvalString`
 (que corre en el estado principal, donde las ⏸ lanzan EINVAL). Opciones consideradas: (a) un
 método Go `RunAgentTurn` en `package runtime` —rechazado: mete vocabulario de PRODUCTO (agente)
-en el kernel—; (b) el patrón de dos fases de CP-10 (`EvalString` que `nu.task.spawn` + globals +
+en el kernel—; (b) el patrón de dos fases de CP-10 (`EvalString` que `enu.task.spawn` + globals +
 segundo `EvalString` para leer el resultado) —funciona pero el mapeo a códigos de salida es
 torpe—; (c) **un método Go GENERAL `Runtime.EvalTaskString(code) -> ([]string, error)`** que
 corre un chunk Lua **como task** a término y devuelve sus retornos / `*StructuredError`.
@@ -3903,7 +3903,7 @@ los contratos por pertenecer a la superficie CLI; aquí se decide: reanuda la se
 del proyecto (cwd). "Más reciente" = `sessions.list(cwd)` ordenando los ids descendente (ordenan
 lexicográfico = temporal, sesiones.md §2/§7) y tomando el primero, que se pasa como `resume` a
 `agent.session{...}`. `--continue` sin sesiones previas → EAGENT accionable (código 1), no una
-sesión nueva muda. El proyecto es `nu.fs.cwd()` (donde se lanzó `enu`).
+sesión nueva muda. El proyecto es `enu.fs.cwd()` (donde se lanzó `enu`).
 
 **Decisión 5 — flags.** `-e '<lua>'` (de S01, consolidado); `-p '<prompt>'` (turno de agente
 headless; imprime el texto final del asistente a stdout); `--auto-permissions` (→
@@ -3918,7 +3918,7 @@ detección de "permiso denegado" en el driver se hace observando el evento `agen
 la extensión `agent` congelada en S39). **Al implementarlo se descubrió que un upvalue ESCALAR
 mutado desde el handler del evento NO se propagaba** de vuelta al thread del driver: la detección
 fallaba intermitentemente con `local denied = false; ... denied = true`. **Causa:** los handlers
-de `nu.events` corren sobre un thread EFÍMERO (ADR-008/S10, `callEventHandler`); mutar el upvalue
+de `enu.events` corren sobre un thread EFÍMERO (ADR-008/S10, `callEventHandler`); mutar el upvalue
 escalar desde ese thread no se ve fiablemente desde el thread del driver, pero mutar el CONTENIDO
 de una TABLA capturada SÍ (la tabla es una referencia compartida). **Solución (sin tocar el
 core):** el driver guarda el estado en una tabla (`local state = { denied = false }`;
@@ -3995,7 +3995,7 @@ el watchdog no cambian. La semántica de `t.awaited` se amplía en su comentario
 *Tests.* `TestEvalTaskStringErrorNoSpuriousLog` (scheduler_test.go): una task lanzada por
 `EvalTaskString` que lanza un error estructurado (a) sigue devolviéndolo como `*StructuredError`
 con el `code` intacto y (b) NO deja la línea "nadie hizo await" en el log. La contraparte
-`TestUnhandledTaskErrorLogged` (fire-and-forget vía `nu.task.spawn` por `EvalString`, que sí pasa
+`TestUnhandledTaskErrorLogged` (fire-and-forget vía `enu.task.spawn` por `EvalString`, que sí pasa
 por `spawn` con `awaited=false`) sigue verde: el aviso legítimo de error perdido NO se desactiva
 —el fix es estrictamente para tasks consumidas por el host—.
 

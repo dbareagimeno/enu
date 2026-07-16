@@ -26,7 +26,7 @@ const t = i18n[lang];
 const { Content, headings } = await render(entry);
 const slug = entry.id;
 
-// Título corto: la parte antes del "—" del frontmatter (nu.fs, nu.http / nu.ws…).
+// Título corto: la parte antes del "—" del frontmatter (enu.fs, enu.http / enu.ws…).
 // Los títulos salen de la colección del idioma que toca.
 const todas = await getCollection(lang === 'en' ? 'referencia_en' : 'referencia');
 const tituloCorto = (s: string): string => {
@@ -55,7 +55,7 @@ const keys = [
 ];
 ---
 <Base
-  title={`${titulo} — nu`}
+  title={`${titulo} — enu`}
   description={entry.data.description}
   lang={lang}
   langMode="fixed"
@@ -105,12 +105,12 @@ const keys = [
   <script define:vars={{ contexto, pos, nextUrl, prevUrl }}>
     // Config del pager serializada desde el frontmatter (script inline). El
     // script module de abajo la lee para llamar a initPager.
-    window.__nuApiCfg = { context: contexto, pos, withPercent: true, nextUrl, prevUrl };
+    window.__enuApiCfg = { context: contexto, pos, withPercent: true, nextUrl, prevUrl };
   </script>
   <script>
     import { initPager } from '../../scripts/pager';
 
-    initPager((window as any).__nuApiCfg);
+    initPager((window as any).__enuApiCfg);
 
     // Scrollspy del § del carril: marca la sección visible como activa (bright).
     const secs = Array.from(document.querySelectorAll<HTMLElement>('[data-sec]'));
@@ -136,7 +136,7 @@ const keys = [
       )
     );
     document.querySelectorAll('[data-touch="search"]').forEach((b) =>
-      b.addEventListener('click', () => window.dispatchEvent(new CustomEvent('nu:search-open')))
+      b.addEventListener('click', () => window.dispatchEvent(new CustomEvent('enu:search-open')))
     );
   </script>
 </Base>

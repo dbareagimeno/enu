@@ -1,13 +1,13 @@
 ---
 title: The toolkit extension
-description: The widget toolkit over nu.ui and nu.text — layout containers, focus, composition across plugins, and a theme system with semantic color names.
+description: The widget toolkit over enu.ui and enu.text — layout containers, focus, composition across plugins, and a theme system with semantic color names.
 ---
 
 ## What it does
 
 The core exposes a deliberately low-level UI API (cells, regions, and a
-compositor; `nu.ui`, ADR-007). The `toolkit` is the official Lua extension
-that provides the high-level layer on top of `nu.ui` and `nu.text`:
+compositor; `enu.ui`, ADR-007). The `toolkit` is the official Lua extension
+that provides the high-level layer on top of `enu.ui` and `enu.text`:
 
 - **slots** — layout containers (`vbox`/`hbox`/`stack`) that place their
   children;
@@ -25,18 +25,18 @@ versioned **separately** from the core's sacred API. [chat](../chat.md) and
 
 ## How it's activated
 
-`plugin.toml` declares no `requires`. In `nu.toml`:
+`plugin.toml` declares no `requires`. In `enu.toml`:
 
 ```toml
-# ~/.config/nu/nu.toml
+# ~/.config/enu/enu.toml
 [plugins]
 enabled = ["toolkit"]
 ```
 
-The toolkit **doesn't exist without `nu.ui`**: in headless mode (no TTY) the
+The toolkit **doesn't exist without `enu.ui`**: in headless mode (no TTY) the
 painting functions can't be used. Loading the extension only exposes the
 machinery (the pure tree, layout, and theme functions); mounting a real app
-requires checking `nu.has("ui")` first. Activating `chat` pulls in the
+requires checking `enu.has("ui")` first. Activating `chat` pulls in the
 toolkit by dependency.
 
 ## Configuration
@@ -55,7 +55,7 @@ manages focus, routes input (pushes an `on_input` that delivers the key to
 the focused widget), and repaints by dirty nodes. `opts`: `region` (an
 already-created `Region`) **or** `x/y/w/h/z?` so the app creates its own;
 `root?` (the root container, a `vbox` by default); `theme?`;
-`manage_input?` (`true` by default). Without `nu.ui` it's an actionable
+`manage_input?` (`true` by default). Without `enu.ui` it's an actionable
 `EINVAL`.
 
 `App` methods: `relayout()`, `resize(w, h)`, `set_focus(w)`, `focus_next()` /
@@ -111,7 +111,7 @@ and a theme change repaints the UI without touching the widgets.
 `Theme` methods: `color(name) -> literal`, `style(spec) -> Style` (converts
 a spec's semantic `fg`/`bg` into literals), `with(overrides) -> Theme`
 (derives a theme with some colors replaced), and `markdown_opts()` (the
-per-element style table that `nu.text.markdown` accepts).
+per-element style table that `enu.text.markdown` accepts).
 
 The default palette defines, among others, `fg`, `bg`, `dim`, `secondary`,
 `accent`, `error`, `warn`, `success`, `info`, `bg_surface`, `overlay`,
@@ -138,7 +138,7 @@ semantics.
 ```lua
 local toolkit = require("toolkit")
 
-if nu.has("ui") then
+if enu.has("ui") then
   local column = toolkit.vbox{ id = "root" }
   local output = toolkit.text{ markdown = true }
   output.flex = 1

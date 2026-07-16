@@ -49,14 +49,14 @@ func TestA36CleanupBucleNoCongela(t *testing.T) {
 	if _, lerr, err := inst.Eval(`
 		traza = ""
 		vivo = "no"
-		local w = nu.task.spawn(function()
-			nu.task.cleanup(function() traza = traza .. "C" end)  -- registrado 1º → corre 3º
-			nu.task.cleanup(function() while true do end end)     -- bucle de CPU: lo corta el WD
-			nu.task.cleanup(function() traza = traza .. "A" end)  -- registrado 3º → corre 1º
+		local w = enu.task.spawn(function()
+			enu.task.cleanup(function() traza = traza .. "C" end)  -- registrado 1º → corre 3º
+			enu.task.cleanup(function() while true do end end)     -- bucle de CPU: lo corta el WD
+			enu.task.cleanup(function() traza = traza .. "A" end)  -- registrado 3º → corre 1º
 		end)
-		nu.task.spawn(function() pcall(function() nu.task.await(w) end) end)
-		nu.task.spawn(function()
-			nu.task.sleep(1)
+		enu.task.spawn(function() pcall(function() enu.task.await(w) end) end)
+		enu.task.spawn(function()
+			enu.task.sleep(1)
 			vivo = "si"   -- el estado sigue vivo: esta task avanza tras el corte del cleanup
 		end)`); err != nil || lerr != "" {
 		t.Fatalf("setup: lerr=%q err=%v", lerr, err)
@@ -80,9 +80,9 @@ func TestA36HandlerBusBucleNoCongela(t *testing.T) {
 	inst := newInstanceBudget(t, 30*time.Millisecond)
 	if _, lerr, err := inst.Eval(`
 		got = ""
-		nu.events.on("test:boom", function() got = got .. "1" end)
-		nu.events.on("test:boom", function() while true do end end)  -- bucle: lo corta el WD
-		nu.events.on("test:boom", function() got = got .. "3" end)`); err != nil || lerr != "" {
+		enu.events.on("test:boom", function() got = got .. "1" end)
+		enu.events.on("test:boom", function() while true do end end)  -- bucle: lo corta el WD
+		enu.events.on("test:boom", function() got = got .. "3" end)`); err != nil || lerr != "" {
 		t.Fatalf("setup: lerr=%q err=%v", lerr, err)
 	}
 	emitBounded(t, inst, "test:boom", 3*time.Second)
@@ -103,14 +103,14 @@ func TestA36FronteraNormalSinFalsoEBUDGET(t *testing.T) {
 	inst := newInstanceBudget(t, 500*time.Millisecond)
 	if _, lerr, err := inst.Eval(`
 		clean_done = "no"
-		local w = nu.task.spawn(function()
-			nu.task.cleanup(function()
+		local w = enu.task.spawn(function()
+			enu.task.cleanup(function()
 				local s = 0; for i = 1, 50000 do s = s + i end; clean_done = tostring(s)
 			end)
 		end)
-		nu.task.spawn(function() pcall(function() nu.task.await(w) end) end)
+		enu.task.spawn(function() pcall(function() enu.task.await(w) end) end)
 		handler_done = "no"
-		nu.events.on("test:ping", function()
+		enu.events.on("test:ping", function()
 			local s = 0; for i = 1, 50000 do s = s + i end; handler_done = tostring(s)
 		end)`); err != nil || lerr != "" {
 		t.Fatalf("setup: lerr=%q err=%v", lerr, err)

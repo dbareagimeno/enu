@@ -1,13 +1,13 @@
 package runtime
 
-// Catálogo de nu.ws sobre el backend wasm (M13b, §11). Contraparte de ws.go: una
-// sola primitiva de entrada, nu.ws.connect(url, opts?) -> Ws, y el handle Ws con
+// Catálogo de enu.ws sobre el backend wasm (M13b, §11). Contraparte de ws.go: una
+// sola primitiva de entrada, enu.ws.connect(url, opts?) -> Ws, y el handle Ws con
 // send/recv/close. Reusa TODA la lógica de red/protocolo VM-agnóstica de ws.go
 // —el dial (`rt.dialWs`), la escritura (`luaWs.send`), la lectura (`luaWs.recv`)
 // y el cierre idempotente (`luaWs.close`)—; sólo cambia el marshaling de la
 // frontera (el wire ya lo resuelve) y la forma de despachar los métodos ⏸.
 //
-// EL RETO DEL connect ⏸ + HANDLE. `nu.ws.connect` es a la vez BLOQUEANTE (el
+// EL RETO DEL connect ⏸ + HANDLE. `enu.ws.connect` es a la vez BLOQUEANTE (el
 // handshake) y CREADOR DE HANDLE. Lo bloqueante exige una primitiva suspendente
 // (`RegisterSuspending`), que corre en la goroutine de fondo del scheduler; crear
 // el handle exige `inst.AllocHandle`. El contrato de RegisterSuspending desaconseja
@@ -36,11 +36,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/dbareagimeno/nu/internal/vmwasm"
+	"github.com/dbareagimeno/enu/internal/vmwasm"
 )
 
 func registerWsWasm(p *vmwasm.Pool, rt *Runtime) {
-	// nu.ws._connect(url, opts?) -> Ws ⏸ — el wrapper nu.ws.connect lo envuelve. El
+	// enu.ws._connect(url, opts?) -> Ws ⏸ — el wrapper enu.ws.connect lo envuelve. El
 	// handshake corre en la goroutine de fondo (cede al scheduler); ya conectado se
 	// registra el handle Ws. url/opts malos → EINVAL; puerto cerrado/DNS → ENET;
 	// handshake que expira timeout_ms → ETIMEOUT (los tres, del núcleo de ws.go).
@@ -101,14 +101,14 @@ func registerWsWasm(p *vmwasm.Pool, rt *Runtime) {
 		return nil, nil
 	})
 
-	// Wrapper Lua: nu.ws.connect envuelve el handle de ws._connect y le añade
+	// Wrapper Lua: enu.ws.connect envuelve el handle de ws._connect y le añade
 	// send/recv (por __hcall_s, ⏸) y close (por __hcall, síncrono). Mismo patrón que
-	// nu.re.compile (vmwasm_re.go), aquí enrutando los métodos bloqueantes al
+	// enu.re.compile (vmwasm_re.go), aquí enrutando los métodos bloqueantes al
 	// despacho suspendente.
 	p.AddPreludioW(`
-nu.ws = nu.ws or {}
-function nu.ws.connect(url, opts)
-  local ws = nu.ws._connect(url, opts)   -- ⏸: handle {__id} tras el handshake
+enu.ws = enu.ws or {}
+function enu.ws.connect(url, opts)
+  local ws = enu.ws._connect(url, opts)   -- ⏸: handle {__id} tras el handshake
   ws.send  = function(self, data, opts) return __hcall_s(self.__id, "send", data, opts) end
   ws.recv  = function(self)             return __hcall_s(self.__id, "recv") end
   ws.close = function(self)       return __hcall(self.__id, "close") end
@@ -116,7 +116,7 @@ function nu.ws.connect(url, opts)
 end`, "ws._connect")
 }
 
-// parseWsOptsWasm extrae (url, wsOpts) del wire de nu.ws.connect. Mismo contrato
+// parseWsOptsWasm extrae (url, wsOpts) del wire de enu.ws.connect. Mismo contrato
 // que parseWsOpts (§11) del backend gopher: url obligatoria (string no vacío),
 // opts?.headers (string→string) y opts?.timeout_ms (positivo); un uso malo →
 // EINVAL. El equivalente de parseReqOptsWasm (vmwasm_http.go) para ws.
@@ -163,7 +163,7 @@ func parseWsOptsWasm(urlArg, optsArg any) (string, wsOpts, error) {
 }
 
 func einvalWs(msg string) error {
-	return &vmwasm.StructuredError{Code: CodeEINVAL, Message: "nu.ws.connect: " + msg}
+	return &vmwasm.StructuredError{Code: CodeEINVAL, Message: "enu.ws.connect: " + msg}
 }
 
 // wsErrWasm traduce el error de send/recv (del núcleo de ws.go) al error

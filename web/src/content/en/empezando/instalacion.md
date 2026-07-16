@@ -1,9 +1,9 @@
 ---
 title: Installation
-description: Install the static nu binary from a release or build it with Go.
+description: Install the static enu binary from a release or build it with Go.
 ---
 
-`nu` is **a single static binary** with no dynamic dependencies
+`enu` is **a single static binary** with no dynamic dependencies
 (`CGO_ENABLED=0`): it runs as-is on any distro or container. There's no need
 to install Node, npm, or any runtime.
 
@@ -18,10 +18,10 @@ curl -fsSL https://raw.githubusercontent.com/dbareagimeno/enu/main/install.sh | 
 ```
 
 By default it installs to `~/.local/bin` (or `/usr/local/bin` if you have
-permission); you can force the destination with `NU_INSTALL_DIR`:
+permission); you can force the destination with `ENU_INSTALL_DIR`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/dbareagimeno/enu/main/install.sh | NU_INSTALL_DIR=/usr/local/bin sh
+curl -fsSL https://raw.githubusercontent.com/dbareagimeno/enu/main/install.sh | ENU_INSTALL_DIR=/usr/local/bin sh
 ```
 
 Prefer to review it before running it? Download it, read it, and run it by
@@ -37,11 +37,11 @@ put it on your `PATH`:
 
 ```sh
 # Adjust VERSION and the platform.
-tar -xzf nu-vVERSION-linux-amd64.tar.gz
-chmod +x nu
-sudo mv nu /usr/local/bin/
+tar -xzf enu-vVERSION-linux-amd64.tar.gz
+chmod +x enu
+sudo mv enu /usr/local/bin/
 
-nu -e 'return nu.version'   # verify the install (headless, no TTY)
+enu -e 'return enu.version'   # verify the install (headless, no TTY)
 ```
 
 Verify integrity with the `checksums.txt` that ships with each release:
@@ -56,36 +56,36 @@ You need Go (the minimum version is in `go.mod`):
 
 ```sh
 git clone https://github.com/dbareagimeno/enu
-cd nu
-CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o nu .
+cd enu
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o enu .
 ```
 
 ## Windows
 
-On Windows, `nu` is used via **WSL2** with the `linux/amd64` binary. Native
+On Windows, `enu` is used via **WSL2** with the `linux/amd64` binary. Native
 Windows support is postponed.
 
 ## Checking it works
 
 ```sh
-nu -e 'return nu.version'
+enu -e 'return enu.version'
 ```
 
 You should see a table with `major`, `minor`, `patch`, and `api` (the core
 API level). If you see it, you already have a working Lua runtime.
 
 :::note[Bare runtime]
-A freshly installed `nu` **ships with no extension active**: launching it
+A freshly installed `enu` **ships with no extension active**: launching it
 with a TTY shows you a runtime screen with its capabilities and the option
 to activate the official set (the agent, the chat…) with a single key, with
 no network access. Without a TTY (CI, Docker, scripts), the one-command
-equivalent is `nu --default-config`, which writes that activation to your
-`nu.toml`. This is deliberate — see [Key
-concepts](/nu/en/docs/conceptos/)—. For headless scripting with `nu -e`
+equivalent is `enu --default-config`, which writes that activation to your
+`enu.toml`. This is deliberate — see [Key
+concepts](/enu/en/docs/conceptos/)—. For headless scripting with `enu -e`
 you don't need to activate anything.
 :::
 
 ## Next step
 
 You can now run Lua. Continue with [Your first
-script](/nu/en/docs/primer-script/).
+script](/enu/en/docs/primer-script/).

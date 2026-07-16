@@ -309,7 +309,7 @@ need to be thread-safe or multiplex concurrent authors.
 
 **Decision.**
 
-1. **Global namespace `nu`** with submodules (`nu.fs`, `nu.ui`, ...), like
+1. **Global namespace `enu`** with submodules (`enu.fs`, `enu.ui`, ...), like
    Neovim's global `vim`; `require` is reserved for plugin modules. Lua's
    blocking stdlib (`io`, `os.execute`, ...) is disabled: all IO goes
    through the core's async primitives, or it would freeze the event loop.
@@ -327,7 +327,7 @@ need to be thread-safe or multiplex concurrent authors.
 **Consequences.** The trivial-plugin DX is sequential code with no visible
 async concepts. Disabling `io`/`os` breaks compatibility with pure Lua
 libraries that use them (assumed: the target ecosystem writes against
-`nu.*`). The scheduler's coroutine↔goroutine bridge is the kernel's central
+`enu.*`). The scheduler's coroutine↔goroutine bridge is the kernel's central
 piece (consistent with ADR-004).
 
 ---
@@ -361,7 +361,7 @@ expects it this way.
 **Consequences.** The first boot must offer activation of the official set
 (without it, the first experience would be an empty screen); "agent working
 within the first minute" goes from automatic to "one keystroke away."
-Philosophy §5 is rewritten. `nu.toml` moves from `plugins.disabled` to
+Philosophy §5 is rewritten. `enu.toml` moves from `plugins.disabled` to
 governing activation (`plugins.enabled` or equivalent — a loader detail).
 
 ---
@@ -530,7 +530,7 @@ promoted from *Proposed (pending validation)* to **Accepted**.
   moving the toolkit to Go wouldn't fix it. It remains a **performance
   observation, not a veto**: if in production the picker over huge repos
   feels slow with very short queries, the fix belongs to the
-  `nu.search.fuzzy` *primitive* (S27) —e.g., parallelizing the scoring, or
+  `enu.search.fuzzy` *primitive* (S27) —e.g., parallelizing the scoring, or
   a minimum query-length threshold in the toolkit— not to the UI
   architecture. It doesn't open a `G##`: API §11 and §9 suffice; it's a
   note for future optimization.
@@ -556,7 +556,7 @@ discipline lived only in the [CLAUDE.md](../CLAUDE.md) protocol —"every
 session leaves `go build ./...` green," the 🔒 inventory of mandatory
 tests— and was enforced by hand in every session. There was no continuous
 integration, no configured linting, no mechanism for distributing the
-binary. This decision records **how `nu` is validated and published**.
+binary. This decision records **how `enu` is validated and published**.
 It's operator DevOps: the implementation (the `.github/workflows/*.yml`
 files) is NOT part of the sacred API ([api.md](api.md)) nor of the
 extension contracts; this ADR captures the *decisions*, not the YAML
@@ -570,11 +570,11 @@ fixed its pipeline.
    formatting (`gofmt`), `go vet`, clean modules (`go mod verify` +
    diff-free `tidy`), `golangci-lint` (minimal set, see point 5), `go build
    ./...`, building the static binary with release flags, a **headless
-   smoke test** (`nu -e 'return nu.version.api'`, with no secrets), and `go
+   smoke test** (`enu -e 'return enu.version.api'`, with no secrets), and `go
    test -race` over an **`ubuntu` + `macos` matrix** (the two v1 target
    platforms). `-race` always: the 🔒 inventory includes concurrency tests
    (S07–S10) that only reveal data races under the detector. No Go version
-   matrix: `nu` is distributed as a binary, not as a library that third
+   matrix: `enu` is distributed as a binary, not as a library that third
    parties compile; the version that matters is the one in `go.mod`, read
    via `go-version-file`.
 
@@ -589,10 +589,10 @@ fixed its pipeline.
 
 3. **Versioning — "constants as source of truth" strategy.** The version
    lives in `internal/runtime/nu.go`'s constants (`VersionMajor/Minor/Patch`,
-   exposed as `nu.version`). The release **does not inject** the version
+   exposed as `enu.version`). The release **does not inject** the version
    via `-ldflags -X`: it **verifies** it against the tag in a gate job and
    aborts if they diverge. The gate reads the version **by running the
-   runtime** (`go run . -e '…nu.version…'`), not with a `grep` of the file:
+   runtime** (`go run . -e '…enu.version…'`), not with a `grep` of the file:
    it uses the same composition logic (`registerNu`) as the real binary, so
    it validates exactly what the user will see, with no fragility from the
    order of the constants.
@@ -617,7 +617,7 @@ fixed its pipeline.
   strategy has **a single source of truth**, doesn't mutate code at build
   time (what's published is bit-for-bit what's in the repo, reinforcing
   `-trimpath`), and is consistent with "Lua decides, Go executes":
-  `nu.version` is already the observable truth; packaging derives from it.
+  `enu.version` is already the observable truth; packaging derives from it.
   The constants are **not** part of the sacred surface (they live in
   `internal/runtime`, not in `api.md`): the gate *reads* them, it doesn't
   extend them, so it doesn't brush against the §4 protocol.
@@ -662,7 +662,7 @@ fixed its pipeline.
 
 **Context.** The kernel is already real code and is going to be
 distributed (ADR-013), but the repo had no license: without one, legally
-nobody can use or redistribute `nu`. The author wants two things at once,
+nobody can use or redistribute `enu`. The author wants two things at once,
 seemingly in tension: (1) for it to be **truly open source**, to
 contribute to the community and maximize adoption, and (2) to keep the
 option of **commercializing or selling it** in the future if the project
@@ -675,7 +675,7 @@ proprietary license or transfer the entire project. The risk to that
 ownership isn't the chosen license, but **accepting third-party code
 without a rights assignment**.
 
-On authorship: `nu`'s sole author is **Diego Barea**. The `Candela1011
+On authorship: `enu`'s sole author is **Diego Barea**. The `Candela1011
 <candelabr72@gmail.com>` identity that appears in the git history is not a
 second author: it's the `git config` left over from the borrowed computer;
 there is no co-ownership. The repo's identity was fixed to the author's
@@ -692,7 +692,7 @@ stays alive, without yet imposing the friction of a CLA.
 
 **Reasoning.**
 - **Why permissive and not copyleft (AGPL/GPL).** The goal is broad
-  adoption and "giving to the community." An AGPL would make `nu` viral
+  adoption and "giving to the community." An AGPL would make `enu` viral
   copyleft (whoever runs it modified as a service must publish their
   changes), which **reduces** adoption and is used when one wants to
   continuously *force* commercial buyers — not the case here. For the
@@ -710,7 +710,7 @@ stays alive, without yet imposing the friction of a CLA.
   goes in with their copyright intact) while keeping it cheap.
 
 **Consequences.**
-- `nu` is free to use, study, modify, and distribute (even commercially)
+- `enu` is free to use, study, modify, and distribute (even commercially)
   under Apache 2.0; CI and the release can already publish with a valid
   license.
 - The author retains ownership and, therefore, the ability to offer a
@@ -718,7 +718,7 @@ stays alive, without yet imposing the friction of a CLA.
   volume of external contributions grows, formalize a CLA (text + a
   CLA-assistant-type bot) so as not to have to negotiate assignments one
   by one; the framework is already announced in `CONTRIBUTING.md`.
-- If an entity/company is created in the future to commercialize `nu`, the
+- If an entity/company is created in the future to commercialize `enu`, the
   copyright name is updated; it doesn't require changing licenses.
 - No license headers are added per `.go` file (the root `LICENSE` is
   enough for Apache 2.0 in a single-owner module); if third-party code is
@@ -747,7 +747,7 @@ screen is UI —it exists **only with an interactive TTY**—; [api.md](api.md)
 the already-finished binary to try it with its harness in CI/Docker/scripts
 (no TTY), two loose ends ADR-010 didn't tie up appear: (1) **there is no
 step** to activate the official set without a TTY —you have to write
-`config.dir()/nu.toml` by hand, which contradicts the "one-keystroke"
+`config.dir()/enu.toml` by hand, which contradicts the "one-keystroke"
 ergonomics ADR-010 itself promises—; and (2) **"the official set" was never
 precisely defined**: today `ActivateOfficial()` activates *all* of
 `embeddedNames()`, which includes `example` —the scaffolding plugin that
@@ -755,13 +755,13 @@ exists solely to test the gating ([implementacion.md](implementacion.md),
 Phase 8)—, so the TTY action already puts the test plugin into the user's
 config.
 
-**Decision.** Two pieces, **neither in the sacred API** `nu.*` (it's CLI
-and loader surface, not `nu.version.api`):
+**Decision.** Two pieces, **neither in the sacred API** `enu.*` (it's CLI
+and loader surface, not `enu.version.api`):
 
 1. **A CLI flag, `nu --default-config`**, a non-interactive mirror of the
    bare screen's "activate the official set" action, with **two modes**:
    - **Alone** (`nu --default-config`): writes `plugins.enabled` with the
-     product set to `config.dir()/nu.toml` —preserving the rest, atomic,
+     product set to `config.dir()/enu.toml` —preserving the rest, atomic,
      idempotent, reusing the same `writeEnabledPlugins` as the TTY
      action— and **exits**.
    - **With a headless action** (`--default-config -p '…'` / `-e '…'`):
@@ -782,16 +782,16 @@ and loader surface, not `nu.version.api`):
 
 The set is **identical in both modes**, including `chat`: although
 `chat`/`repl` need a TTY, their `init.lua` already self-gate with `if
-nu.has("ui")` and stay inert without a UI surface (G20), so activating them
+enu.has("ui")` and stay inert without a UI surface (G20), so activating them
 headless doesn't get in the way; having a second "no UI" list would be an
 edge case with no payoff.
 
 **Reasoning.**
-- **Why a flag and not extending the API (`nu.config.enable_official()` +
-  `nu -e`).** Exposing it to Lua would **expand the sacred surface**
-  (`nu.version.api`++, the project's most expensive cost, and what
-  [api.md](api.md) §17 shields) to *worsen* ergonomics: `nu -e
-  'nu.config.enable_official()'` is no easier to remember or type than the
+- **Why a flag and not extending the API (`enu.config.enable_official()` +
+  `enu -e`).** Exposing it to Lua would **expand the sacred surface**
+  (`enu.version.api`++, the project's most expensive cost, and what
+  [api.md](api.md) §17 shields) to *worsen* ergonomics: `enu -e
+  'enu.config.enable_official()'` is no easier to remember or type than the
   flag. It fails the stated goal (easy installation) while paying the
   highest price.
 - **Why a flag and not a `nu init` subcommand.** It would be honest (a
@@ -812,19 +812,19 @@ edge case with no payoff.
   orchestrates extensions through the public API just as a user's
   `init.lua` could: the core still doesn't know what an agent is. It's
   exactly S45's boundary (the CLI surface lives in `main.go`, not in
-  `nu.*`).
+  `enu.*`).
 
 **Consequences.**
-- Installing `nu` and having it "batteries-included" in CI/Docker is **one
+- Installing `enu` and having it "batteries-included" in CI/Docker is **one
   command** (`nu --default-config`), with no hand-editing of TOML.
   ADR-010's "one keystroke" promise now also holds without a TTY.
 - "The official set" has a **single definition** (`officialProductSet`);
   the bare screen (G21) and the flag can't diverge. `ActivateOfficial()`
   stops activating `example`: an observable behavior change, covered by
   its test.
-- The sacred surface **does not grow**: `nu.version.api` stays the same.
+- The sacred surface **does not grow**: `enu.version.api` stays the same.
   The only new API is internal to the runtime (`WithEnabledPlugins`, an
-  option of `runtime.New`, not `nu.*`).
+  option of `runtime.New`, not `enu.*`).
 - **No network** (ADR-010): activation comes from the embedded binary, in
   both modes.
 - **Reopening trigger:** if the binary accumulates more configuration
@@ -851,8 +851,8 @@ the crack is **latent** (the agent doesn't populate `req.thinking` by default), 
 is decided now, before wiring up reasoning, so as not to build that feature on
 top of a broken canonical.
 
-**Decision.** Two pieces, **neither in the sacred `nu.*` API** (this is the model
-canonical to the `providers` extension, not `nu.version.api`):
+**Decision.** Two pieces, **neither in the sacred `enu.*` API** (this is the model
+canonical to the `providers` extension, not `enu.version.api`):
 
 1. **The canonical parameter grows by addition** to
    `thinking?: { mode?: "off" | "adaptive" | "budget", budget?: integer }`:
@@ -914,8 +914,8 @@ canonical to the `providers` extension, not `nu.version.api`):
 **Consequences.**
 - The canonical model can now **express adaptive reasoning**; Opus 4.6+
   models (including the default) are usable with reasoning without a 400.
-- The sacred `nu.*` surface **doesn't change** (it's a contract of the
-  `providers` extension); `nu.version.api` stays the same. `providers.toml` gains an
+- The sacred `enu.*` surface **doesn't change** (it's a contract of the
+  `providers` extension); `enu.version.api` stays the same. `providers.toml` gains an
   optional per-model field `thinking` (compatible: absent = `"budget"`).
 - **Implementation pending** (a construction session, NOT this commit, per the
   "the contract leads, the code follows" protocol): the new `to_wire` of the
@@ -931,27 +931,27 @@ canonical to the `providers` extension, not `nu.version.api`):
 **Status:** Accepted · 2026-06 (**refines** [ADR-015](#adr-015--conjunto-oficial-de-producto-y-onramp-no-interactivo); resolves [G35](problemas.md#g35--el-onramp-de-adr-015-activa-los-plugins-pero-no-deja-config-de-agente-el-primer-nu-muere-sin-modelo-y-deja-la-ui-atrapada))
 
 **Context.** ADR-015 delivered the non-interactive onramp (`nu --default-config`)
-that activates the **official product set** in `nu.toml`. But "activating the
+that activates the **official product set** in `enu.toml`. But "activating the
 plugins" isn't "having a usable harness": the agent and the chat need a
 **model**, a **provider**, and an **API key** that the onramp doesn't provide. When
-using the finished binary after `nu --default-config`, running `nu` leaves the
+using the finished binary after `nu --default-config`, running `enu` leaves the
 terminal blank; the log says so: `chat: could not start: agent.session requires
 model ("provider/model") in opts or in agent.toml`. There are **two defects**
 ([G35](problemas.md#g35--el-onramp-de-adr-015-activa-los-plugins-pero-no-deja-config-de-agente-el-primer-nu-muere-sin-modelo-y-deja-la-ui-atrapada)):
 (1) the onramp doesn't write `agent.toml`/`providers.toml`, so `core:ready` →
 `chat.start` → `agent.session({model=nil})` throws `EINVAL`; (2) the chat catches
-that failure with `pcall` and sends it only to the log (`nu.log.error`, never to
+that failure with `pcall` and sends it only to the log (`enu.log.error`, never to
 the screen, §15) without mounting anything, and since the bare screen —the only
 path that installs an emergency exit handler— isn't taken with plugins active,
 the user is left **trapped** (in raw mode `ctrl+c` doesn't generate `SIGINT`). The
 command that promised "batteries-included" leaves the product broken and
 unusable on its very first run.
 
-**Decision.** Two pieces, **neither in the sacred `nu.*` API** (this is CLI + loader
-+ extension Lua surface; `nu.version.api` doesn't change):
+**Decision.** Two pieces, **neither in the sacred `enu.*` API** (this is CLI + loader
++ extension Lua surface; `enu.version.api` doesn't change):
 
 1. **The onramp leaves USABLE agent config.** `nu --default-config` (persistent
-   mode) writes, in addition to `nu.toml`, **active templates** for:
+   mode) writes, in addition to `enu.toml`, **active templates** for:
    - `agent.toml`: `model = "anthropic/opus"`, `max_turns = 32`.
    - `providers.toml`: provider `anthropic` (`base_url`, `api_key_env =
      "ANTHROPIC_API_KEY"`) with the model `claude-opus-4-8` (alias `opus`,
@@ -964,7 +964,7 @@ unusable on its very first run.
    environment. The success message becomes **honest**: it lists the files
    created and reminds the user to export `ANTHROPIC_API_KEY` (or edit
    `providers.toml`) before starting — no longer the misleading promise "you can
-   now run the agent: nu -p".
+   now run the agent: enu -p".
 
    **Ephemeral** mode (`--default-config -p/-e`, immutable Docker) still doesn't
    touch disk: there, config comes from the environment or mounted files, and
@@ -984,14 +984,14 @@ unusable on its very first run.
 
 **Rationale.**
 - **Why active templates and not commented-out ones.** With the key in the
-  environment, `nu` *just works* after a single command — ADR-015's promise, now
+  environment, `enu` *just works* after a single command — ADR-015's promise, now
   real. Without the key, `providers.resolve` **doesn't fail** (it leaves
   `api_key=nil`): the chat still mounts, the statusline shows the model, and the
   missing-key error surfaces **in-transcript** on the first turn (`agent:error`
   → `transcript:add_error`, which the chat already renders), much better than a
   dead screen. Commented-out templates would force editing TOML before the
   first run, the very friction the onramp removes.
-- **Why an Anthropic default.** `nu` is a claude-code-style coding harness; the
+- **Why an Anthropic default.** `enu` is a claude-code-style coding harness; the
   opinionated default is coherent with its identity and with the project's
   default model (`claude-opus-4-8`, ADR-016). The user changes it by editing
   two lines; the templates show the format.
@@ -1006,11 +1006,11 @@ unusable on its very first run.
   alternatives.
 - **Why it doesn't touch the sacred API.** Same as ADR-015: the onramp belongs
   to the binary (`main.go`/loader) and the degradation is Lua in the `chat`
-  extension. `nu.*` and `nu.version.api` stay intact.
+  extension. `enu.*` and `enu.version.api` stay intact.
 
 **Consequences.**
 - `nu --default-config` leaves the harness **actually** ready (with the key
-  exported, one command suffices); without it, the first `nu` opens the chat with
+  exported, one command suffices); without it, the first `enu` opens the chat with
   an actionable error instead of a dead screen.
 - `chat.start` stops being a silent point of failure: any missing or broken
   config produces a screen that **explains and closes**.
@@ -1041,16 +1041,16 @@ whole UI was condemned to stack plain text no matter how much it was dressed up.
 
 **Decision.** Raise the official extensions to product quality, **entirely in
 Lua on top of the already-frozen API** (completeness corollary: no need to
-extend `nu.*`; `nu.version.api` doesn't move). Three fronts:
+extend `enu.*`; `enu.version.api` doesn't move). Three fronts:
 
 1. **The toolkit decorates.** Added to the catalog (open question #3 of
    arquitectura.md, which ADR-012 left for the toolkit to settle): `box` (rounded/
    straight border frame, title, padding, focus highlight), `spinner` (animated
-   via `nu.task.every`), `richtext` (a line of several spans with alignment), and
+   via `enu.task.every`), `richtext` (a line of several spans with alignment), and
    in containers `padding`/`gap`/`align`/`justify`. The `theme` moves from a
    placeholder palette to a **curated palette** (warm accent, roles, surfaces,
    selection, code/links/diff) and exposes `Theme:markdown_opts()`, which
-   **wires the semantic names into `nu.text.markdown`'s render** (api.md §10) —
+   **wires the semantic names into `enu.text.markdown`'s render** (api.md §10) —
    the highest-impact change: the transcript stops being monochrome.
 
 2. **The chat looks finished.** Welcome on startup (banner, model, cwd,
@@ -1076,8 +1076,8 @@ because until now nothing had been painted at x>0), fixed to comply with the
 **Rationale.**
 - **Why in Lua and not in the core.** The audits confirmed the primitives
   needed already existed in the frozen API: Blocks with styled spans (§9.2),
-  **themable** `nu.text.markdown` (§10), `nu.text.highlight`/`diff`,
-  `nu.task.every` to animate, `nu.plugin.list` for the repl to detect the chat.
+  **themable** `enu.text.markdown` (§10), `enu.text.highlight`/`diff`,
+  `enu.task.every` to animate, `enu.plugin.list` for the repl to detect the chat.
   The completeness corollary holds: the API was exactly enough; what was
   missing was *using* it from the toolkit. The only exception was G37, an
   *implementation* bug in the compositor (not a spec issue): the code is fixed
@@ -1098,7 +1098,7 @@ because until now nothing had been painted at x>0), fixed to comply with the
   framed input, status bar, and a single app that shuts down the binary when
   closed.
 - The toolkit's catalog grows (box/spinner/richtext + padding/align), but it's
-  **toolkit surface**, versioned separately, not `nu.*` (the sacred API doesn't
+  **toolkit surface**, versioned separately, not `enu.*` (the sacred API doesn't
   move).
 - Observable changes covered by tests: the transcript emits color (themable
   markdown), the statusline is a bar of spans, the editor sits in a box, the
@@ -1177,7 +1177,7 @@ of binary size.
   minimizes crossings); an experimental API watched by the spike; and the
   minor, announced breakage of the 5.1→5.4 baseline in api.md §1.2 when it
   lands.
-- Plugin authors **notice nothing**: same Lua, same `nu.*` API, same
+- Plugin authors **notice nothing**: same Lua, same `enu.*` API, same
   contracts — the sacred API is exactly the layer that makes it possible to
   change the engine without touching the ecosystem (ADR-003, structural
   dogfooding).
@@ -1210,7 +1210,7 @@ scheduler loop in Go driving them:
    running at a time, sharing the instance's memory. No token/GIL: the
    coroutine truly yields.
 2. **⏸ = `lua_yield` with a request.** A suspending primitive (or
-   `nu.task.sleep`) yields with a *work descriptor* (M05 wire: work type +
+   `enu.task.sleep`) yields with a *work descriptor* (M05 wire: work type +
    args). The Go loop reads what was yielded, launches the blocking work in a
    **background goroutine** (which never touches the VM), and when it finishes
    it **resumes** the coroutine with the result (`nu_co_resume`). The Lua code
@@ -1219,7 +1219,7 @@ scheduler loop in Go driving them:
    the ready ones until they yield or finish; delivers background-goroutine
    results over a channel. It's ADR-004's event loop, now without the token
    dance.
-4. **The complete `nu.task`** (spawn/sleep/await/all[G27]/race/every/defer/
+4. **The complete `enu.task`** (spawn/sleep/await/all[G27]/race/every/defer/
    future/cleanup) is implemented on top of this loop. Observable semantics
    are identical to gopher's (the `scheduler_test`/`allrace`/`future`/`timers`
    tests are the parity contract).

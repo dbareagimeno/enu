@@ -201,7 +201,7 @@ function M.install_builtins(deps)
       if sessions == nil or sessions.list == nil then
         return "el listado de sesiones no está disponible"
       end
-      local ok, list = pcall(sessions.list, ctx.session.cwd or nu.fs.cwd())
+      local ok, list = pcall(sessions.list, ctx.session.cwd or enu.fs.cwd())
       if not ok or type(list) ~= "table" or #list == 0 then
         return "no hay sesiones guardadas para este proyecto"
       end
@@ -209,7 +209,7 @@ function M.install_builtins(deps)
       for _, s in ipairs(list) do
         lines[#lines + 1] = "  " .. tostring(s.id or s)
       end
-      lines[#lines + 1] = "(reanuda con  nu --continue  o /sessions <id> en una versión futura)"
+      lines[#lines + 1] = "(reanuda con  enu --continue  o /sessions <id> en una versión futura)"
       return table.concat(lines, "\n")
     end })
   -- /compact, /fork, /permissions (chat.md §4): delegan en la API del agente

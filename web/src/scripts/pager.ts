@@ -56,11 +56,11 @@ export function initPager(opts: InitPagerOptions): void {
 
   // Búsqueda (fase E): el overlay se carga bajo demanda (import dinámico) para
   // no pesar en el resto de páginas internas. Lo abren tanto '/' (keyboard.ts
-  // emite 'nu:search-open') como el botón táctil `[/] buscar` de la statusline.
+  // emite 'enu:search-open') como el botón táctil `[/] buscar` de la statusline.
   const abreBusqueda = (): void => {
     void import('./search').then((m) => m.openSearch());
   };
-  window.addEventListener('nu:search-open', abreBusqueda);
+  window.addEventListener('enu:search-open', abreBusqueda);
   document
     .querySelectorAll<HTMLElement>('[data-touch="search"]')
     .forEach((btn) => btn.addEventListener('click', abreBusqueda));

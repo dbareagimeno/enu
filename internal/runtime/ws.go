@@ -9,18 +9,18 @@ import (
 	"github.com/coder/websocket"
 )
 
-// `nu.ws` — websockets (api.md §8, sesión S21). Una sola primitiva,
-// `nu.ws.connect(url, opts?) -> Ws`, y tres métodos del handle: `Ws:send(data,
+// `enu.ws` — websockets (api.md §8, sesión S21). Una sola primitiva,
+// `enu.ws.connect(url, opts?) -> Ws`, y tres métodos del handle: `Ws:send(data,
 // opts?)` ⏸ (`opts.binary` → frame binario; sin él, texto — G52/A-38),
 // `Ws:recv() -> data: string?, binary: boolean` ⏸ (nil al cerrarse; el segundo
 // valor distingue el tipo del frame entrante — G52/A-38) y `Ws:close()`. Cierra la Fase 4
-// (Red). Es el complemento full-duplex de `nu.http.stream` (S20): donde el stream
+// (Red). Es el complemento full-duplex de `enu.http.stream` (S20): donde el stream
 // es un body que el servidor va emitiendo (SSE), el websocket es un canal de ida
 // y vuelta —el caso de un provider que empuja tokens y a la vez recibe control—.
 //
 // EL PUENTE ⏸ (S04, ADR-011). Como todo el IO de red, `connect`/`send`/`recv` son
 // ⏸: sueltan el token y bloquean en la goroutine de fondo del puente `suspend`,
-// que **JAMÁS toca Lua**. A diferencia de `nu.http.stream` (S20), aquí NO hace
+// que **JAMÁS toca Lua**. A diferencia de `enu.http.stream` (S20), aquí NO hace
 // falta una goroutine permanente de lectura: el modelo de un websocket es
 // *petición-respuesta dirigida por el consumidor* —Lua llama `recv()` cuando
 // quiere el siguiente mensaje—, así que cada `send`/`recv` ejecuta su `Write`/
@@ -48,7 +48,7 @@ import (
 //
 // CLOSE / CLEANUP. `Ws:close()` cierra la conexión y es **idempotente**
 // (`closeOnce`). El idioma de vida es el de §6 (igual que `Stream`): quien abre el
-// websocket registra `nu.task.cleanup(function() w:close() end)`, de modo que al
+// websocket registra `enu.task.cleanup(function() w:close() end)`, de modo que al
 // cancelar/terminar la task se cierra sin fuga de goroutines. Como red de
 // seguridad, `Runtime.Close` cierra todos los websockets vivos (`stopAllWs`). El
 // `Ws` se rastrea para `Close` (como `Stream`) pero **no** cuenta para la
@@ -234,7 +234,7 @@ func isWsNormalClose(err error) bool {
 
 // errWsClosed lo devuelve `send` cuando el handle ya se cerró: `wsSend` lo rinde
 // como `ECLOSED`.
-var errWsClosed = errors.New("nu.ws: conexión cerrada")
+var errWsClosed = errors.New("enu.ws: conexión cerrada")
 
 // close cierra la conexión y libera recursos (§8). Idempotente. Marca `closed` (para
 // que un `send`/`recv` concurrente sepa que el cierre es a propósito), manda un frame
