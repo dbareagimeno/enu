@@ -55,6 +55,7 @@ Todo vive en `docs/`. Orden de lectura sugerido (y dependencias conceptuales):
 | `docs/pospuesto.md` | Lo que se decidió no decidir todavía (P##), cada uno con su *disparador* de reapertura. |
 | `docs/implementacion.md` | Plan de construcción incremental: una feature por sesión (S##), ordenado por dependencias del kernel. |
 | `docs/decisiones-implementacion.md` | Bitácora operativa: decisiones y desviaciones por sesión, por debajo del umbral de `G##`. |
+| `docs/release.md` | Runbook operativo para cortar una release estable (los *steps* que ADR-013 deja fuera). |
 
 Además, dos carpetas por tipo de artefacto: `docs/audits/` (informes de
 auditoría fechados y cerrados) y `docs/archive/` (planes ya ejecutados que solo
@@ -142,7 +143,9 @@ Este es el corazón del proyecto y debes respetarlo:
    consecuencias. **Las entradas nunca se reescriben**: si una decisión cambia,
    se añade una nueva que la *reemplaza* (supersede), y la vieja se marca
    "Reemplazada por ADR-NNN". Estados: Aceptada · Propuesta · Abierta ·
-   Reemplazada. Hay diez ADRs (ADR-001…ADR-010).
+   Reemplazada. El número y estado de cada ADR viven en el **propio
+   `adr.md`** — consúltalo ahí, no aquí (la cifra escrita aquí ya se desfasó
+   una vez).
 
 **Reglas de oro del flujo:**
 
