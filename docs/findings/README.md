@@ -14,7 +14,7 @@ resolución se aplica a los documentos afectados y la entrada pasa a
 aquello es lo que decidimos no decidir; esto son agujeros que la v1 sí
 necesita cerrados.
 
-**Estado: 52 registradas, 52 resueltas, 0 abiertas** (G53–G56 añadidas
+**Estado: 54 registradas, 54 resueltas, 0 abiertas** (G53–G56 añadidas
 2026-07-16 desde la auditoría de seguridad
 ([auditoria-seguridad-2026-07-16.md](../audits/auditoria-seguridad-2026-07-16.md)):
 grietas de diseño de SEC-02/03/04/07 —semántica de emparejamiento de permisos,
@@ -39,11 +39,14 @@ de los workers— resuelta y **construida** el 2026-07-13 con la opción (a),
 marca worker-safe por snippet de preludio; G46 —el replay de `event`—
 resuelta y **construida** el 2026-07-13 con la opción (a) más la (c):
 precedencia `opts > transcript > agent.toml` y allow/deny reaplicados en
-orden. Los números G42–G43 son un **hueco histórico**: se reservaron en su
-día para un trabajo (retry con backoff y `agent:error` estructurado) que
-nunca llegó a registrarlos —la rama que los apartó, `claude/ux-producto-pulido`,
-se fusionó el 2026-06-28 aportando otros hallazgos (G36/G37, PR #63)— y la
-numeración, append-only, no los reutiliza. G41 añadida 2026-07-03 desde la
+orden. G42–G43 añadidas 2026-07-08 desde la auditoría de arquitectura
+post-M17
+([informe-arquitectura-2026-07-08.md](../audits/informe-arquitectura-2026-07-08.md))
+— dos promesas de contrato que la implementación no cumplía y ningún registro
+recogía: el reintento con backoff de agente.md §2 no existía en el motor (G42)
+y `agent:error` descartaba el `code`/`retryable` que chat.md necesita para su
+acción de reintento (G43); resueltas y construidas el 2026-07-16
+(`stream_with_retry`, `Session:retry` y `/retry` en chat). G41 añadida 2026-07-03 desde la
 construcción — un handler que escribía en un upvalue de una task suspendida
 "perdía" la escritura: bug de gopher-lua en el desenrollado de `pcall`,
 blindado en el kernel el mismo día; G38-G40
@@ -97,10 +100,9 @@ añaden aquí con el mismo método.
 
 ## Índice
 
-> Los números G24–G25 y G42–G43 no existen como fichero: son huecos
-> históricos que **nunca se asignaron** (G42–G43 se reservaron para un trabajo
-> que acabó fusionado con otros números — G36/G37, PR #63). La numeración es
-> append-only: el próximo hallazgo es G57, los huecos no se reutilizan.
+> Los números G24–G25 no existen como fichero: son un hueco histórico que
+> nunca se asignó. La numeración es append-only: el próximo hallazgo es G57,
+> los huecos no se reutilizan.
 
 | # | Título | Docs afectados | Estado | Fichero |
 |---|---|---|---|---|
@@ -143,6 +145,8 @@ añaden aquí con el mismo método.
 | G39 | `Session:fork` no re-aloja: sin `opts` (cwd/permisos/modelo) y con `at` sin unidad definida | `agente.md` §2 / `sesiones.md` §5 | RESUELTO | [g39-session-fork-no-re-aloja.md](g39-session-fork-no-re-aloja.md) |
 | G40 | Las denegaciones de permisos no son observables como dato | `agente.md` §4/§5 | RESUELTO | [g40-las-denegaciones-de-permisos.md](g40-las-denegaciones-de-permisos.md) |
 | G41 | Un error capturado por `pcall` cierra upvalues de frames VIVOS (y el aborto no cerraba los suyos bajo el arreglo) | gopher-lua / `cancel.go` / `scheduler.go` | RESUELTO | [g41-un-error-capturado-por-pcall.md](g41-un-error-capturado-por-pcall.md) |
+| G42 | El reintento con backoff prometido por agente.md §2 no existe en el motor | `agente.md` §2/§4/§10 | RESUELTO | [g42-reintento-con-backoff-de-apertura.md](g42-reintento-con-backoff-de-apertura.md) |
+| G43 | `agent:error` descarta el `code` y el `retryable` que chat.md promete pintar | `agente.md` §2/§4 · `chat.md` §2/§4 | RESUELTO | [g43-agent-error-descarta-code-retryable.md](g43-agent-error-descarta-code-retryable.md) |
 | G44 | El scheduler no se bombea fuera de los `Eval`: el modo interactivo no ejecuta tasks y los timers de fondo mueren en cada quiescencia | `api.md` §3 / `modelo-ejecucion.md` | RESUELTO | [g44-el-scheduler-no-se-bombea.md](g44-el-scheduler-no-se-bombea.md) |
 | G45 | La superficie [W] prometida en `api.md` §16 no llega a los workers: los wrappers Lua de `extraPreludio` no cruzan | `api.md` §16 / `vmwasm/worker.go` | RESUELTO | [g45-la-superficie-w-prometida.md](g45-la-superficie-w-prometida.md) |
 | G46 | El replay de `resume` ignora las entradas `event`: los cambios en caliente persistidos se pierden al reanudar | `sesiones.md` §3 / `agente.md` §2 (tensión G18/G19) | RESUELTO | [g46-el-replay-de-resume-ignora.md](g46-el-replay-de-resume-ignora.md) |

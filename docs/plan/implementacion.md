@@ -148,6 +148,7 @@ sesión antes de cerrarla:
 | 🔒 **S31** | Resolución de **secuencias** de teclas con timeout; pila de input (quien no consume, deja pasar). |
 | 🔒 **S34** | `caps` **deny-by-default**, dos granularidades `"fs"` vs `"fs.read"` (G6); colas acotadas con backpressure. |
 | 🔒 **S35** | Exclusividad `on_message`/`recv` → `EINVAL` en el acto (G8). |
+| 🔒 **G42 (extensión)** | Reintento de la apertura del stream (agente.md §2): SOLO la apertura (a mitad de stream jamás), frontera exacta `max_retries`+1 aperturas, clasificación estricta `detail.retryable == true`, error propagado intacto (con el `retryable` que G43 alza a `agent:error`), cancel durante el backoff aborta sin reabrir. La MISMA política vive **duplicada** en el subagente-worker (herencia del padre incluida): blindar el motor no blinda la copia — tests propios (`agent_g42_test.go`, `agent_g42_worker_test.go`). |
 
 Las sesiones **fuera** de esta lista (S01, S03, S05, S12, S17, S19, S21, S24,
 S26, S28, S30, S32, S33 y las de extensiones Lua de la Fase 8) se cierran con
