@@ -1,4 +1,4 @@
-/* Shim productivo de nu.wasm (migracion-vm.md M02): la superficie C que el
+/* Shim productivo de enu.wasm (migracion-vm.md M02): la superficie C que el
  * kernel Go ve del estado Lua compilado a WebAssembly. Promueve el shim del
  * spike (spike/lua-wasm/shim/lua_shim.c) a calidad de kernel:
  *
