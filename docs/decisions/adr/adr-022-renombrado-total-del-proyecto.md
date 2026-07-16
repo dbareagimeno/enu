@@ -71,6 +71,6 @@ shim de compatibilidad.
   esa carpeta es informe fechado y cerrado, no contrato vivo, y no se toca.
 - Fuera de `docs/`, el renombrado del binario, el module path de Go y las
   rutas reales en disco es trabajo de una sesión de implementación
-  ([docs/implementacion.md](../../plan/implementacion.md)), no de este ADR: aquí se
+  ([docs/plan/implementacion.md](../../plan/implementacion.md)), no de este ADR: aquí se
   registra la decisión y se actualizan los contratos; el código la sigue
   después, protocolo habitual "el contrato lidera, el código sigue".

@@ -102,7 +102,7 @@ un runtime— y quiere verla crecer (o darle forma).
 
 ## Cómo funciona, por dentro
 
-La tesis, en cuatro ideas (detalle en [docs/filosofia.md](docs/core/filosofia.md)):
+La tesis, en cuatro ideas (detalle en [docs/core/filosofia.md](docs/core/filosofia.md)):
 
 1. **El core no sabe lo que es un agente.** Modelo Emacs/Textadept, no Neovim:
    un kernel diminuto de primitivas + un intérprete de Lua. El agente, MCP, el
@@ -185,8 +185,8 @@ lectura sugerido:
 
 Las aportaciones son bienvenidas; lee [CONTRIBUTING.md](CONTRIBUTING.md) antes de
 enviar un Pull Request. Como el proyecto tiene un método de trabajo explícito, el
-mejor primer paso es leer [docs/filosofia.md](docs/core/filosofia.md) y
-[docs/adr.md](docs/decisions/adr/README.md) para entender el *porqué* antes de proponer el *qué*.
+mejor primer paso es leer [docs/core/filosofia.md](docs/core/filosofia.md) y
+[docs/decisions/adr/README.md](docs/decisions/adr/README.md) para entender el *porqué* antes de proponer el *qué*.
 
 El autor conserva la titularidad del proyecto, por lo que al incorporar código de
 terceros puede pedir una cesión de derechos o un acuerdo de contribución (CLA).

@@ -16,7 +16,7 @@ Antes de nada, ubica el caso.
 
 ## Los cuatro casos de alta
 
-- **(a) API nueva en `docs/api.md`.** NO es esta skill. La referencia `/api` se
+- **(a) API nueva en `docs/contracts/api.md`.** NO es esta skill. La referencia `/api` se
   deriva de `api.md` con su propio gate `check-drift`; una firma o namespace
   nuevo se publica con **`/sync-web`**, no tocando el docmap de la wiki.
 - **(b) Un contrato de `docs/` que pasa a publicarse** (uno nuevo, o uno hasta
