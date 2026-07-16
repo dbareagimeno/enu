@@ -57,7 +57,8 @@ indefinidamente.
 > ✅ **Implementado** ([pospuesto.md](pospuesto.md) **P27**). El chat consume
 > también `agent:tool.progress` (progreso en vivo bajo la tool en curso) y
 > `agent:compact` (marca "historia compactada arriba", emitida ya por el agente
-> con **P25**).
+> con **P25**). Con G42/G43 consume además `agent:retry` (la nota de backoff) y
+> el payload completo de `agent:error` (`[code] mensaje` + pista `/retry`).
 
 **Renderers enchufables**: un plugin puede registrar el render del resultado
 de su tool — `chat.renderer(tool_name, fn(result, width) -> Block)`. Así la
@@ -106,8 +107,9 @@ error, `Session:retry`, G43), `/help`, `/quit`.
 > ✅ **Implementado** ([pospuesto.md](pospuesto.md) **P28**). Además de
 > `/model`, `/sessions`, `/compact`, `/clear`, `/help`, `/quit`, el chat trae
 > `/fork` (bifurca con `Session:fork` y sigue en la rama vía `Chat:switch_session`),
-> `/permissions` (ve y edita la política: `allow|deny <patrón>`, `mode ask|auto`)
-> y `/think` (`off|adaptive|budget <N>`, vía `Session:set_thinking`, ADR-016).
+> `/permissions` (ve y edita la política: `allow|deny <patrón>`, `mode ask|auto`),
+> `/think` (`off|adaptive|budget <N>`, vía `Session:set_thinking`, ADR-016) y
+> `/retry` (re-ejecuta el turno fallido vía `Session:retry`, G43).
 
 ## 5. Diálogo de permisos
 

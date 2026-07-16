@@ -60,6 +60,7 @@ enu.events.on("agent:retry", function(p)
   RETRIES[#RETRIES + 1] = {
     attempt = p.attempt, max_retries = p.max_retries,
     delay_ms = p.delay_ms, code = p.code, session = p.session,
+    message = p.message,
   }
 end)
 enu.events.on("agent:error", function(p)
@@ -141,7 +142,51 @@ func TestG42RetryAbreYSegundoIntento(t *testing.T) {
 	h.expectEval(`return tostring(RETRIES[1].max_retries == 3)`, "true")
 	h.expectEval(`return tostring(RETRIES[1].delay_ms == 5)`, "true") // base·2^0
 	h.expectEval(`return tostring(RETRIES[1].code)`, "EPROVIDER")
-	h.expectEval(`return tostring(RETRIES[1].session == SID)`, "true") // atribución G3
+	h.expectEval(`return tostring(RETRIES[1].message)`, "boom apertura 1") // §4: el payload lleva message
+	h.expectEval(`return tostring(RETRIES[1].session == SID)`, "true")     // atribución G3
+}
+
+// TestG42CancelDuranteBackoff: el backoff duerme en un punto de suspensión NORMAL
+// (agente.md §2): un Session:cancel durante la espera aborta el turno como siempre
+// (S08) — el send devuelve nil, el turno cierra como cancelado (sin agent:error) y
+// el adaptador NO vuelve a abrirse. El retry_base_ms es enorme a propósito: si el
+// cancel no cortara la espera, el test no terminaría en tiempo de suite.
+func TestG42CancelDuranteBackoff(t *testing.T) {
+	h, _ := bootAgent(t, providersTomlRetryStub, false)
+	h.eval(`
+		out, errc = nil, nil
+		enu.task.spawn(function()
+			local ok, e = pcall(function()
+				local agent = require("agent")
+				` + registerRetryStub + `
+				FAIL_OPEN_TIMES = 100
+				CANCELED_EV = false
+				enu.events.on("agent:turn.end", function(p)
+					if p.canceled then CANCELED_EV = true end
+				end)
+				local s = agent.session{ model = "test/m", no_store = true,
+					max_retries = 3, retry_base_ms = 60000 }
+				RET = "sentinel"
+				enu.task.spawn(function() RET = s:send("hola") end)
+				enu.task.sleep(30)  -- la 1ª apertura ya falló; el turno duerme el backoff (60 s)
+				CALLS_AT_CANCEL = CALLS
+				s:cancel()
+				enu.task.sleep(30)  -- deja aterrizar el aborto (cleanup + waiters)
+				ACTIVE = s.turn_active
+				s:close()
+			end)
+			if not ok then errc = (type(e) == "table" and e.message) or tostring(e) end
+			out = "done"
+		end)`)
+	h.expectEval(`return tostring(out)`, "done")
+	h.expectEval(`return tostring(errc)`, "nil")
+	h.expectEval(`return tostring(CALLS_AT_CANCEL)`, "1") // el cancel llegó DURANTE el backoff
+	h.expectEval(`return tostring(CALLS)`, "1")           // y el stream no se reabrió jamás
+	h.expectEval(`return tostring(#RETRIES)`, "1")        // la espera se anunció antes de dormir
+	h.expectEval(`return tostring(RET == nil)`, "true")   // send devolvió nil (cancelado)
+	h.expectEval(`return tostring(CANCELED_EV)`, "true")  // turn.end con canceled
+	h.expectEval(`return tostring(ERR == nil)`, "true")   // cancelar NO es un agent:error
+	h.expectEval(`return tostring(ACTIVE)`, "false")
 }
 
 // TestG42BackoffExponencial: dos fallos retryables encadenados → dos esperas con
