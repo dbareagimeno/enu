@@ -142,7 +142,9 @@ Este es el corazón del proyecto y debes respetarlo:
    consecuencias. **Las entradas nunca se reescriben**: si una decisión cambia,
    se añade una nueva que la *reemplaza* (supersede), y la vieja se marca
    "Reemplazada por ADR-NNN". Estados: Aceptada · Propuesta · Abierta ·
-   Reemplazada. Hay diez ADRs (ADR-001…ADR-010).
+   Reemplazada. El número y estado de cada ADR viven en el **propio
+   `adr.md`** — consúltalo ahí, no aquí (la cifra escrita aquí ya se desfasó
+   una vez).
 
 **Reglas de oro del flujo:**
 
