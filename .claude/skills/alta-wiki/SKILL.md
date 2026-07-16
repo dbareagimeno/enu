@@ -43,11 +43,18 @@ Cámbialos juntos.
    **colección** (`wiki` para contratos de `docs/`; `empezar`/`extensiones` para
    páginas locales) y su **`gitPath`**, que sale de la rama de `gitPath()` según
    la colección:
-   - `wiki` → `docs/<slug>.md`
+   - `wiki` → `docs/<subcarpeta>/<slug>.md` (la subcarpeta —`core/` o
+     `contracts/`— sale del mapa `WIKI_DIR` del propio docmap; si la página
+     nueva es de `core/`, añade ahí su entrada)
    - `empezar` → `web/src/content/docs/empezando/<slug>.md`
    - `extensiones` → `web/src/content/docs/extensiones/<slug>.md`
 
    `TOTAL`, el 404 y prev/next se **derivan solos** del docmap; no los toques.
+   **Además, para colección `wiki`**: la lista EXPLÍCITA de ficheros del glob
+   de `web/src/content.config.ts` (colección `wiki`) debe ganar/perder la ruta
+   `<subcarpeta>/<slug>.md` — sin esa línea la página no se carga (el glob no
+   usa comodines a propósito: docs/ contiene registros internos que no se
+   publican).
 2. **`web/src/lib/markdown/remark-enlaces-wiki.mjs`** — el set `WIKI_SLUGS`
    **debe quedar idéntico** a la lista de slugs del docmap (el plugin corre
    fuera de `astro:content` y por eso los replica a mano). Un slug del docmap que
