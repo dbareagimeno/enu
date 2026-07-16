@@ -1,11 +1,11 @@
 ---
 // Header de la portada (solo /). Wordmark a la izquierda; a la derecha los
-// pickers `theme: [nu] dracula gruvbox solarized` y `lang: [es] en` como TEXTO
+// pickers `theme: [enu] dracula gruvbox solarized` y `lang: [es] en` como TEXTO
 // plano clicable (activo entre corchetes en key weight 600, resto dim). El
 // script de teclado (initKeyboard) cablea los clicks y el estado activo.
 import Wordmark from './Wordmark.astro';
 
-const themes = ['nu', 'dracula', 'gruvbox', 'solarized'];
+const themes = ['enu', 'dracula', 'gruvbox', 'solarized'];
 const langs = ['es', 'en'];
 ---
 <header class="home-header">
@@ -16,10 +16,10 @@ const langs = ['es', 'en'];
       {themes.map((t) => (
         <span
           data-theme-pick={t}
-          style={t === 'nu'
+          style={t === 'enu'
             ? 'color:var(--key);font-weight:600'
             : 'color:var(--dim);font-weight:400'}
-        >{t === 'nu' ? `[${t}]` : t}</span>
+        >{t === 'enu' ? `[${t}]` : t}</span>
       ))}
     </span>
     <span class="group">

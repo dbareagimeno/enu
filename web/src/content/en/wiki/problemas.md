@@ -55,7 +55,7 @@ core) are closed. Numbering jumps from G23 to G26 because G24-G25 are
 cracks from the same review in progress, recorded on their own
 branches; G27 comes out of round 5 of pseudocode (agent orchestration by a
 third party). G28-G30 come out of round 6 (rebuilding a claude-code-style
-coding harness on top of `nu.ui`): G28 (blit clips at both ends,
+coding harness on top of `enu.ui`): G28 (blit clips at both ends,
 scrollback), G29 (mouse hit-testing belongs to the toolkit, same split as
 G1/G22) and G30 (pasting images injects a path). G31 is the first crack
 that comes out of **construction** and not out of a pseudocode round: gopher-lua
@@ -69,7 +69,7 @@ no-TTY startup had no onramp (G21's bare screen is TTY-only) and
 `nu --default-config` flag and ADR-015 (without touching the sacred API: it's
 CLI surface). G35 is the **second** from *using* the finished binary: that same onramp
 activates the seven plugins but **leaves no agent config** (model/provider), so
-the first `nu` dies without a model and leaves the UI stuck — resolved with ADR-017
+the first `enu` dies without a model and leaves the UI stuck — resolved with ADR-017
 (active templates in the onramp + graceful degradation of chat). The list stands
 as a record of the process; new problems that arise (spike included) are
 added here using the same method.
@@ -98,12 +98,12 @@ before the spike.
 without error, and the convention is "your region, your `ui:resize`"; (b) also,
 declarative anchors in `region{}` (`x = "center"`, `w = "80%"`) that the
 compositor reapplies only on each resize; (c) delegate it all to the toolkit and
-have raw `nu.ui` explicitly "on your own."
+have raw `enu.ui` explicitly "on your own."
 
 ## G2 · Plugin hot-reload (development cycle) — loader / `api.md` §14 — **RESOLVED**
 
 **Resolution** (applied in [api.md](api.md) §14 and §4):
-`nu.plugin.reload(name)` best-effort — handles tagged by owner,
+`enu.plugin.reload(name)` best-effort — handles tagged by owner,
 `core:plugin.unload` event so extensions can clean up their
 registrations, require cache cleared, init.lua reloaded. A development tool, not
 a production guarantee. Restart-with-`--continue` was
@@ -114,13 +114,13 @@ right where the first authors are won.
 re-running `init.lua` would duplicate registrations, and although every
 registration returns a handle, nobody tracks them by plugin (there is no "undo
 everything from X"). The same applies to hot-reloading `providers.toml` /
-`nu.toml`.
+`enu.toml`.
 
 **Impact.** DX of the plugin community — the project's target audience.
 Does not block contracts.
 
 **Options.** (a) The core tracks handle ownership per plugin (it already
-knows `plugin.current()` at each registration) and offers `nu.plugin.reload(name)`;
+knows `plugin.current()` at each registration) and offers `enu.plugin.reload(name)`;
 (b) no reload: a quick-restart command for nu that restores the session
 (`--continue` already almost gives this); (c) postpone with a trigger (new P).
 
@@ -315,7 +315,7 @@ base64? The bug would surface far from its origin.
 **Impact.** Basic robustness of the `bash` tool — will hit on day
 one.
 
-**Options.** (a) `nu.json.encode` throws `EINVAL` on invalid UTF-8 and
+**Options.** (a) `enu.json.encode` throws `EINVAL` on invalid UTF-8 and
 tools sanitize (lossy replacement + note "binary output truncated") —
 a rule in the guide and in the official tool; (b) automatic base64 with a
 marker; (c) silent replacement with U+FFFD in the codec (convenient, but hides
@@ -326,11 +326,11 @@ corruption).
 **Resolution** (applied in [api.md](api.md) §8): `opts.tls = { ca_file?,
 insecure? }` in `request`/`stream`; the `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`
 environment variables are respected by default (the de facto corporate
-standard); global defaults in `[net]` of `nu.toml` overridable per
+standard); global defaults in `[net]` of `enu.toml` overridable per
 request.
 
 **Problem.** The "corporate proxy" is a case called out in the philosophy,
-but `nu.http` has no TLS options (own CA, insecure) nor a proxy policy (is
+but `enu.http` has no TLS options (own CA, insecure) nor a proxy policy (is
 `HTTPS_PROXY` respected?). The case cannot be configured.
 
 **Impact.** Enterprise adoption — the natural audience for a dependency-free
@@ -338,13 +338,13 @@ binary.
 
 **Options.** (a) `opts.tls = { ca_file?, insecure? }` + respect
 `HTTP(S)_PROXY`/`NO_PROXY` by default (documented); (b) additionally,
-global configuration in `nu.toml` to avoid repeating it per request.
+global configuration in `enu.toml` to avoid repeating it per request.
 
 ## G13 · Subscription-based providers (OAuth) — `providers.md` / `api.md` — **RESOLVED**
 
 **Resolution** (applied in [providers.md](providers.md) §4 and guide §7):
 v1 path without a listener — device flow or manual code pasting (the
-`gh`/`gcloud` pattern), writable with `http.request` + `nu.proc`; tokens in
+`gh`/`gcloud` pattern), writable with `http.request` + `enu.proc`; tokens in
 `data_dir()/plugins/<name>/` with `0600`, in the clear (consistent with P7). The
 localhost listener (`listen_once`) goes to [P19](pospuesto.md) with the
 trigger "a real provider with neither device flow nor code paste."
@@ -359,7 +359,7 @@ common; decides whether nu supports them first-class.
 
 **Options.** (a) Bless the device flow as the v1 path + a token storage
 convention (`plugins/<name>/`, `0600`) and no
-listener; (b) add a minimal HTTP listener (`nu.http.listen_once` for
+listener; (b) add a minimal HTTP listener (`enu.http.listen_once` for
 OAuth callbacks, ephemeral, loopback-only) — small and bounded
 surface; (c) postpone OAuth entirely with a trigger.
 
@@ -368,7 +368,7 @@ surface; (c) postpone OAuth entirely with a trigger.
 **Resolution** (applied in [agente.md](agente.md) §11): the repo is not the
 user. (1) Repo config **only trims** permissions: its `deny` is honored, its
 `allow`/`mode` are ignored. (2) **One-key TOFU** per repo
-for skills and `nu.md` (Neovim's `:trust` pattern); without explicit yes
+for skills and `enu.md` (Neovim's `:trust` pattern); without explicit yes
 (headless included), nothing gets injected. MCP tool descriptions remain
 the user's responsibility (installing a server is a conscious act).
 
@@ -439,21 +439,21 @@ path).
 
 **Resolution** (applied in [api.md](api.md) §1.4/§5/§6/§7 and
 [sesiones.md](sesiones.md) §6): three minimal generic primitives —
-`opts.exclusive = true` in `nu.fs.write` (atomic
+`opts.exclusive = true` in `enu.fs.write` (atomic
 only-if-not-existing creation via `O_EXCL`, no temp+rename, throws the
-new reserved code `EEXIST`), `nu.proc.alive(pid)` (existence, not identity: a
-recycled pid returns `true`) and `nu.sys.hostname()`. The lockfile remains
-agent extension logic, in Lua. A dedicated `nu.fs.lockfile` was
+new reserved code `EEXIST`), `enu.proc.alive(pid)` (existence, not identity: a
+recycled pid returns `true`) and `enu.sys.hostname()`. The lockfile remains
+agent extension logic, in Lua. A dedicated `enu.fs.lockfile` was
 discarded (it would put session policy — pids, orphans, hostnames — into
 the kernel: the core gives guarantees, not conveniences); best-effort
 was discarded ("almost right is worse than not").
 
 **Problem.** G5's resolution requires three pieces [api.md](api.md)
-doesn't have: (1) **exclusive** file creation — `nu.fs.write` is atomic
+doesn't have: (1) **exclusive** file creation — `enu.fs.write` is atomic
 via temp+rename, but rename *overwrites*: two processes can
 "win" the lock at once; (2) checking whether a foreign `pid` is alive
-(`nu.proc` only manages its own children) — needed to clean up orphaned
-locks; (3) `hostname` (not in `nu.sys`) — needed for the
+(`enu.proc` only manages its own children) — needed to clean up orphaned
+locks; (3) `hostname` (not in `enu.sys`) — needed for the
 lock's content.
 
 **Impact.** G5 was resolved in prose but cannot be written with the
@@ -462,9 +462,9 @@ possible. The same kind of crack the pseudocode rounds hunted for —
 this one slipped through because G5 was resolved without writing the code.
 
 **Options.** (a) Three minimal primitives: `opts.exclusive = true` in
-`nu.fs.write` (throws if the file exists), `nu.proc.alive(pid) ->
-boolean`, `nu.sys.hostname() -> string`; (b) one dedicated primitive
-`nu.fs.lockfile(path, meta) -> Lock` packaging the full semantics
+`enu.fs.write` (throws if the file exists), `enu.proc.alive(pid) ->
+boolean`, `enu.sys.hostname() -> string`; (b) one dedicated primitive
+`enu.fs.lockfile(path, meta) -> Lock` packaging the full semantics
 of sesiones.md §6 (less general surface, more opinionated); (c) downgrade
 G5 to best-effort (assume the race is unlikely) — probably
 discardable: "almost right is worse than not."
@@ -522,12 +522,12 @@ model (consistent with append-only, but fragments sessions).
 ## G20 · Interactivity detection (TTY/headless) — `api.md` / `agente.md` §5 / `chat.md` §8 — **RESOLVED**
 
 **Resolution** (applied in [api.md](api.md) §2/§9, [agente.md](agente.md)
-§5 and [chat.md](chat.md) §8): in headless the `nu.ui` module directly
-**does not exist**; the test is `nu.has("ui")` — consistent with the
+§5 and [chat.md](chat.md) §8): in headless the `enu.ui` module directly
+**does not exist**; the test is `enu.has("ui")` — consistent with the
 deny-by-default of worker `caps` (surface not granted is
-not there) and without a new primitive. `nu.ui.interactive()` was
+not there) and without a new primitive. `enu.ui.interactive()` was
 discarded (a UI module present but "off" invites calls that paint nothing);
-exposing boot mode in `nu.sys` was discarded as redundant with
+exposing boot mode in `enu.sys` was discarded as redundant with
 the above.
 
 **Problem.** The default-deny of permissions in headless and "chat only
@@ -538,11 +538,11 @@ doesn't exist).
 **Impact.** The permission pipeline — a security decision — rests its
 main branch on an unspecified function.
 
-**Options.** (a) `nu.ui.interactive() -> boolean` (or a cap:
-`nu.has("ui.tty")`); (b) in headless the `nu.ui` module directly does not
-exist and the test is `nu.has("ui")` — consistent with worker caps
+**Options.** (a) `enu.ui.interactive() -> boolean` (or a cap:
+`enu.has("ui.tty")`); (b) in headless the `enu.ui` module directly does not
+exist and the test is `enu.has("ui")` — consistent with worker caps
 (deny-by-default of surface); (c) expose boot mode in
-`nu.sys` (`nu -e` = headless by definition).
+`enu.sys` (`enu -e` = headless by definition).
 
 ## G21 · ADR-010's first boot has no owner — ADR-010 / `api.md` §14 — **RESOLVED**
 
@@ -565,7 +565,7 @@ screen) and print-and-exit (contradicts ADR-010's "one key" and
 philosophy §5).
 
 **Problem.** With official extensions inactive by default and a
-core that neither paints nor knows about agents (`nu.log` "never to the
+core that neither paints nor knows about agents (`enu.log` "never to the
 screen"), what code shows the first-boot "one-key" activation offer?
 ADR-010's central consequence has no mechanism.
 
@@ -584,17 +584,17 @@ instructions (`nu --enable-official`) and exits — austere but hostile.
 **Resolution** (applied in [api.md](api.md) §9.2,
 [arquitectura.md](arquitectura.md) and guide §6): option (b) — the core only
 accepts **literal** colors (`#rrggbb`, index 0-255; degraded to
-`nu.ui.caps().colors` at paint time); semantic vocabulary and themes
+`enu.ui.caps().colors` at paint time); semantic vocabulary and themes
 are entirely the toolkit's, which resolves name → literal when building
 the Blocks. Decisive reason: not to freeze a single theming model into the
 sacred API — a global core palette would constrain
 alternative toolkits with richer models; within the extension space theming
 can compete and iterate. Mitigations for the known costs: the toolkit's
 retained tree only re-renders on theme change (its consumers change
-live for free); raw `nu.ui` plugins that use theme colors subscribe to its
+live for free); raw `enu.ui` plugins that use theme colors subscribe to its
 change event (the same convention as `ui:resize`: your region, your
 repaint); live change for non-cooperating plugins is assumed imperfect. Discarded:
-(a) an `nu.ui.theme` table in the core (blesses a single model and puts
+(a) an `enu.ui.theme` table in the core (blesses a single model and puts
 theming vocabulary in the sacred API); (c) style-by-reference (too much
 surface for the same outcome).
 
@@ -606,7 +606,7 @@ color, nor when (when building the Block or when painting?).
 **Impact.** `Style` is sacred API; the entire theming system (and the
 "only semantic colors" rule from guide §6) depends on this piece.
 
-**Options.** (a) A minimal registry in the core — `nu.ui.theme(table)`
+**Options.** (a) A minimal registry in the core — `enu.ui.theme(table)`
 defines the semantic palette; themes (toolkit plugins) call it and
 the compositor resolves at paint time (switching themes repaints everything, the
 Blocks are not rebuilt); (b) semantic names don't belong to the core: the
@@ -616,7 +616,7 @@ only accepts literal colors (purer core; but each Block ends up
 (c) indirection by reference in the Block, resolved at paint time (the most
 flexible and the most expensive to specify).
 
-## G23 · LLM vocabulary in the sacred API (`nu.text.approx_tokens`) — `api.md` §10 / `providers.md` §5 — **RESOLVED**
+## G23 · LLM vocabulary in the sacred API (`enu.text.approx_tokens`) — `api.md` §10 / `providers.md` §5 — **RESOLVED**
 
 **Resolution** (applied in [api.md](api.md) §10, [providers.md](providers.md)
 §4/§5 and [agente.md](agente.md) §8): the primitive **leaves the core**. It
@@ -633,7 +633,7 @@ it as a documented concession was discarded (with no performance cost to
 justify it, it would set the precedent that philosophy §2's yardstick is
 negotiable within the sacred surface itself).
 
-**Problem.** `api.md` §10 exposed `nu.text.approx_tokens(s)` documented
+**Problem.** `api.md` §10 exposed `enu.text.approx_tokens(s)` documented
 as an "LLM token heuristic estimate", while `providers.md` §5
 stated in the same breath that token counting is "never the core's job
 (ADR-003: the core doesn't know what an LLM is)." Philosophy §2's yardstick —
@@ -691,21 +691,21 @@ namespaces; (c) two levels by convention: the core reserves only `core:`/`ui:`,
 and plugin name uniqueness (a loader guarantee) protects
 extensions from each other — `agent:` is just one more plugin namespace.
 
-## G27 · `nu.task.all` doesn't specify result order — `api.md` §3 — **RESOLVED**
+## G27 · `enu.task.all` doesn't specify result order — `api.md` §3 — **RESOLVED**
 
-**Resolution** (applied in [api.md](api.md) §3): `nu.task.all` returns
+**Resolution** (applied in [api.md](api.md) §3): `enu.task.all` returns
 results **aligned with the inputs** (`out[i]` is the one from `fns[i]`),
 regardless of completion order — `Promise.all` semantics. Not new API:
 it fixes the order semantics of a primitive that already existed. It passes
 philosophy §4's yardstick, which rules out the alternatives: *allSettled*
 (wrapping each branch in `pcall`) and a concurrency limit (a semaphore
-made of `nu.task.future`) are composed in Lua by a plugin, so they stay in
+made of `enu.task.future`) are composed in Lua by a plugin, so they stay in
 userland; a core primitive's order **cannot** be fixed from
 the outside, so it's its contract. Completion-order discarded: it breaks
 the result↔input correlation and forces every caller to re-tag, exactly
 the friction that "composes better across layers" (§1.4) wants to avoid;
 aligning is furthermore free (write into the indexed slot on resolution, without
-losing parallelism). A new `nu.task.all_settled`/`map_limit` function was
+losing parallelism). A new `enu.task.all_settled`/`map_limit` function was
 discarded: it would be ad hoc sacred surface for what Lua already does
 (philosophy §3/§6).
 
@@ -807,7 +807,7 @@ it set (cheap, but leaves hit-testing outside the core forever).
 
 **Resolution** (applied in [api.md](api.md) §9.3): pasting **non-text**
 content from the clipboard (an image) **injects a path**, not the bytes. The
-core dumps the image to a session temp file (`nu.fs.tmpdir`) and delivers a
+core dumps the image to a session temp file (`enu.fs.tmpdir`) and delivers a
 `paste` event with `path` (without `text`); the UI inserts the path exactly
 like an `@` mention, and the agent decides whether to read it (the content is
 not blindly embedded, just like the mentions in [chat.md](chat.md) §3).
@@ -828,7 +828,7 @@ surface being frozen.
 
 **Options.** (a) The `paste` event for non-text content delivers `path`
 (dumped temp file), insertable as `@` — the chosen one; (b)
-`nu.ui.clipboard_get_image() -> path?` as a separate call (extra surface for
+`enu.ui.clipboard_get_image() -> path?` as a separate call (extra surface for
 the same thing); (c) leave it out of v1, folded into P6 (discarded: P6 is
 output).
 
@@ -848,30 +848,30 @@ are gopher-lua's native ones and survive the suspension. Implemented in S04
 ## G32 · The session lock needs its OWN pid and the API does not expose it — `api.md` §7 / `sesiones.md` §6 — **RESOLVED**
 
 **Resolution** (applied in [api.md](api.md) §7/§16/§17 and
-[sesiones.md](sesiones.md) §6): a minimal primitive —`nu.sys.pid() ->
-integer`, the pid of the current `nu` process—, immediate local query (not
-⏸) and [W] like the rest of `nu.sys`. Together with `nu.sys.hostname()` it
+[sesiones.md](sesiones.md) §6): a minimal primitive —`enu.sys.pid() ->
+integer`, the pid of the current `enu` process—, immediate local query (not
+⏸) and [W] like the rest of `enu.sys`. Together with `enu.sys.hostname()` it
 forms the **writer identity** that the lock records (`{ pid, hostname,
 started }`, §6). It is the fourth piece that the completeness corollary
 (filosofia.md §2) demands: G17 added `fs.write{exclusive}` +
-`nu.proc.alive(pid)` + `nu.sys.hostname()` to *create* the lock and
+`enu.proc.alive(pid)` + `enu.sys.hostname()` to *create* the lock and
 *validate other pids*, but it missed how to know the **own** pid that goes
 inside the lock. Since this is the **first addition to the sacred surface
-after the freeze**, `nu.version.api` goes from 1 to **2** (api.md §17: it
+after the freeze**, `enu.version.api` goes from 1 to **2** (api.md §17: it
 grows only by addition, the counter is incremented with each one); it is a
 strict addition, breaking no signature. The dedicated primitive is justified
 like G17's: it is **kernel** vocabulary (a pid belongs to the process, not
-the product) and does not compose with what exists —`nu.proc` only knows
-the pids of children it spawns, never `nu`'s own—. Discarded deriving it
-from a subprocess (`nu.proc.run(["sh","-c","echo $PPID"])` is fragile,
-expensive and POSIX-only) and discarded folding it into `nu.proc.alive` (that
+the product) and does not compose with what exists —`enu.proc` only knows
+the pids of children it spawns, never `enu`'s own—. Discarded deriving it
+from a subprocess (`enu.proc.run(["sh","-c","echo $PPID"])` is fragile,
+expensive and POSIX-only) and discarded folding it into `enu.proc.alive` (that
 is existence of a given pid, not discovery of one's own).
 
 **Problem.** The lockfile from [sesiones.md](sesiones.md) §6 records
 `{ pid, hostname, started }` with the **pid of the writing process**, but
-[api.md](api.md) does not expose it: `nu.sys` gives
+[api.md](api.md) does not expose it: `enu.sys` gives
 `platform`/`env`/`setenv`/`now_ms`/`mono_ms`/`hostname` (no pid) and
-`nu.proc.alive(pid)` validates **other** pids (to detect orphaned locks) but
+`enu.proc.alive(pid)` validates **other** pids (to detect orphaned locks) but
 there is no way to get one's **own**. Without it the sessions extension (S38)
 cannot write the specified lock: same class of crack as G17 (correct
 resolution in prose, not writable with the specified API), and born the same
@@ -882,9 +882,9 @@ G5/G17 (session corruption that they closed becomes possible again if the
 lock cannot be written as specified). Cheap to close now, on the surface
 being frozen.
 
-**Options.** (a) `nu.sys.pid() -> integer` (the chosen one): minimal, kernel
-vocabulary, sibling of `hostname`; (b) extend `nu.proc` with a
-`nu.proc.self()` — puts the own pid in the *subprocess* module, where it
+**Options.** (a) `enu.sys.pid() -> integer` (the chosen one): minimal, kernel
+vocabulary, sibling of `hostname`; (b) extend `enu.proc` with a
+`enu.proc.self()` — puts the own pid in the *subprocess* module, where it
 does not fit (proc manages children); (c) reduce the lock's content to just
 `{ hostname, started }` and trust `O_EXCL` for uniqueness — loses the orphan
 detection by pid from §6 (a crash would leave the lock forever), can be
@@ -920,15 +920,15 @@ panic, not with the yield discarded here.
 runtime screen from G21 solved the first startup **TTY-only** (it is UI;
 §14 closes it with "No TTY, no screen: starts bare"). The no-TTY case —CI,
 Docker, scripts— was left with no single step to activate the official set:
-one had to write `config.dir()/nu.toml` by hand. The flag covers it with
+one had to write `config.dir()/enu.toml` by hand. The flag covers it with
 **two modes**: alone (`nu --default-config`) **writes** `plugins.enabled`
 with the product set and exits (idempotent, atomic, preserving the rest of
 the file — reuses `writeEnabledPlugins`, the same path as the TTY action);
 combined with a headless action (`--default-config -p '…'` / `-e '…'`) **does
 not touch disk**: it activates the set **only for that process** (internal
 `WithEnabledPlugins` option) and runs the action. It lives in the **binary**
-(`main.go`), not in `nu.*`: it is the CLI surface of S45 —like
-`-e`/`-p`/`--continue`—, so **`nu.version.api` does not change** (unlike
+(`main.go`), not in `enu.*`: it is the CLI surface of S45 —like
+`-e`/`-p`/`--continue`—, so **`enu.version.api` does not change** (unlike
 G17/G32, which did extend the sacred surface). The core still does not know
 what an agent is (ADR-003): the flag orchestrates extensions through the
 public API, like an `init.lua` could.
@@ -949,7 +949,7 @@ source (`officialProductSet`, derived from `embeddedNames` filtering out
 `example`).
 
 **Same set in both modes**, including `chat`: even though `chat`/`repl` need
-a TTY, their `init.lua` already self-gate with `if nu.has("ui")` — without a
+a TTY, their `init.lua` already self-gate with `if enu.has("ui")` — without a
 UI surface they stay inert on their own (G20/§9). Activating them in headless
 does not get in the way, and omitting them would require a second list and
 an edge case with no gain. Discarded.
@@ -958,14 +958,14 @@ an edge case with no gain. Discarded.
 it out with its official extensions (not in a pseudocode round nor building
 the kernel: using it). (a) ADR-010 leaves the official ones **inactive by
 default** and G21 gave the onramp for the first startup, but **TTY-only**;
-in headless (`nu -e`/CI/Docker) there is no single step to activate the set:
-one has to edit `nu.toml` by hand, effectively contradicting the "one-key"
+in headless (`enu -e`/CI/Docker) there is no single step to activate the set:
+one has to edit `enu.toml` by hand, effectively contradicting the "one-key"
 ergonomics ADR-010 promises. (b) "The official set" was never precisely
 defined against `example`: `ActivateOfficial()` activates the whole
 `embeddedNames()`, so today's TTY action already puts the test plugin into
 the user's config.
 
-**Impact.** It is the **first experience** for whoever installs `nu` and
+**Impact.** It is the **first experience** for whoever installs `enu` and
 wants the harness in CI/a container — exactly what ADR-010 says it protects,
 but on the non-interactive side that G21 did not cover. It does not block
 any build session (the plan is closed, 45/45); it is product debt, cheap to
@@ -974,20 +974,20 @@ API.
 
 **Options.** (a) **The `nu --default-config` flag** (the chosen one):
 non-interactive mirror of the screen's action 1, with an ephemeral mode for
-immutable Docker; lives in the binary, does not touch `nu.*`. (b) Expose the
-write to Lua (`nu.config.enable_official()`) and solve it with `nu -e`:
-**extends the sacred API** (`nu.version.api`++) to *worsen* the ergonomics
-(`nu -e 'nu.config.enable_official()'` is no easier than the flag) —
+immutable Docker; lives in the binary, does not touch `enu.*`. (b) Expose the
+write to Lua (`enu.config.enable_official()`) and solve it with `enu -e`:
+**extends the sacred API** (`enu.version.api`++) to *worsen* the ergonomics
+(`enu -e 'enu.config.enable_official()'` is no easier than the flag) —
 contradicts the goal; discarded. (c) An `nu init` subcommand: semantically
 honest, but it would introduce the binary's **first subcommand** (today only
 flags), a gateway to `nu run`/`nu chat`… which S45 avoided by keeping the
 binary thin; premature for a single need. (d) Do nothing and document "edit
-`nu.toml`": austere and hostile, exactly what ADR-010 wanted to avoid (it is
+`enu.toml`": austere and hostile, exactly what ADR-010 wanted to avoid (it is
 option (c) discarded in G21, now for the no-TTY case).
 
 ## G34 · The canonical `thinking` model does not express adaptive mode (Opus 4.6+ 400s with `budget_tokens`) — `providers.md` §2.1/§3 — **RESOLVED**
 
-**Resolution** (recorded in [ADR-016](adr.md#adr-016--modelo-canónico-de-thinking-con-mode-y-traducción-por-modelo-en-el-adaptador), which **reopens and closes** [P21](pospuesto.md); applied in [providers.md](providers.md) §2.1/§3 and the `anthropic` adapter's `⚠` note): the canonical parameter grows **by addition** to `thinking?: { mode?: "off"|"adaptive"|"budget", budget? }` —with `{budget=N}` as a **compatible alias** of `mode="budget"`, so the frozen form remains valid—, and each model's **reasoning dialect is declared as DATA** in `providers.toml` (`thinking = "adaptive"|"budget"|"none"`, default `"budget"`), which travels in `ModelInfo` and the adapter reads to translate **per-model** (`adaptive` → `{type="adaptive"}`, `budget` → `{type="enabled", budget_tokens=N}`, degrading between the two according to the dialect; `none`/absent → nothing is sent, degradation declared §3 ob.5). The adapter remains a **pure translator** (ADR-003/ADR-005): zero model-version tables in code. The sacred `nu.*` surface does not change (this is an extension contract). **Implemented** (a build session following the ADR, as the "the contract leads, the code follows" protocol mandates): `thinking_to_wire` in `adapter_anthropic.lua` translates by dialect, `resolve` carries `model.thinking` into `ModelInfo`, and `providers_p21_test.go` shields the eight combinations (dialect × mode); the legacy unconditional `budget_tokens` block no longer exists.
+**Resolution** (recorded in [ADR-016](adr.md#adr-016--modelo-canónico-de-thinking-con-mode-y-traducción-por-modelo-en-el-adaptador), which **reopens and closes** [P21](pospuesto.md); applied in [providers.md](providers.md) §2.1/§3 and the `anthropic` adapter's `⚠` note): the canonical parameter grows **by addition** to `thinking?: { mode?: "off"|"adaptive"|"budget", budget? }` —with `{budget=N}` as a **compatible alias** of `mode="budget"`, so the frozen form remains valid—, and each model's **reasoning dialect is declared as DATA** in `providers.toml` (`thinking = "adaptive"|"budget"|"none"`, default `"budget"`), which travels in `ModelInfo` and the adapter reads to translate **per-model** (`adaptive` → `{type="adaptive"}`, `budget` → `{type="enabled", budget_tokens=N}`, degrading between the two according to the dialect; `none`/absent → nothing is sent, degradation declared §3 ob.5). The adapter remains a **pure translator** (ADR-003/ADR-005): zero model-version tables in code. The sacred `enu.*` surface does not change (this is an extension contract). **Implemented** (a build session following the ADR, as the "the contract leads, the code follows" protocol mandates): `thinking_to_wire` in `adapter_anthropic.lua` translates by dialect, `resolve` carries `model.thinking` into `ModelInfo`, and `providers_p21_test.go` shields the eight combinations (dialect × mode); the legacy unconditional `budget_tokens` block no longer exists.
 
 **Problem.** The canonical form froze `thinking?: { budget?: integer }` and
 the `anthropic` adapter emits it as `{type="enabled", budget_tokens=N}`
@@ -1017,12 +1017,12 @@ renamed ids; (c) **replace** `budget` with the new form — breaks the frozen
 signature and recorded tests; (d) leave it postponed — discarded: the
 trigger (default model Opus 4.8) is already active.
 
-## G35 · ADR-015's onramp activates the plugins but leaves no agent config: the first `nu` dies with no model and leaves the UI stuck — ADR-015 / `chat.md` §8 / `agente.md` §10 — **RESOLVED**
+## G35 · ADR-015's onramp activates the plugins but leaves no agent config: the first `enu` dies with no model and leaves the UI stuck — ADR-015 / `chat.md` §8 / `agente.md` §10 — **RESOLVED**
 
-**Resolution** (recorded in [ADR-017](adr.md#adr-017--el-onramp-deja-config-de-agente-usable-y-el-chat-degrada-con-gracia), which **refines** ADR-015; applied in [chat.md](chat.md) §8, [agente.md](agente.md) §10, [providers.md](providers.md) and the binary): two pieces, neither in the sacred API (it is CLI surface, loader, and extension Lua; `nu.version.api` does not change).
+**Resolution** (recorded in [ADR-017](adr.md#adr-017--el-onramp-deja-config-de-agente-usable-y-el-chat-degrada-con-gracia), which **refines** ADR-015; applied in [chat.md](chat.md) §8, [agente.md](agente.md) §10, [providers.md](providers.md) and the binary): two pieces, neither in the sacred API (it is CLI surface, loader, and extension Lua; `enu.version.api` does not change).
 
 1. **Complete onramp: `nu --default-config` leaves USABLE agent config.**
-The persistent mode, besides writing `plugins.enabled` in `nu.toml` (G33),
+The persistent mode, besides writing `plugins.enabled` in `enu.toml` (G33),
 writes **active templates** of `agent.toml` (`model = "anthropic/opus"`,
 `max_turns`) and `providers.toml` (provider `anthropic` with `base_url`,
 `api_key_env = "ANTHROPIC_API_KEY"` and the model
@@ -1032,7 +1032,7 @@ existing TOML" pattern from `writeEnabledPlugins`). Default **opinionated
 toward Anthropic** (the product's identity, a claude-code-style harness).
 The key **never** goes into the file (providers.md §1): it lives in the
 environment (`api_key_env`). The success message stops being misleading
-("you can now run the agent: nu -p") and becomes **honest and
+("you can now run the agent: enu -p") and becomes **honest and
 actionable**: it lists the files written and reminds the user to export
 `ANTHROPIC_API_KEY` (or edit `providers.toml`) before starting.
 
@@ -1050,7 +1050,7 @@ covers it), so that **no** path leaves the terminal in raw mode with no way
 to exit via keyboard.
 
 **Why active templates and not commented-out ones.** With the key in the
-environment, `nu` *just works* after a single command (ADR-015's
+environment, `enu` *just works* after a single command (ADR-015's
 "batteries-included" promise, now real). Without the key,
 `providers.resolve` **does not fail** (it leaves `api_key=nil`): the chat
 mounts anyway, the statusline shows the model, and the error for the
@@ -1060,13 +1060,13 @@ a dead screen. Commented-out templates would force editing TOML before the
 first startup, exactly the friction the onramp was meant to remove.
 
 **Problem.** Surfaces when *using* the finished binary (like G33, not in
-pseudocode nor while building): after `nu --default-config`, running `nu`
+pseudocode nor while building): after `nu --default-config`, running `enu`
 leaves the terminal blank. The log says it: `ERROR [user] chat: could not
 start: agent.session requires model ("provider/model") in opts or in
 agent.toml`. Two layers: (a) the onramp activates the seven plugins but
 **leaves no `model`/`provider`**, so `core:ready` → `chat.start` →
 `agent.session({model=nil})` throws `EINVAL`; (b) the chat's `init.lua`
-`pcall` sends the error to `nu.log.error` (to disk, never to screen, §15)
+`pcall` sends the error to `enu.log.error` (to disk, never to screen, §15)
 and **mounts nothing**, and since the bare screen (the only path that
 installs an emergency-exit handler) is not taken with plugins active, the
 user **gets stuck** —in raw mode `ctrl+c` does not generate `SIGINT`—.
@@ -1080,7 +1080,7 @@ extensions' Lua, without touching the sacred API.
 **Options.** (a) **Complete onramp + graceful degradation** (the chosen
 one, ADR-017): the onramp leaves usable config *and* the chat survives the
 absence of config. (b) Degradation only: the chat mounts an actionable UI,
-but the first `nu` still has no model and requires editing TOML by hand —
+but the first `enu` still has no model and requires editing TOML by hand —
 undoes ADR-015's ergonomics. (c) Onramp only: write the templates, but the
 chat would still die if the user deletes/breaks the config — leaves the
 second defect (stuck UI) unclosed. (d) A **default model hardcoded in the
@@ -1096,7 +1096,7 @@ touching the sacred API; documented in [arquitectura.md](arquitectura.md)
 §Distribución and [chat.md](chat.md) §8): the repl **yields the screen to
 the chat**. Its auto-mount on `core:ready` becomes conditional: it only
 mounts its UI if `chat` is **not** among the active plugins (checked via
-`nu.plugin.list()`, without `require`ing chat —the repl must be able to
+`enu.plugin.list()`, without `require`ing chat —the repl must be able to
 activate SOLO, G21). With the official set active, only the chat opens; the
 repl remains an accessible module (`require("repl")`, `repl.eval`) but
 inert as a UI. With only `repl` active (G21), the REPL opens. In headless,
@@ -1107,7 +1107,7 @@ returning the user to a lower layer.
 **Problem.** Surfaces when *using* the product, not in pseudocode. ADR-015
 set the official set as "the seven embedded ones minus `example`",
 including `repl`, reasoning **only about the headless case** ("chat/repl
-self-gate with `nu.has("ui")` and stay inert without a UI, so activating
+self-gate with `enu.has("ui")` and stay inert without a UI, so activating
 them together does not get in the way"). But **with a TTY** —the product's
 real experience— the `init.lua` files of both chat *and* repl subscribe to
 `core:ready` and **both** mount a full-screen `toolkit.app` over the same
@@ -1161,7 +1161,7 @@ axis.
 margin/padding/centering —that is, almost all product UI (boxes, centered
 modals, a padded statusline)—. Discovered while building the first border
 widget. The fix aligns the implementation with the contract; it does not
-extend or change the API (`nu.version.api` does not move).
+extend or change the API (`enu.version.api` does not move).
 
 ## G38 · The project slug for `sessions/<proyecto>/` is unspecified — `sesiones.md` §2/§7 — **RESOLVED**
 
@@ -1239,7 +1239,7 @@ pointing at the wrong cwd).
 existed de facto (implemented, idempotent, releases the writer lock from
 sesiones.md §6) and other flows need it: the lock conflict in §6 and any
 orchestrator that opens N sessions and must release them deterministically.
-House rule: close explicitly via `nu.task.cleanup`; GC as a non-deterministic
+House rule: close explicitly via `enu.task.cleanup`; GC as a non-deterministic
 safety net (same pattern as the `Proc` objects in api.md §6).
 3. **Semantics nailed down.** `at` indexes the **current message history**
 (post-compaction; what the implementation already did) — and
@@ -1404,7 +1404,7 @@ local writes to a detached cell while its owner reads its local from the
 registry — the write is silently lost. With ADR-011's scheduler this bit
 hard: an event handler writing to a suspended task's upvalue lost the write
 if ANY error had been caught before on that thread (e.g. the
-`pcall(nu.fs.read)` of a missing `agent.toml`). Surfaced while building
+`pcall(enu.fs.read)` of a missing `agent.toml`). Surfaced while building
 G40's tests (round 8); the retrospective giveaway: **every Go test in the
 project captured into globals** — someone tripped over this while building
 and worked around it by instinct, without recording it.
@@ -1443,11 +1443,11 @@ the current pair of over-closing-on-raise / no-closure-with-handler.
 2. **Quiescence stops running down the background.** With `liveFg == 0` the loop no longer does `cancelAll()` + return: it waits. The `every`s keep their request in flight — they *pause* in the sense that there's no foreground, they aren't killed. `cancelAll` is now reserved for real shutdown (`ctx.Done`). Closes manifestation (2).
 3. **Kick channel.** `EmitEvent`, `FeedInput`, and `CoSpawn` publish on a buffer-1 channel (the bell stays rung until someone looks — no lost wakeups) that forms the third case of the `select`: work queued from outside wakes the loop immediately. Closes the unbounded delay of manifestation (3).
 
-Interactive mode launches that long-lived `RunTasks` (`PumpTasks`) alongside the driver — closing manifestation (1) —; `inst.mu` remains the **sole entry token to the VM**, and the discipline the resident loop needs already exists (`schedStep` takes and releases the lock per step, `scheduler.go`; waits happen without it): no new concurrency mechanism is introduced, just one more user of the existing one — the residual risk is one of *liveness*, not corruption, and the session's tests cover it. Headless mode keeps its semantics as the exit condition of the same loop (returning on foreground quiescence). **Doesn't touch `api.md`** (APILevel intact): the `nu.task.every` contract now holds exactly as written. [P33](pospuesto.md) (ctx in `HostFn`) remains intact and in view: its trigger cites this redesign.
+Interactive mode launches that long-lived `RunTasks` (`PumpTasks`) alongside the driver — closing manifestation (1) —; `inst.mu` remains the **sole entry token to the VM**, and the discipline the resident loop needs already exists (`schedStep` takes and releases the lock per step, `scheduler.go`; waits happen without it): no new concurrency mechanism is introduced, just one more user of the existing one — the residual risk is one of *liveness*, not corruption, and the session's tests cover it. Headless mode keeps its semantics as the exit condition of the same loop (returning on foreground quiescence). **Doesn't touch `api.md`** (APILevel intact): the `enu.task.every` contract now holds exactly as written. [P33](pospuesto.md) (ctx in `HostFn`) remains intact and in view: its trigger cites this redesign.
 
-**Construction** (same day; details in the `G44 (kernel)` row of the [implementacion.md](implementacion.md) logbook). Faithful to the three pieces, with two detail decisions: the contexts of in-flight requests hang off `inst.ctx` — not the loop's ctx —, so that whoever reclaims the paused background is the targeted cancellation of its task (§1.3) or `Close`, never the return of an invocation; and a CAS guard detects two simultaneous loops over the same state instead of corrupting it. Construction **uncovered a latent data race** that pumping made real: the compositor was mutated under `inst.mu` (the `nu.ui` hostcalls during a Call) but the driver (`attachOutput`), resize, and the bare screen touched it only under the scheduler's token — a coincidence impossible without continuous pumping, a race caught by `-race` on the driver's first test. Closed by making `inst.mu` the compositor's **sole** lock (`withUILock` on every access outside a Call), consistent with the role the `mu` comment already documented for it (A-26). Shielding 🔒: `scheduler_g44_test.go` (the every survives quiescence and keeps ticking under pumping; the kick wakes within bounded time with a long sleep in flight; reentry detected; shutdown via ctx; `Close` reclaims the background) and `driver_g44_test.go` (keymap → `nu.task.spawn` → ⏸ → repaint end to end over the driver — the skeleton of the chat turn —, responsive input while the task sleeps, clean shutdown of loop and pump). Full suite green with `-race`.
+**Construction** (same day; details in the `G44 (kernel)` row of the [implementacion.md](implementacion.md) logbook). Faithful to the three pieces, with two detail decisions: the contexts of in-flight requests hang off `inst.ctx` — not the loop's ctx —, so that whoever reclaims the paused background is the targeted cancellation of its task (§1.3) or `Close`, never the return of an invocation; and a CAS guard detects two simultaneous loops over the same state instead of corrupting it. Construction **uncovered a latent data race** that pumping made real: the compositor was mutated under `inst.mu` (the `enu.ui` hostcalls during a Call) but the driver (`attachOutput`), resize, and the bare screen touched it only under the scheduler's token — a coincidence impossible without continuous pumping, a race caught by `-race` on the driver's first test. Closed by making `inst.mu` the compositor's **sole** lock (`withUILock` on every access outside a Call), consistent with the role the `mu` comment already documented for it (A-26). Shielding 🔒: `scheduler_g44_test.go` (the every survives quiescence and keeps ticking under pumping; the kick wakes within bounded time with a long sleep in flight; reentry detected; shutdown via ctx; `Close` reclaims the background) and `driver_g44_test.go` (keymap → `enu.task.spawn` → ⏸ → repaint end to end over the driver — the skeleton of the chat turn —, responsive input while the task sleeps, clean shutdown of loop and pump). Full suite green with `-race`.
 
-**Problem.** The wasm scheduler's lifecycle loop is **per invocation**: `RunTasks` only runs during `Boot` and the two headless `Eval`s (`vmwasm_loader.go:102`, `eval.go`). Three manifestations of the same crack, all empirically verified in the audit (ids A-34/A-01/A-03 of the report): (1) the interactive loop `drive()` (`driver.go:130-158`) only does FeedInput/Eval/flushFrame — any `nu.task.spawn` from a keymap or handler queues in `__ready` and **no one ever resumes it**; the `chat` extension runs the agent's turn exactly that way (`chat/init.lua`), so the killer app can't run over the TTY driver (the code itself flags it as pending in `vmwasm_loader.go:100-101`). (2) On reaching foreground quiescence, `RunTasks` does `cancelAll()` and returns (`scheduler.go:143-146`): the in-flight `sleep` of every `nu.task.every` receives an uncatchable `ECANCELED` and the timer's coroutine **dies outright** — it doesn't pause —, with no error or log; a later `RunTasks` doesn't revive it. (3) Work queued from external `Eval`s serialized by `inst.mu` (fs watchers, signals, input) doesn't wake `RunTasks`'s `select` (`scheduler.go:149-154`): the new task waits for the nearest in-flight request to expire — an unbounded delay, total loss if that request never finishes.
+**Problem.** The wasm scheduler's lifecycle loop is **per invocation**: `RunTasks` only runs during `Boot` and the two headless `Eval`s (`vmwasm_loader.go:102`, `eval.go`). Three manifestations of the same crack, all empirically verified in the audit (ids A-34/A-01/A-03 of the report): (1) the interactive loop `drive()` (`driver.go:130-158`) only does FeedInput/Eval/flushFrame — any `enu.task.spawn` from a keymap or handler queues in `__ready` and **no one ever resumes it**; the `chat` extension runs the agent's turn exactly that way (`chat/init.lua`), so the killer app can't run over the TTY driver (the code itself flags it as pending in `vmwasm_loader.go:100-101`). (2) On reaching foreground quiescence, `RunTasks` does `cancelAll()` and returns (`scheduler.go:143-146`): the in-flight `sleep` of every `enu.task.every` receives an uncatchable `ECANCELED` and the timer's coroutine **dies outright** — it doesn't pause —, with no error or log; a later `RunTasks` doesn't revive it. (3) Work queued from external `Eval`s serialized by `inst.mu` (fs watchers, signals, input) doesn't wake `RunTasks`'s `select` (`scheduler.go:149-154`): the new task waits for the nearest in-flight request to expire — an unbounded delay, total loss if that request never finishes.
 
 **Impact.** Structural: it's the runtime's biggest pending piece. Without it, interactive mode can't run the agent's turn (official chat included), extensions' `every`s (`chat` spinner, `toolkit`) die after startup, and the reactivity of any handler that fires async work is coupled to the luck of whatever IO is in flight. It de facto blocks the interactive product.
 
@@ -1463,7 +1463,7 @@ the fragment as [W] and declares the **thunks it wraps** (`needs`, e.g.
 ones **whose `needs` pass `workerGrants`** — the same authority that prunes
 the thunks prunes their wrappers, so "what isn't granted doesn't exist"
 (api.md §14) also holds at the Lua layer: a worker without the `http` cap has
-no `nu.http`, not even as a table, and detecting surface by existence (the
+no `enu.http`, not even as a table, and detecting surface by existence (the
 one that shields subagent isolation, agente.md §9) remains reliable. The
 seven [W] wrappers cross over (`log`, `re.compile`, `text.*`, `proc.spawn`,
 `ws.connect`, `http.stream`, `search.grep`); `fs.watch` stays
@@ -1479,7 +1479,7 @@ instance itself). **Doesn't touch `api.md`**
 `worker_g45_test.go` (parity with §16's table from inside a worker,
 wrappers working end to end, and pruning by caps for the wrappers too).
 
-**Problem.** `api.md` §16 declares available in workers ([W]) `re`, `ws`, `search`, `log`, `proc`, `http`, and `text` in full, but a good part of that surface isn't catalog thunks but **Lua wrappers** registered with `Pool.AddPreludio` (`nu.log.*`, `nu.re.compile`, `nu.text.wrap/markdown/highlight/diff`, `nu.proc.spawn` and its methods, `nu.ws.connect`, `nu.http.stream`, `nu.search.grep`). `spawnWorker` (`vmwasm/worker.go:137-179`) copies the modules and the registry's primitives but **never `extraPreludio`**: the worker's preludio runs without those wrappers and the modules end up absent (empirically verified: the six tested, `nil`). The host thunks do cross over; exactly the wrapper layer is missing. Note: the `nu.fs.watch` wrapper also lives in `extraPreludio` but watch is NOT [W] — the solution must discriminate, not copy in bulk.
+**Problem.** `api.md` §16 declares available in workers ([W]) `re`, `ws`, `search`, `log`, `proc`, `http`, and `text` in full, but a good part of that surface isn't catalog thunks but **Lua wrappers** registered with `Pool.AddPreludio` (`enu.log.*`, `enu.re.compile`, `enu.text.wrap/markdown/highlight/diff`, `enu.proc.spawn` and its methods, `enu.ws.connect`, `enu.http.stream`, `enu.search.grep`). `spawnWorker` (`vmwasm/worker.go:137-179`) copies the modules and the registry's primitives but **never `extraPreludio`**: the worker's preludio runs without those wrappers and the modules end up absent (empirically verified: the six tested, `nil`). The host thunks do cross over; exactly the wrapper layer is missing. Note: the `enu.fs.watch` wrapper also lives in `extraPreludio` but watch is NOT [W] — the solution must discriminate, not copy in bulk.
 
 **Impact.** Every plugin that follows §16 and moves heavy work to a worker (the central use case for workers: search, rendering, subagents) blows up with `attempt to index a nil value` when touching any of those modules. The sacred surface's promise is broken in the code.
 
@@ -1539,8 +1539,8 @@ Touches `agente.md` §2, `sesiones.md` §3, and the extension's replay.
 ## G47 · `api.md` §1.5 promises universal `opts.timeout_ms` and doesn't define the value 0, which today diverges between modules — `api.md` §1.5/§5/§6/§8 — **RESOLVED**
 
 **Resolution** (applied in [api.md](api.md) §1.5; option (a)). The promise
-is **scoped to the signatures that list it** — `nu.proc.run`, `nu.http.request`,
-`nu.http.stream`, `nu.ws.connect` —, which is what the code implements and
+is **scoped to the signatures that list it** — `enu.proc.run`, `enu.http.request`,
+`enu.http.stream`, `enu.ws.connect` —, which is what the code implements and
 what §5-§8's own signatures always said: the universal phrasing in §1.5 was
 the anomaly, not the code. And the boundary value is defined where it
 exists: in `proc.run`, `0` (the default) means *unlimited* (a local process
@@ -1548,19 +1548,19 @@ can legitimately have no ceiling); in `http`/`ws` the deadline always exists
 (default 30 000 ms) and `0` is `EINVAL` — a network request with no ceiling
 isn't a supported case—. The divergence stops being silent: it's documented
 semantics with its rationale. Adding `timeout_ms` to more signatures (e.g.
-`nu.fs.*` over network mounts) remains a **future addition**, compatible (the
+`enu.fs.*` over network mounts) remains a **future addition**, compatible (the
 API grows only by addition); it isn't promised until it exists.
 
 **Problem.** §1.5 flatly stated "Every function with IO accepts
 `opts.timeout_ms` (throws `ETIMEOUT`)", but almost no IO primitive honors it
-or lists it in its signature (`nu.fs.read(path)` doesn't even have an opts
-table; `Proc:read/write/wait`, `Ws:send/recv`, `nu.search.*` don't either).
+or lists it in its signature (`enu.fs.read(path)` doesn't even have an opts
+table; `Proc:read/write/wait`, `Ws:send/recv`, `enu.search.*` don't either).
 On top of that, the value `0` diverged undocumented: `proc.run` accepts it as
 "unlimited" while `http.request`/`ws.connect` throw `EINVAL`. Found in the
 full audit (A-24/A-30 of the report), verified against code and signatures.
 
 **Impact.** A plugin author reading §1.5 would expect `ETIMEOUT` from a
-`nu.fs.read` over a hung NFS mount (blocks forever) and portability of
+`enu.fs.read` over a hung NFS mount (blocks forever) and portability of
 `{timeout_ms=0}` across modules (it blows up or not depending on the
 module).
 
@@ -1628,17 +1628,17 @@ already contradicts. (A-27 of the report.)
 ADR-020" left ADR-002 unannotated, even though its implementation decision
 became just as obsolete: an asymmetry in the registry's upkeep.
 
-## G51 · `arquitectura.md`'s primitive inventory omits `nu.search` and the YAML codec — `arquitectura.md` / `api.md` §11-§12 — **RESOLVED**
+## G51 · `arquitectura.md`'s primitive inventory omits `enu.search` and the YAML codec — `arquitectura.md` / `api.md` §11-§12 — **RESOLVED**
 
 **Resolution** (applied in [arquitectura.md](arquitectura.md), the kernel
 table): the **io** row names the tree's parallel search (`files`/`grep`,
 api.md §11) and the **data** row lists YAML alongside JSON and TOML (api.md
 §12, needed for agente.md §6's skills). Whoever reads only the table as "the
 inventory" no longer misses two modules of the sacred surface. (A-33 of the
-report; the supposed omission of `nu.sys` was refuted in verification — it's
+report; the supposed omission of `enu.sys` was refuted in verification — it's
 represented as "environment" in the io row.)
 
-## G52 · `nu.ws` has no binary path: `Ws:send` always sends a text frame and `Ws:recv` doesn't distinguish the frame type — `api.md` §8 / `runtime/ws.go` — **RESOLVED**
+## G52 · `enu.ws` has no binary path: `Ws:send` always sends a text frame and `Ws:recv` doesn't distinguish the frame type — `api.md` §8 / `runtime/ws.go` — **RESOLVED**
 
 **Resolution** (2026-07-14; addition to [api.md](api.md) §8, API level
 2→3). `Ws:send(data, opts?)` gains `opts.binary?: boolean`: with it, the
@@ -1662,7 +1662,7 @@ bytes of any frame (discards the `MessageType`), so an incoming binary frame
 *worked* but was indistinguishable from text: a faithful proxy/echo was
 inexpressible. Found in the full audit (A-38 of the report).
 
-**Impact.** Any binary (or mixed) WS protocol was unusable from `nu`: MCP
+**Impact.** Any binary (or mixed) WS protocol was unusable from `enu`: MCP
 over WS with compressed payloads, LSP/DAP binary framing protocols, or a
 simple faithful relay.
 

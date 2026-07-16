@@ -3,18 +3,18 @@ title: The official extensions
 description: Index of the extensions embedded in the binary — the harness (providers, sessions, agent, chat), the supporting pieces (mcp, toolkit, repl), and the guide for writing your own.
 ---
 
-`nu` is a bare runtime: a tiny kernel of primitives plus a Lua interpreter.
+`enu` is a bare runtime: a tiny kernel of primitives plus a Lua interpreter.
 Everything else — the agent, the chat, the LLM providers, the bridge with
 MCP — are **Lua extensions**, and the official ones are no exception: they
 come embedded in the binary but **inactive by default** and **without
 kernel privilege**, so a third-party alternative can replace any of them.
-They're activated by name in `plugins.enabled` in `nu.toml`; dependencies
+They're activated by name in `plugins.enabled` in `enu.toml`; dependencies
 resolve themselves in topological order (activating `chat` pulls in
 `agent`, `providers`, `sessions`, and `toolkit`).
 
 ## The harness
 
-The product set — what `nu --default-config` activates — is a complete
+The product set — what `enu --default-config` activates — is a complete
 coding harness, split across four contracts:
 
 - **[providers](../providers.md)** — the model registry (TOML) and the LLM
@@ -34,8 +34,8 @@ standalone:
 
 - **[mcp](mcp.md)** — integrates MCP (Model Context Protocol) servers as
   agent tools: each remote tool registers just like a native one. Pure Lua
-  over `nu.proc` and `nu.json`.
-- **[toolkit](toolkit.md)** — the widget toolkit over `nu.ui` and `nu.text`:
+  over `enu.proc` and `enu.json`.
+- **[toolkit](toolkit.md)** — the widget toolkit over `enu.ui` and `enu.text`:
   layout containers, focus, composition across plugins, and themes. It's
   what chat uses to paint.
 - **[repl](repl.md)** — an interactive Lua interpreter over the public API,

@@ -16,8 +16,8 @@
 --      **stream de Eventos CANÓNICO** de §2.3 (`text`, `tool_call.*`, `usage`,
 --      `done`).
 --
--- Todo sobre la API pública (api.md): `nu.http.stream` + `Stream:events()` (§8),
--- `nu.json` (§12), `error` estructurado (ADR-009). Lua puro (ADR-003).
+-- Todo sobre la API pública (api.md): `enu.http.stream` + `Stream:events()` (§8),
+-- `enu.json` (§12), `error` estructurado (ADR-009). Lua puro (ADR-003).
 --
 -- DOS DIFERENCIAS que el traductor absorbe:
 --   - Gemini identifica una llamada a función por su NOMBRE, no por un id (no hay
@@ -187,7 +187,7 @@ local function make_iterator(stream, provider)
       local args = part.functionCall.args or {}
       -- Gemini da el functionCall entero: begin + delta (args completo) + end.
       enqueue({ type = "tool_call.begin", id = id, name = name })
-      enqueue({ type = "tool_call.delta", id = id, args_json = nu.json.encode(args) })
+      enqueue({ type = "tool_call.delta", id = id, args_json = enu.json.encode(args) })
       enqueue({ type = "tool_call.end", id = id })
       message.content[#message.content + 1] =
         { type = "tool_call", id = id, name = name, args = args }
@@ -197,7 +197,7 @@ local function make_iterator(stream, provider)
   local function handle(evt)
     local data = evt.data
     if data == nil or data == "" then return end
-    local ok, d = pcall(nu.json.decode, data)
+    local ok, d = pcall(enu.json.decode, data)
     if not ok or type(d) ~= "table" then
       return
     end
@@ -284,11 +284,11 @@ function M.stream(req, provider)
   local body = to_wire(req, provider)
   local url = provider.base_url .. "/v1beta/" .. model_path(req.model) ..
     ":streamGenerateContent?alt=sse"
-  local stream = nu.http.stream({
+  local stream = enu.http.stream({
     url = url,
     method = "POST",
     headers = headers,
-    body = nu.json.encode(body),
+    body = enu.json.encode(body),
   })
 
   if stream.status ~= nil and stream.status >= 400 then
@@ -300,7 +300,7 @@ function M.stream(req, provider)
       return acc
     end)
     if ok_chunks and raw ~= "" then
-      local okj, payload = pcall(nu.json.decode, raw)
+      local okj, payload = pcall(enu.json.decode, raw)
       if okj and type(payload) == "table" and type(payload.error) == "table" then
         code = payload.error.status
         if type(payload.error.message) == "string" then

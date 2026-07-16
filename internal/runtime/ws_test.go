@@ -11,7 +11,7 @@ import (
 	"github.com/coder/websocket"
 )
 
-// Tests de `nu.ws.connect` (S21, api.md §8). La sesión NO está en el inventario 🔒
+// Tests de `enu.ws.connect` (S21, api.md §8). La sesión NO está en el inventario 🔒
 // (es un wrapper sobre `coder/websocket` + el puente ⏸ de S04), pero tiene lógica
 // propia que sí merece blindaje: el modelo `recv → nil al cerrar` (distinguir un
 // cierre ordenado de un fallo de transporte), el cierre idempotente integrado con
@@ -54,8 +54,8 @@ func TestWsEchoRoundTrip(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		r1, r2, r3, done = nil, nil, nil, false
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			w:send("hola")
 			r1 = w:recv()
 			w:send("mundo")
@@ -91,8 +91,8 @@ func TestWsRecvNilAfterServerClose(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		first, second, count = nil, "SENTINEL", 0
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			first = w:recv()       -- "ultimo"
 			second = w:recv()      -- nil: el servidor cerró
 			-- un recv más tras el cierre sigue dando nil (idempotente), no cuelga
@@ -117,8 +117,8 @@ func TestWsRecvNilAfterLocalClose(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		afterClose = "SENTINEL"
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			w:send("ping")
 			local _ = w:recv()
 			w:close()
@@ -138,8 +138,8 @@ func TestWsSendAfterCloseECLOSED(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		code = nil
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			w:close()
 			local ok, e = pcall(function() w:send("tarde") end)
 			if not ok then code = e.code end
@@ -163,8 +163,8 @@ func TestWsConnectRefusedENET(t *testing.T) {
 	h.regStringFn("DEADURL", "ws://"+addr)
 	h.eval(`
 		code = nil
-		nu.task.spawn(function()
-			local ok, e = pcall(function() nu.ws.connect(DEADURL(), { timeout_ms = 2000 }) end)
+		enu.task.spawn(function()
+			local ok, e = pcall(function() enu.ws.connect(DEADURL(), { timeout_ms = 2000 }) end)
 			if not ok then code = e.code end
 		end)
 	`)
@@ -201,8 +201,8 @@ func TestWsConnectTimeoutETIMEOUT(t *testing.T) {
 	h.regStringFn("SLOWURL", "ws://"+ln.Addr().String())
 	h.eval(`
 		code = nil
-		nu.task.spawn(function()
-			local ok, e = pcall(function() nu.ws.connect(SLOWURL(), { timeout_ms = 80 }) end)
+		enu.task.spawn(function()
+			local ok, e = pcall(function() enu.ws.connect(SLOWURL(), { timeout_ms = 80 }) end)
 			if not ok then code = e.code end
 		end)
 	`)
@@ -219,8 +219,8 @@ func TestWsCloseIdempotent(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		ok = false
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			w:close()
 			w:close()
 			w:close()
@@ -230,7 +230,7 @@ func TestWsCloseIdempotent(t *testing.T) {
 	h.expectEval(`return tostring(ok)`, "true")
 }
 
-// TestWsClosedByCleanupOnCancel blinda la integración con `nu.task.cleanup` (§6):
+// TestWsClosedByCleanupOnCancel blinda la integración con `enu.task.cleanup` (§6):
 // una task que abre un websocket y registra `cleanup(function() w:close() end)` lo
 // libera al ser CANCELADA, sin fuga de goroutines. La task se bloquea en `recv()`
 // (el servidor de eco no manda nada espontáneo), se cancela desde fuera, y el
@@ -245,17 +245,17 @@ func TestWsClosedByCleanupOnCancel(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		ready, T = false, nil
-		T = nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
-			nu.task.cleanup(function() w:close() end)
+		T = enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
+			enu.task.cleanup(function() w:close() end)
 			ready = true
 			-- recv se bloquea indefinidamente: el servidor de eco no manda nada por su
 			-- cuenta. Solo la cancelación de la task (-> cleanup -> close) lo desbloquea.
 			local _ = w:recv()
 		end)
-		nu.task.spawn(function()
-			while not ready do nu.task.sleep(5) end
-			nu.task.sleep(20) -- deja que recv() se bloquee de verdad
+		enu.task.spawn(function()
+			while not ready do enu.task.sleep(5) end
+			enu.task.sleep(20) -- deja que recv() se bloquee de verdad
 			T:cancel()
 		end)
 	`)
@@ -277,7 +277,7 @@ func TestWsClosedByCleanupOnCancel(t *testing.T) {
 // una task lanzan `EINVAL` (no pueden suspender sin una task, §1.3).
 func TestWsOutsideTaskEINVAL(t *testing.T) {
 	h := newHarness(t)
-	se := h.evalErr(`nu.ws.connect("ws://x")`)
+	se := h.evalErr(`enu.ws.connect("ws://x")`)
 	if se.Code != CodeEINVAL {
 		t.Fatalf("connect fuera de task: got %q, want EINVAL", se.Code)
 	}
@@ -328,8 +328,8 @@ func TestWsSendBinaryFrameType_G52(t *testing.T) {
 	// intacto en un frame binario.
 	h.eval(`
 		done = false
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			w:send("\255\254\0", { binary = true })  -- frame binario
 			w:send("texto")                            -- frame de texto (default, sin opts)
 			done = true
@@ -374,8 +374,8 @@ func TestWsRecvFrameType_G52(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		binOk, b1, txt, b2 = false, nil, nil, nil
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			local d1
 			d1, b1 = w:recv()  -- frame binario: (data, true)
 			binOk = (#d1 == 3 and string.byte(d1,1) == 0 and string.byte(d1,2) == 255 and string.byte(d1,3) == 1)
@@ -407,8 +407,8 @@ func TestWsRecvBinaryNilOnClose_G52(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		closeData, closeBin = "S", "S"
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			local _ = w:recv()                 -- "uno"
 			closeData, closeBin = w:recv()     -- cierre: nil, nil
 			w:close()
@@ -429,8 +429,8 @@ func TestWsSendBinaryAfterCloseECLOSED_G52(t *testing.T) {
 	withURL(h, srv.URL)
 	h.eval(`
 		code = nil
-		nu.task.spawn(function()
-			local w = nu.ws.connect(URL())
+		enu.task.spawn(function()
+			local w = enu.ws.connect(URL())
 			w:close()
 			local ok, e = pcall(function() w:send("tarde", { binary = true }) end)
 			if not ok then code = e.code end
@@ -445,14 +445,14 @@ func TestWsBadOptsEINVAL(t *testing.T) {
 	h := newHarness(t)
 	h.eval(`
 		c1, c2, c3, c4 = nil, nil, nil, nil
-		nu.task.spawn(function()
-			local _, e1 = pcall(function() nu.ws.connect("") end)
+		enu.task.spawn(function()
+			local _, e1 = pcall(function() enu.ws.connect("") end)
 			c1 = e1.code
-			local _, e2 = pcall(function() nu.ws.connect("ws://x", 7) end)
+			local _, e2 = pcall(function() enu.ws.connect("ws://x", 7) end)
 			c2 = e2.code
-			local _, e3 = pcall(function() nu.ws.connect("ws://x", { headers = { [1] = "v" } }) end)
+			local _, e3 = pcall(function() enu.ws.connect("ws://x", { headers = { [1] = "v" } }) end)
 			c3 = e3.code
-			local _, e4 = pcall(function() nu.ws.connect("ws://x", { timeout_ms = -5 }) end)
+			local _, e4 = pcall(function() enu.ws.connect("ws://x", { timeout_ms = -5 }) end)
 			c4 = e4.code
 		end)
 	`)

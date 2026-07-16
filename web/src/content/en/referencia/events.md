@@ -1,9 +1,9 @@
 ---
-title: nu.events — event bus
-description: nu's generic event bus — on, once, emit, and synchronous dispatch semantics.
+title: enu.events — event bus
+description: enu's generic event bus — on, once, emit, and synchronous dispatch semantics.
 ---
 
-`nu.events` is a generic event bus. The core doesn't know what an agent is:
+`enu.events` is a generic event bus. The core doesn't know what an agent is:
 this bus is where extensions define their own hooks. It's only available in
 the **main state** (not in workers).
 
@@ -16,10 +16,10 @@ name is unique, two extensions never collide. Official ones have no
 privilege: `agent:` is the namespace of the `agent` plugin, just like
 `my-plugin:` is yours.
 
-## `nu.events.on`
+## `enu.events.on`
 
 ```
-nu.events.on(name, fn) -> Sub
+enu.events.on(name, fn) -> Sub
   Sub:cancel()
 ```
 
@@ -28,42 +28,42 @@ registration order, and each one runs under `pcall` (a handler that throws
 doesn't bring down the others). Returns a `Sub` with `Sub:cancel()`.
 
 ```lua
-local sub = nu.events.on("my-plugin:saved", function(payload)
-  -- react; synchronous, so for IO: nu.task.spawn(...)
-  nu.log.info("saved: %s", payload.path)
+local sub = enu.events.on("my-plugin:saved", function(payload)
+  -- react; synchronous, so for IO: enu.task.spawn(...)
+  enu.log.info("saved: %s", payload.path)
 end)
 -- ...
 sub:cancel()
 ```
 
-## `nu.events.once`
+## `enu.events.once`
 
 ```
-nu.events.once(name, fn) -> Sub
+enu.events.once(name, fn) -> Sub
 ```
 
 Like `on`, but fires **only once** and cancels itself.
 
 ```lua
-nu.events.once("core:ready", function()
-  nu.log.info("runtime ready")
+enu.events.once("core:ready", function()
+  enu.log.info("runtime ready")
 end)
 ```
 
-## `nu.events.emit`
+## `enu.events.emit`
 
 ```
-nu.events.emit(name, payload?)
+enu.events.emit(name, payload?)
 ```
 
 Dispatches the event **synchronously** on the main state. `payload` is
 optional (any table).
 
 ```sh
-nu -e '
+enu -e '
 local seen
-nu.events.on("demo:hello", function(p) seen = p.who end)
-nu.events.emit("demo:hello", { who = "nu" })
+enu.events.on("demo:hello", function(p) seen = p.who end)
+enu.events.emit("demo:hello", { who = "nu" })
 return seen
 '
 ```

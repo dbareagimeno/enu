@@ -11,10 +11,10 @@
 //  2. Bloques ```mermaid → `<pre class="mermaid">` con la fuente escapada, para
 //     que Shiki no los toque y el cliente (mermaid-init.ts) los renderice.
 //
-// BASE es '/nu' (coincide con `base` en astro.config.mjs); en un plugin remark
+// BASE es '/enu' (coincide con `base` en astro.config.mjs); en un plugin remark
 // no hay acceso fiable a import.meta.env, así que se fija aquí.
 
-const BASE = '/nu';
+const BASE = '/enu';
 const GH_BLOB = 'https://github.com/dbareagimeno/enu/blob/main/docs/';
 
 // Los 18 slugs publicados como página en /docs/<slug> (docmap.ts es la fuente;
@@ -22,7 +22,7 @@ const GH_BLOB = 'https://github.com/dbareagimeno/enu/blob/main/docs/';
 // astro:content). Los enlaces a docs despublicados (api, adr, malla y todo el
 // grupo proceso) caen a GitHub blob por la rama de `.md` desconocido.
 const WIKI_SLUGS = new Set([
-  'que-es-nu', 'instalacion', 'inicio-rapido', 'primer-script', 'primer-agente', 'conceptos',
+  'que-es-enu', 'instalacion', 'inicio-rapido', 'primer-script', 'primer-agente', 'conceptos',
   'filosofia', 'arquitectura', 'modelo-ejecucion',
   'extensiones', 'guia-plugins', 'providers', 'agente', 'sesiones', 'chat', 'mcp', 'repl', 'toolkit',
 ]);
@@ -37,7 +37,7 @@ function limpiaRuta(r) {
 }
 
 // `prefLang` es '' (ES) o 'en/' (EN): las páginas EN publican sus enlaces de
-// wiki bajo /nu/en/docs/<slug>, no /nu/docs/<slug> (W-04). Los enlaces a GitHub
+// wiki bajo /enu/en/docs/<slug>, no /enu/docs/<slug> (W-04). Los enlaces a GitHub
 // (audits/archive/.md despublicado) son idénticos en ambos idiomas: apuntan a
 // la fuente ES, que es la de verdad.
 function reescribeUrl(url, prefLang) {

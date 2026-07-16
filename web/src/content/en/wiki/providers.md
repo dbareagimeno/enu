@@ -16,7 +16,7 @@ Two audiences:
 
 ## 1. The registry: `providers.toml`
 
-Lives in `nu.config.dir()`. Declares *data*, never logic.
+Lives in `enu.config.dir()`. Declares *data*, never logic.
 
 ```toml
 # Provider with an official adapter: data only.
@@ -150,7 +150,7 @@ already resolved from the TOML.
 Adapter obligations:
 
 1. **`stream` is a suspending function** that returns an iterator of
-   `Event`s (typically wrapping `nu.http.stream` + `Stream:events()`).
+   `Event`s (typically wrapping `enu.http.stream` + `Stream:events()`).
    It runs inside the agent's task: canceling that task cancels the
    request (the runtime closes the underlying `Stream`).
 2. **Errors**: throws structured errors (ADR-009) with code
@@ -185,11 +185,11 @@ return {
   caps = { tools = true, images = true, system = true, usage = true },
   stream = function(req, provider)
     local body = to_wire(req)                       -- canonical → dialect
-    local s = nu.http.stream{
+    local s = enu.http.stream{
       url = provider.base_url .. "/chat/completions",
       method = "POST",
       headers = auth_headers(provider),
-      body = nu.json.encode(body),
+      body = enu.json.encode(body),
     }
     if s.status >= 400 then
       error({ code = "EPROVIDER", message = read_error(s),
@@ -218,13 +218,13 @@ return {
   `providers.list() -> ModelInfo[]` (feeds the UI's model selector).
 - `providers.approx_tokens(s) -> integer`: heuristic token estimate
   (model-agnostic, ~4 bytes/token), in pure Lua. It used to live in the
-  core as `nu.text.approx_tokens` and left it (G23): "token" is this
+  core as `enu.text.approx_tokens` and left it (G23): "token" is this
   extension's vocabulary, and a division doesn't deserve a primitive. For
   accuracy, the adapter's `count_tokens?` (§3).
 
 **Subscriptions / OAuth (G13).** The v1 path is the one that needs no
-local server: **device flow or manually pasted code** (`nu.http.request`
-in polling + opening the browser with `nu.proc` — the `gh` or `gcloud`
+local server: **device flow or manually pasted code** (`enu.http.request`
+in polling + opening the browser with `enu.proc` — the `gh` or `gcloud`
 pattern). Refresh tokens: in `data_dir()/plugins/<name>/`, `0600`
 permissions, in the clear (consistent with [P7](pospuesto.md): at-rest
 encryption is the filesystem's job). The localhost-callback flow would

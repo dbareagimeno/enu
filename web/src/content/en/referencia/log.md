@@ -1,36 +1,36 @@
 ---
-title: nu.log — logging
-description: File logging with level and source plugin. print is an alias for nu.log.info.
+title: enu.log — logging
+description: File logging with level and source plugin. print is an alias for enu.log.info.
 ---
 
-`nu.log` is the runtime's logging. Available in workers **[W]**. Writes **to a
+`enu.log` is the runtime's logging. Available in workers **[W]**. Writes **to a
 file** in `data_dir`, with the source plugin annotated automatically —
 **never to the screen**: the UI belongs to the extensions, not the core—.
 
 ## Levels
 
 ```
-nu.log.debug(fmt, ...) [W]
-nu.log.info(fmt, ...) [W]
-nu.log.warn(fmt, ...) [W]
-nu.log.error(fmt, ...) [W]
+enu.log.debug(fmt, ...) [W]
+enu.log.info(fmt, ...) [W]
+enu.log.warn(fmt, ...) [W]
+enu.log.error(fmt, ...) [W]
 ```
 
 `fmt` uses `string.format`'s format:
 
 ```lua
-nu.log.info("procesados %d ficheros en %d ms", n, dur)
-nu.log.warn("reintentando: %s", err.message)
+enu.log.info("procesados %d ficheros en %d ms", n, dur)
+enu.log.warn("reintentando: %s", err.message)
 ```
 
-## `print` is `nu.log.info`
+## `print` is `enu.log.info`
 
-In `nu`'s Lua baseline, `print` is **redirected to `nu.log.info`**: it goes to the
-log, not stdout. This is deliberate —screen IO goes through `nu.ui` or through
-`nu -e`'s return values—.
+In `enu`'s Lua baseline, `print` is **redirected to `enu.log.info`**: it goes to the
+log, not stdout. This is deliberate —screen IO goes through `enu.ui` or through
+`enu -e`'s return values—.
 
 ```sh
-nu -e 'print("esto va al log, no aquí"); return "esto sí sale"'
+enu -e 'print("esto va al log, no aquí"); return "esto sí sale"'
 ```
 
 ```
@@ -39,8 +39,8 @@ esto sí sale
 
 :::caution[Don't use print for user output]
 If you want something to appear on the terminal: in headless, return it with `return`
-(in `nu -e`) or write it to stdout via the corresponding extension; in a TUI,
-paint it with [`nu.ui`](/nu/en/api/ui/). `print`/`nu.log.*` are for
+(in `enu -e`) or write it to stdout via the corresponding extension; in a TUI,
+paint it with [`enu.ui`](/enu/en/api/ui/). `print`/`enu.log.*` are for
 diagnostics, and their destination is the log file at
-[`nu.config.data_dir()`](/nu/en/api/plugin/#directories).
+[`enu.config.data_dir()`](/enu/en/api/plugin/#directories).
 :::

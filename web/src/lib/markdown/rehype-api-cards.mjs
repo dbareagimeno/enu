@@ -14,7 +14,7 @@
 // Detección firma vs ejemplo (misma heurística que check-drift.mjs):
 //   - fence con data-language lua/sh/bash  -> EJEMPLO (se envuelve, no card).
 //   - fence sin etiqueta (plaintext): es FIRMA si alguna de sus líneas parsea
-//     como callable (empieza por `nu.` o `Handle:metodo`, con `(...)` y/o
+//     como callable (empieza por `enu.` o `Handle:metodo`, con `(...)` y/o
 //     `-> ret`). Si ninguna parsea (salidas como `true`, `{...}`, los modos de
 //     la CLI) se deja como bloque de código tal cual.
 
@@ -22,8 +22,8 @@ import { toText } from 'hast-util-to-text';
 
 const SUSP = '⏸';
 const W = '[W]';
-// Cabeza de un callable: nombre punteado bajo `nu.` o método `Handle:metodo`.
-const RE_CABEZA = /^(nu\.[\w./]+|[A-Z][A-Za-z]*:[a-z_]\w*)/;
+// Cabeza de un callable: nombre punteado bajo `enu.` o método `Handle:metodo`.
+const RE_CABEZA = /^(enu\.[\w./]+|[A-Z][A-Za-z]*:[a-z_]\w*)/;
 
 // --- Helpers de parseo (portados de check-drift.mjs) ------------------------
 
@@ -200,7 +200,7 @@ function tarjeta(textoFence, desc, heading) {
 function envolverEjemplo(pre) {
   const texto = toText(pre, { whitespace: 'pre' });
   const esNuE = /\bnu\s+-e\b/.test(texto);
-  const etiqueta = esNuE ? 'ejemplo — pruébalo con nu -e' : 'ejemplo';
+  const etiqueta = esNuE ? 'ejemplo — pruébalo con enu -e' : 'ejemplo';
   const cap = {
     type: 'element',
     tagName: 'figcaption',

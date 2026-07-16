@@ -163,15 +163,15 @@ const contiene = (s, sub) => s.includes(sub);
   comprueba('B/blockquote Estado', contiene(t, 'Sigue') && !contiene(t, 'Estado de implementación'), `→ "${t}"`);
 }
 
-// --- Regla A: rangos nu:interno -----------------------------------------------
+// --- Regla A: rangos enu:interno -----------------------------------------------
 
 {
   const md = [
     'Externo uno.', '',
-    '<!-- nu:interno -->', '',
+    '<!-- enu:interno -->', '',
     '## Interno', '',
     'Párrafo interno con detalle sensible.', '',
-    '<!-- /nu:interno -->', '',
+    '<!-- /enu:interno -->', '',
     'Externo dos.', '',
   ].join('\n');
   const t = texto(md);
@@ -182,8 +182,8 @@ const contiene = (s, sub) => s.includes(sub);
 {
   // Varios pares en el mismo documento.
   const md = [
-    'A', '', '<!-- nu:interno -->', '', 'X1', '', '<!-- /nu:interno -->', '',
-    'B', '', '<!-- nu:interno -->', '', 'X2', '', '<!-- /nu:interno -->', '', 'C', '',
+    'A', '', '<!-- enu:interno -->', '', 'X1', '', '<!-- /enu:interno -->', '',
+    'B', '', '<!-- enu:interno -->', '', 'X2', '', '<!-- /enu:interno -->', '', 'C', '',
   ].join('\n');
   const t = texto(md);
   comprueba('A/varios pares',
@@ -207,11 +207,11 @@ const contiene = (s, sub) => s.includes(sub);
     'Frase con (G4), y (ADR-003, más prosa) y (files/grep, G51).', '',
     'Un aside. *(✅ Implementado: P23.)*', '',
     '> ✅ Implementado (P22)', '',
-    '<!-- nu:interno -->', '', 'oculto (G99)', '', '<!-- /nu:interno -->', '',
+    '<!-- enu:interno -->', '', 'oculto (G99)', '', '<!-- /enu:interno -->', '',
   ].join('\n');
   const t = texto(md);
   comprueba('gate/sin marcadores parentéticos',
-    !/\((?:G|P|S)\d/.test(t) && !/\(ADR-\d/.test(t) && !t.includes('✅') && !t.includes('nu:interno') && !t.includes('oculto'),
+    !/\((?:G|P|S)\d/.test(t) && !/\(ADR-\d/.test(t) && !t.includes('✅') && !t.includes('enu:interno') && !t.includes('oculto'),
     `→ "${t}"`);
 }
 

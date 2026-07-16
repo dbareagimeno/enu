@@ -1,14 +1,14 @@
 -- Bootstrap del LOOP de un subagente-worker (S40, agente.md §9).
 --
--- Este módulo es el `module` que `nu.worker.spawn` carga DENTRO del worker para
+-- Este módulo es el `module` que `enu.worker.spawn` carga DENTRO del worker para
 -- correr el turno de un subagente AISLADO (agente.md §9: "el loop corre en un
 -- worker, con caps recortadas; los handlers de tools se ejecutan en el estado
 -- principal vía proxy de mensajes"). Es, por tanto, código que corre BAJO LAS CAPS
 -- RECORTADAS del worker: la superficie no concedida NO EXISTE aquí (p. ej.
--- `nu.fs.write`, `nu.ui`, `nu.events` —el bus principal no cruza, api.md §13/§16—).
+-- `enu.fs.write`, `enu.ui`, `enu.events` —el bus principal no cruza, api.md §13/§16—).
 -- El subagente es HEADLESS por construcción.
 --
--- PROTOCOLO con el padre (por `nu.worker.parent`, api.md §13, mensajes JSON-ables):
+-- PROTOCOLO con el padre (por `enu.worker.parent`, api.md §13, mensajes JSON-ables):
 --   1. el padre manda `{ kind="init", model, system, thinking, prompt, tool_defs,
 --      adapters, max_turns, max_tokens, temperature }` —`system` ya trae el índice
 --      de skills y `thinking` ya está resuelto (A-22): el worker no re-descubre—;
@@ -74,7 +74,7 @@ end
 -- consume_stream(iter) -> done. Consume el iterador de Events del adaptador
 -- (providers.md §2.3) y devuelve el `done` (con stop_reason y el Message ensamblado)
 -- y el último `usage`. El subagente-worker es HEADLESS: no hay bus de eventos
--- (`nu.events` no existe en el worker, §16), así que los deltas se descartan —el
+-- (`enu.events` no existe en el worker, §16), así que los deltas se descartan —el
 -- padre solo recibe el DIGESTO, no el stream crudo (agente.md §9)—.
 local function consume_stream(iter)
   local done, usage = nil, nil
@@ -104,7 +104,7 @@ local function run_turn(init)
   -- padre —que tiene el lock (§6)— es el único escritor. Fire-and-forget: el padre
   -- no responde (no es un tool_call).
   local function persist(message, usage, model)
-    nu.worker.parent.send({ kind = "message", message = message, usage = usage, model = model })
+    enu.worker.parent.send({ kind = "message", message = message, usage = usage, model = model })
   end
 
   -- Historial en memoria del subagente. Su transcript PROPIO se persiste en el
@@ -161,10 +161,10 @@ local function run_turn(init)
     local results = {}
     for _, block in ipairs(assistant.content) do
       if block.type == "tool_call" then
-        nu.worker.parent.send({
+        enu.worker.parent.send({
           kind = "tool_call", id = block.id, name = block.name, args = block.args,
         })
-        local reply = nu.worker.parent.recv()
+        local reply = enu.worker.parent.recv()
         if reply == nil then
           error({ code = "EAGENT", message = "el padre cerró el canal sin devolver el tool_result" })
         end
@@ -194,9 +194,9 @@ end
 -- Cuerpo del worker (corre como task, así que puede ⏸): recibe el init, corre el
 -- turno y devuelve el digesto. Un fallo se reporta como `error` para no colgar al
 -- padre (que está en `w:recv()` esperando o un tool_result o el digesto).
-local init = nu.worker.parent.recv()
+local init = enu.worker.parent.recv()
 if init == nil or init.kind ~= "init" then
-  nu.worker.parent.send({ kind = "error", message = "primer mensaje no es un init" })
+  enu.worker.parent.send({ kind = "error", message = "primer mensaje no es un init" })
   return
 end
 
@@ -204,8 +204,8 @@ register_adapters(init.adapters)
 
 local ok, digest_or_err = pcall(run_turn, init)
 if ok then
-  nu.worker.parent.send({ kind = "done", digest = digest_or_err })
+  enu.worker.parent.send({ kind = "done", digest = digest_or_err })
 else
   local message = (type(digest_or_err) == "table" and digest_or_err.message) or tostring(digest_or_err)
-  nu.worker.parent.send({ kind = "error", message = message })
+  enu.worker.parent.send({ kind = "error", message = message })
 end

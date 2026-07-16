@@ -4,7 +4,7 @@ package vmwasm
 // ADR-019: cada worker es una Instance wasm distinta, con su **memoria lineal
 // físicamente aislada** — más fuerte que el `*LState` separado de gopher (que
 // comparte el heap de Go). Un worker es un mini-runtime completo (G15): su propio
-// scheduler (nu.task), sin watchdog (existe para quemar CPU), controlado por
+// scheduler (enu.task), sin watchdog (existe para quemar CPU), controlado por
 // terminate() + caps. Su único canal con el mundo es la mensajería con el padre.
 //
 // La frontera de workers **solo cruza datos, nunca referencias** (ADR-008): los
@@ -16,7 +16,7 @@ package vmwasm
 // Alcance (como M09-M11): M12 entrega el MECANISMO (aislamiento, mensajería
 // acotada, caps, exclusión recv/on_message, terminate) contra código fuente
 // directo; la resolución de `module` por el loader (require) es la integración de
-// M13. Desviación anotada: nu.task es intrínseco al runtime del worker (vive en el
+// M13. Desviación anotada: enu.task es intrínseco al runtime del worker (vive en el
 // preludio), siempre presente; las caps filtran los módulos respaldados por
 // primitivas (fs/proc/http/...), que es donde se prueba el mecanismo de G6.
 
@@ -103,17 +103,17 @@ func (p *Pool) lookupWorker(id int64) (w *worker, known bool) {
 }
 
 // registerWorkerHost registra las primitivas del lado PADRE de los workers (M12).
-// El preludioWorkerHost las envuelve como nu.worker.spawn y los métodos del
+// El preludioWorkerHost las envuelve como enu.worker.spawn y los métodos del
 // handle Worker.
 func (p *Pool) registerWorkerHost() {
-	// nu.worker._spawn(source, opts?) -> wid. SÍNCRONA: crea la Instance del
+	// enu.worker._spawn(source, opts?) -> wid. SÍNCRONA: crea la Instance del
 	// worker (aislada), la arranca en su goroutine con su propio RunTasks, y
 	// devuelve su id. `source` es código Lua (M13 lo cambia por resolución del
 	// módulo vía el loader).
 	p.Register("worker._spawn", func(inst *Instance, args []any) ([]any, error) {
 		source, _ := args[0].(string)
 		if source == "" {
-			return nil, &StructuredError{Code: "EINVAL", Message: "nu.worker.spawn: module es obligatorio"}
+			return nil, &StructuredError{Code: "EINVAL", Message: "enu.worker.spawn: module es obligatorio"}
 		}
 		var opts map[string]any
 		if len(args) > 1 {
@@ -135,7 +135,7 @@ func (p *Pool) registerWorkerHost() {
 		return []any{id}, nil
 	})
 
-	// nu.worker._send(wid, msg) ⏸: encola msg en la cola hacia el worker; SUSPENDE
+	// enu.worker._send(wid, msg) ⏸: encola msg en la cola hacia el worker; SUSPENDE
 	// si está llena (backpressure). ECLOSED si el worker terminó.
 	p.RegisterSuspending("worker._send", func(inst *Instance, args []any) ([]any, error) {
 		w, known := inst.pool.lookupWorker(toI64(args[0]))
@@ -150,7 +150,7 @@ func (p *Pool) registerWorkerHost() {
 		return sendOnChan(w.chans.toWorker, w.chans.done, args[1], "Worker:send")
 	})
 
-	// nu.worker._recv(wid) ⏸: saca un mensaje de la cola desde el worker; SUSPENDE
+	// enu.worker._recv(wid) ⏸: saca un mensaje de la cola desde el worker; SUSPENDE
 	// hasta que llegue. nil (fin de canal) si el worker terminó y no queda nada.
 	p.RegisterSuspending("worker._recv", func(inst *Instance, args []any) ([]any, error) {
 		w, known := inst.pool.lookupWorker(toI64(args[0]))
@@ -171,7 +171,7 @@ func (p *Pool) registerWorkerHost() {
 		return res, err
 	})
 
-	// nu.worker._terminate(wid): inmediato y seguro (estados aislados). Interrumpe
+	// enu.worker._terminate(wid): inmediato y seguro (estados aislados). Interrumpe
 	// un bucle de CPU (cancela el ctx) y despierta cualquier send/recv (cierra done).
 	p.Register("worker._terminate", func(inst *Instance, args []any) ([]any, error) {
 		if w, _ := inst.pool.lookupWorker(toI64(args[0])); w != nil {
@@ -216,14 +216,14 @@ func (inst *Instance) spawnWorker(source string, caps map[string]bool, capsGiven
 	}
 
 	// Los wrappers Lua [W] del catálogo cruzan al worker (G45): buena parte de la
-	// superficie de api.md §16 (nu.log.*, nu.re.compile, nu.proc.spawn, nu.text.*,
-	// nu.ws.connect, nu.http.stream, nu.search.grep) no son thunks del registro
+	// superficie de api.md §16 (enu.log.*, enu.re.compile, enu.proc.spawn, enu.text.*,
+	// enu.ws.connect, enu.http.stream, enu.search.grep) no son thunks del registro
 	// sino snippets de extraPreludio; sin esta copia el worker arranca con esos
-	// módulos a nil. Cruzan SOLO los marcados worker-safe (nu.fs.watch no: su
-	// entrega depende de nu.events, que en un worker no existe) y SOLO si caps
+	// módulos a nil. Cruzan SOLO los marcados worker-safe (enu.fs.watch no: su
+	// entrega depende de enu.events, que en un worker no existe) y SOLO si caps
 	// concede alguno de los thunks que envuelven (needs): así "lo no concedido no
 	// existe" (§14) vale también para la capa de wrappers —un worker sin la cap
-	// `http` no tiene nu.http ni como tabla—, con workerGrants como única
+	// `http` no tiene enu.http ni como tabla—, con workerGrants como única
 	// autoridad de poda.
 	for _, s := range inst.pool.extraPreludio {
 		if !s.workerSafe {
@@ -266,7 +266,7 @@ func (inst *Instance) spawnWorker(source string, caps map[string]bool, capsGiven
 }
 
 // workerGrants decide si una primitiva `name` (p. ej. "fs.read") está concedida a
-// un worker (G6). Nunca cruzan: nu.ui (un solo escritor de UI), nu.worker (no hay
+// un worker (G6). Nunca cruzan: enu.ui (un solo escritor de UI), enu.worker (no hay
 // anidamiento) ni las primitivas internas de despacho de handles (las re-registra
 // el propio Pool del worker). Sin caps → toda la API [W]. Con caps: concede el
 // módulo entero ("fs") o la función exacta ("fs.read"), deny-by-default.
@@ -315,13 +315,13 @@ func parseWorkerCaps(opts map[string]any) (map[string]bool, bool, error) {
 	}
 	arr, ok := capsV.([]any)
 	if !ok {
-		return nil, false, &StructuredError{Code: "EINVAL", Message: "nu.worker.spawn: opts.caps debe ser un array de strings"}
+		return nil, false, &StructuredError{Code: "EINVAL", Message: "enu.worker.spawn: opts.caps debe ser un array de strings"}
 	}
 	caps := make(map[string]bool)
 	for _, e := range arr {
 		s, ok := e.(string)
 		if !ok || s == "" {
-			return nil, false, &StructuredError{Code: "EINVAL", Message: "nu.worker.spawn: opts.caps debe ser un array de nombres de capacidad (strings no vacíos)"}
+			return nil, false, &StructuredError{Code: "EINVAL", Message: "enu.worker.spawn: opts.caps debe ser un array de nombres de capacidad (strings no vacíos)"}
 		}
 		caps[s] = true
 	}
@@ -333,7 +333,7 @@ func parseWorkerCaps(opts map[string]any) (map[string]bool, bool, error) {
 // no queda nada vivo o lo interrumpe terminate.
 func (w *worker) run(module string) {
 	defer w.shutdown()
-	// El argumento de nu.worker.spawn es un NOMBRE DE MÓDULO (api.md §13), no código
+	// El argumento de enu.worker.spawn es un NOMBRE DE MÓDULO (api.md §13), no código
 	// fuente: el worker lo resuelve con `require` (contra el registro de módulos que
 	// heredó del padre), corriendo su top-level DENTRO de una task para que pueda usar
 	// ⏸ (parent.recv/send). Paridad con el backend gopher (`return require(module)`).
@@ -346,7 +346,7 @@ func (w *worker) run(module string) {
 	// NO existe (ENOENT), se trata el argumento como CÓDIGO FUENTE inline y se corre con
 	// `load` —lo usan pruebas de bajo nivel que pasan el cuerpo del worker directamente—.
 	// Cualquier otro error de require (p. ej. compilación del módulo) se propaga.
-	boot := `nu.task.spawn(function()
+	boot := `enu.task.spawn(function()
   local name = __worker_module
   local ok, mod = pcall(require, name)
   if ok then return mod end

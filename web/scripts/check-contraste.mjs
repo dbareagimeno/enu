@@ -11,7 +11,7 @@
 // auditoría de diseño 2026-07-15). Este check convierte esa regla en un gate:
 // si un token de lectura baja de AA contra su fondo, el build rompe.
 //
-// Qué comprueba, para CADA theme (nu, dracula, gruvbox, solarized):
+// Qué comprueba, para CADA theme (enu, dracula, gruvbox, solarized):
 //   - --fg  sobre --bg  ≥ 4.5:1  (el cuerpo de texto principal)
 //   - --dim sobre --bg  ≥ 4.5:1  (el texto secundario: es lectura, no adorno)
 //
@@ -26,7 +26,7 @@ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TOKENS = join(RAIZ, "web", "src", "styles", "tokens.css");
 
 // Los 4 themes de terminal reales que expone la web. El orden es el de tokens.css.
-const THEMES = ["nu", "dracula", "gruvbox", "solarized"];
+const THEMES = ["enu", "dracula", "gruvbox", "solarized"];
 
 // Pares (token de texto, fondo) que exigimos conformes a AA. Ambos son LECTURA:
 // --fg es el cuerpo; --dim pinta statusline, citas, metadatos y footers.
@@ -73,7 +73,7 @@ function ratio(hexA, hexB) {
 // --- Parser de tokens.css ----------------------------------------------------
 
 // Extrae, para cada theme, el mapa { --token: #hex } de su bloque de reglas.
-// El bloque de `nu` se declara bajo `html[data-theme='nu']` (y comparte selector
+// El bloque de `nu` se declara bajo `html[data-theme='enu']` (y comparte selector
 // con `html,`, pero basta con el atributo). Localizamos el selector del theme y
 // leemos hasta el primer `}`.
 function parseTokens() {

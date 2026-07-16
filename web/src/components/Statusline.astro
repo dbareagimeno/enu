@@ -1,6 +1,6 @@
 ---
 // Statusline: una sola, abajo, fija, en todas las páginas internas. Izquierda =
-// contexto (id="nu-status-left", que el teclado convierte en prompt tras ':').
+// contexto (id="enu-status-left", que el teclado convierte en prompt tras ':').
 // Derecha = teclas disponibles. Chrome 10.5–11px lowercase.
 //
 // En <768px se muestra la versión táctil: `[≡] índice · [/] buscar · [q]
@@ -29,7 +29,7 @@ const t = i18n[lang]; // etiquetas táctiles en el idioma de la página (el swap
 ---
 <footer class="statusline">
   <div class="sl-desktop">
-    <span id="nu-status-left" class="left">{left}</span>
+    <span id="enu-status-left" class="left">{left}</span>
     <span class="right">
       {keys.map((h, i) => (
         <>

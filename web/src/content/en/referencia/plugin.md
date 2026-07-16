@@ -1,12 +1,12 @@
 ---
-title: nu.plugin — plugins and loader
-description: nu's plugin system — structure, loader, identity by name, boot order, reload and config directories.
+title: enu.plugin — plugins and loader
+description: enu's plugin system — structure, loader, identity by name, boot order, reload and config directories.
 ---
 
-`nu.plugin` and the loader are how `nu` loads the code that turns it into something.
+`enu.plugin` and the loader are how `enu` loads the code that turns it into something.
 Remember: **everything** —the agent, the chat, the providers— is a plugin; the
 official extensions have no privilege. Main state only (except
-`nu.config.dir`/`data_dir`, which are **[W]**).
+`enu.config.dir`/`data_dir`, which are **[W]**).
 
 ## What a plugin is
 
@@ -51,36 +51,36 @@ stack the most recent registration wins, the user has the last word (keymaps,
 theme, overrides) by construction, without a priority system.
 
 The embedded official extensions (`go:embed`) load first but only if
-`plugins.enabled` (in `nu.toml`) names them —**inactive by default**, ADR-010—.
+`plugins.enabled` (in `enu.toml`) names them —**inactive by default**, ADR-010—.
 
 ## API
 
-### `nu.plugin.current`
+### `enu.plugin.current`
 
 ```
-nu.plugin.current() -> { name, version, dir }
+enu.plugin.current() -> { name, version, dir }
 ```
 
 The plugin in whose context the code runs. The core uses it to tag
 handles by owner (which is what makes `reload` possible).
 
-### `nu.plugin.list`
+### `enu.plugin.list`
 
 ```
-nu.plugin.list() -> { name, version, source: "builtin"|"user", enabled }[]
+enu.plugin.list() -> { name, version, source: "builtin"|"user", enabled }[]
 ```
 
 ```lua
-for _, p in ipairs(nu.plugin.list()) do
-  nu.log.info("%s %s (%s) %s", p.name, p.version, p.source,
+for _, p in ipairs(enu.plugin.list()) do
+  enu.log.info("%s %s (%s) %s", p.name, p.version, p.source,
     p.enabled and "active" or "inactive")
 end
 ```
 
-### `nu.plugin.reload` ⏸
+### `enu.plugin.reload` ⏸
 
 ```
-nu.plugin.reload(name)
+enu.plugin.reload(name)
 ```
 
 **Development** tool, *best-effort*: releases the plugin's handles, emits
@@ -92,15 +92,15 @@ production**.
 ## Directories
 
 ```
-nu.config.dir() -> string       [W]   -- ~/.config/nu (or equivalent)
-nu.config.data_dir() -> string  [W]   -- ~/.local/share/nu (or equivalent)
+enu.config.dir() -> string       [W]   -- ~/.config/enu (or equivalent)
+enu.config.data_dir() -> string  [W]   -- ~/.local/share/enu (or equivalent)
 ```
 
-`config.dir()` is where `nu.toml`, `providers.toml` and plugin config
+`config.dir()` is where `enu.toml`, `providers.toml` and plugin config
 live; `data_dir()` is for data (logs, sessions).
 
 ```sh
-nu -e 'return nu.config.dir() ~= nil, nu.config.data_dir() ~= nil'
+enu -e 'return enu.config.dir() ~= nil, enu.config.data_dir() ~= nil'
 ```
 
 ```
@@ -109,8 +109,8 @@ true
 ```
 
 :::note[Runtime configuration]
-`config.dir()/nu.toml` governs the core itself: which plugins get activated, extra
-plugin paths and the watchdog budget. A broken `nu.toml` or a
+`config.dir()/enu.toml` governs the core itself: which plugins get activated, extra
+plugin paths and the watchdog budget. A broken `enu.toml` or a
 `plugins.enabled` naming something nonexistent is an actionable boot error
 that points to the line to fix.
 :::

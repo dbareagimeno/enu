@@ -2,7 +2,7 @@
 
 > *A terminal-oriented Lua runtime whose killer app is a coding harness.*
 
-`nu` is a CLI/TUI coding harness. But that sentence describes the product, not
+`enu` is a CLI/TUI coding harness. But that sentence describes the product, not
 the project. The project is a **minimal kernel and an extension system where
 everything else — including the agent itself — is an extension**.
 
@@ -58,7 +58,7 @@ that operation should be a primitive.
 ### 5. Batteries included, but not plugged in (ADR-010)
 
 The binary ships the official extensions embedded (`go:embed`), but **none
-activates on its own**: an installed `nu` is a bare runtime, and the harness
+activates on its own**: an installed `enu` is a bare runtime, and the harness
 is a user's choice, not a fait accompli. Plugging them in is trivial but
 **explicit**: with a TTY, the first launch offers to activate the official
 set with one keystroke; without a TTY (CI, Docker, scripts), the

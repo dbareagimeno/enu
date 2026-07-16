@@ -1,6 +1,6 @@
 ---
 // 404 (pantalla 14a). Astro genera dist/404.html desde esta página; GitHub
-// Pages la sirve para cualquier ruta bajo /nu/ que no exista.
+// Pages la sirve para cualquier ruta bajo /enu/ que no exista.
 //
 // La ruta pedida y la sugerencia "¿querías decir?" (distancia de Levenshtein)
 // se resuelven en CLIENTE: en build-time no se sabe qué URL disparó el 404.
@@ -47,39 +47,39 @@ const keys = [
   { k: '/', label: es.kSearch, i18n: 'kSearch' },
 ];
 ---
-<Base title="404 · nu" description="E404: no es un documento del editor.">
+<Base title="404 · enu" description="E404: no es un documento del editor.">
   <div class="e404">
     <HeaderInternal active={sinActiva} />
 
     <main class="e404-body">
       <div class="e404-line">
-        <span class="dim">$ nu </span><span id="nu-404-path" class="path"></span>
+        <span class="dim">$ enu </span><span id="enu-404-path" class="path"></span>
       </div>
       <div class="e404-gap"></div>
       <div class="e404-msg">
-        <span class="c4">E404: <span data-i18n="e404Msg">{es.e404Msg}</span>: </span><span id="nu-404-path2" class="path c4"></span>
+        <span class="c4">E404: <span data-i18n="e404Msg">{es.e404Msg}</span>: </span><span id="enu-404-path2" class="path c4"></span>
       </div>
       <div class="e404-gap"></div>
       <div class="e404-line">
-        <span data-i18n="e404Sug">{es.e404Sug}</span>{' '}<a id="nu-404-suggestion" class="sugerencia" href={`${base}/`}></a>
+        <span data-i18n="e404Sug">{es.e404Sug}</span>{' '}<a id="enu-404-suggestion" class="sugerencia" href={`${base}/`}></a>
       </div>
       <div class="e404-gap-lg"></div>
       <div class="e404-key">
-        <a class="nu-key-link" href={`${base}/docs/${primerDoc}`}
+        <a class="enu-key-link" href={`${base}/docs/${primerDoc}`}
           ><span class="dim">[</span><b class="key">d</b><span class="dim">]</span></a
         > <span data-i18n="e404Index">{es.e404Index}</span>
       </div>
       <div class="e404-key">
-        <a class="nu-key-link" href={`${base}/`}
+        <a class="enu-key-link" href={`${base}/`}
           ><span class="dim">[</span><b class="key">q</b><span class="dim">]</span></a
         > <span data-i18n="kBack">{es.kBack}</span>
       </div>
       <div class="e404-gap"></div>
       <div class="prompt">
-        <span id="nu-prompt" class="dim">&gt;</span>
-        <span id="nu-typed" class="bright"></span><span class="nu-cursor"></span>
+        <span id="enu-prompt" class="dim">&gt;</span>
+        <span id="enu-typed" class="bright"></span><span class="enu-cursor"></span>
       </div>
-      <div id="nu-feedback" class="feedback"></div>
+      <div id="enu-feedback" class="feedback"></div>
     </main>
 
     <Statusline left={`404 · 0/${TOTAL}`} keys={keys} />
@@ -88,17 +88,17 @@ const keys = [
   <script define:vars={{ manifest, base }}>
     // Config de build para el script de cliente de abajo (evita interpolar
     // literales sueltos en el módulo: mismo patrón que api/[slug].astro).
-    window.__nu404 = { manifest, base };
+    window.__enu404 = { manifest, base };
   </script>
   <script>
     import { initKeyboard } from '../scripts/keyboard';
     import { i18n } from '../lib/i18n';
 
-    interface Nu404Cfg {
+    interface Enu404Cfg {
       manifest: string[];
       base: string;
     }
-    const cfg = (window as unknown as { __nu404: Nu404Cfg }).__nu404;
+    const cfg = (window as unknown as { __enu404: Enu404Cfg }).__enu404;
 
     // Distancia de Levenshtein (DP clásica), implementada aquí — no hay
     // dependencia externa para esto (handoff §14a: "distancia de edición").
@@ -117,7 +117,7 @@ const keys = [
       return d[m][n];
     }
 
-    // Ruta pedida: pathname sin el prefijo /nu/ (base) ni barras sueltas.
+    // Ruta pedida: pathname sin el prefijo /enu/ (base) ni barras sueltas.
     // Caso irreal en producción: si coincidiera exactamente con una ruta del
     // manifiesto (solo posible en el fallback de dev de Astro), no pasa nada
     // especial — la sugerencia sale igual, aunque sea la misma ruta.
@@ -125,7 +125,7 @@ const keys = [
     if (cfg.base && rutaPedida.startsWith(cfg.base)) rutaPedida = rutaPedida.slice(cfg.base.length);
     rutaPedida = rutaPedida.replace(/^\/+/, '').replace(/\/+$/, '');
 
-    document.querySelectorAll<HTMLElement>('#nu-404-path, #nu-404-path2').forEach((el) => {
+    document.querySelectorAll<HTMLElement>('#enu-404-path, #enu-404-path2').forEach((el) => {
       el.textContent = rutaPedida;
     });
 
@@ -139,13 +139,13 @@ const keys = [
         mejor = ruta;
       }
     }
-    const sug = document.getElementById('nu-404-suggestion');
+    const sug = document.getElementById('enu-404-suggestion');
     if (sug) {
       sug.textContent = mejor === '' ? '/' : mejor;
       sug.setAttribute('href', mejor === '' ? `${cfg.base}/` : `${cfg.base}/${mejor}`);
     }
 
-    // Reetiqueta el "$ nu" y demás textos según el idioma activo al cargar y
+    // Reetiqueta el "$ enu" y demás textos según el idioma activo al cargar y
     // en cada cambio (initKeyboard/applyLang ya cubre los [data-i18n], pero
     // el propio bloque no necesita más: se deja aquí solo por si el lang
     // cambia después de pintar la sugerencia, que no lleva data-i18n propio).
@@ -155,7 +155,7 @@ const keys = [
     // solo reserva i/d/a/g; [q] es propio de esta pantalla (como en el resto
     // de páginas internas) y se envuelve aquí SIN tocar keyboard.ts. Se
     // registra ANTES de initKeyboard para leer el buffer (reflejado en
-    // #nu-typed) antes de que el handler de home lo mute.
+    // #enu-typed) antes de que el handler de home lo mute.
     window.addEventListener('keydown', (e) => {
       if (e.key !== 'q') return;
       const activo = document.activeElement;
@@ -167,7 +167,7 @@ const keys = [
       ) {
         return;
       }
-      const typed = document.getElementById('nu-typed');
+      const typed = document.getElementById('enu-typed');
       if (typed && typed.textContent !== '') return; // hay buffer: lo gestiona el modo home
       window.location.href = `${cfg.base}/`;
     });
@@ -225,10 +225,10 @@ const keys = [
   .e404-key {
     color: var(--fg);
   }
-  .nu-key-link .dim {
+  .enu-key-link .dim {
     color: var(--dim);
   }
-  .nu-key-link .key {
+  .enu-key-link .key {
     color: var(--key);
     font-weight: 600;
   }

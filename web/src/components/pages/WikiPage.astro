@@ -72,7 +72,7 @@ function agoLabel(n: number): string {
 }
 ---
 <Base
-  title={`${titulo} · nu`}
+  title={`${titulo} · enu`}
   description={(entry.data.description as string) ?? titulo}
   lang={lang}
   langMode="fixed"
@@ -154,7 +154,7 @@ function agoLabel(n: number): string {
     import { initPager } from '../../scripts/pager';
     import { initMermaid } from '../../scripts/mermaid-init';
 
-    const data = document.getElementById('nu-wiki-data');
+    const data = document.getElementById('enu-wiki-data');
     const ctx = data?.getAttribute('data-ctx') ?? '';
     const pos = data?.getAttribute('data-pos') ?? '';
     const nextUrl = data?.getAttribute('data-next') || null;
@@ -208,7 +208,7 @@ function agoLabel(n: number): string {
 
   <!-- Datos para el script (evita interpolar en el módulo). -->
   <span
-    id="nu-wiki-data"
+    id="enu-wiki-data"
     hidden
     data-ctx={routePath}
     data-pos={posicion}

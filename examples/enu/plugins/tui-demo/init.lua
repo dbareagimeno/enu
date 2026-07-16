@@ -1,5 +1,5 @@
 -- tui-demo — una TUI mínima pero COMPLETA escrita en Lua sobre la API pública del
--- core (`nu.ui` §9, `nu.events` §4, `nu.task` §3). Demuestra que, con el driver de
+-- core (`enu.ui` §9, `enu.events` §4, `enu.task` §3). Demuestra que, con el driver de
 -- TTY (S33), una extensión Lua pinta y responde en un terminal de verdad: regiones,
 -- blocks estilizados, teclado (keymap + on_input), reloj en vivo y `ui:resize`.
 --
@@ -10,14 +10,14 @@
 -- Cómo correrlo (desde la raíz del repo):
 --     XDG_CONFIG_HOME=examples go run .
 --   o, con el binario instalado:
---     XDG_CONFIG_HOME=examples nu
+--     XDG_CONFIG_HOME=examples enu
 -- Teclas: ↑/↓ o j/k mueven el contador · escribe para rellenar el campo ·
 --         Enter lo confirma · Backspace borra · q o Ctrl+C salen.
 
--- Sin TTY (headless: `nu -e`, CI, salida redirigida) no hay `nu.ui` (G20). La
+-- Sin TTY (headless: `enu -e`, CI, salida redirigida) no hay `enu.ui` (G20). La
 -- extensión se carga igual, pero no monta nada: una UI sin terminal no existe.
-if not nu.has("ui") then
-  nu.log.info("tui-demo: sin TTY, no se monta la UI (headless, G20)")
+if not enu.has("ui") then
+  enu.log.info("tui-demo: sin TTY, no se monta la UI (headless, G20)")
   return
 end
 
@@ -39,8 +39,8 @@ local state = {
 
 -- Una región a pantalla completa. El compositor recorta sola si la pantalla encoge,
 -- y reaparece intacta si crece (G1); en `ui:resize` la redimensionamos al nuevo tamaño.
-local size = nu.ui.size()
-local region = nu.ui.region({ x = 0, y = 0, w = size.w, h = size.h, z = 0 })
+local size = enu.ui.size()
+local region = enu.ui.region({ x = 0, y = 0, w = size.w, h = size.h, z = 0 })
 
 -- repeat_str: una utilidad para los bordes (Lua 5.1 tiene string.rep, pero lo
 -- exponemos con nombre propio por claridad).
@@ -54,7 +54,7 @@ end
 -- pinta en Go (api.md §9.1). Repintar entero es barato: el blit es copia y el diff
 -- solo reemite las celdas que cambian.
 local function draw()
-  local s = nu.ui.size()
+  local s = enu.ui.size()
   local w, h = s.w, s.h
   region:resize(w, h)
   region:fill()
@@ -66,7 +66,7 @@ local function draw()
   local function text_line(text, style) span_line({ { text = text, style = style } }) end
 
   -- Borde superior con el título incrustado.
-  local title = " nu · tui-demo "
+  local title = " enu · tui-demo "
   local left = math.floor((inner - #title) / 2)
   if left < 0 then left = 0 end
   span_line({
@@ -109,7 +109,7 @@ local function draw()
     { text = rep("─", math.max(0, inner - hleft - #hint)) .. "╯", style = theme.border },
   })
 
-  region:blit(0, 0, nu.ui.block(lines))
+  region:blit(0, 0, enu.ui.block(lines))
 
   -- El cursor real, al final del campo (api.md §9.1: Region:cursor en coords locales).
   -- El campo vive en la fila 6 (índice 5), tras "│ campo           ".
@@ -124,7 +124,7 @@ end
 -- no casa ningún keymap y cae al campo. Es la regla "la pila manda" del contrato.
 
 -- Edición del campo: handler crudo (on_input) al FONDO. Acepta imprimibles y backspace.
-nu.ui.on_input(function(ev)
+enu.ui.on_input(function(ev)
   if ev.type ~= "key" then return false end
   if ev.key == "backspace" then
     state.field = state.field:sub(1, -2)
@@ -154,26 +154,26 @@ local function bump(delta)
   draw()
 end
 
-nu.ui.keymap("up", function() bump(1) end)
-nu.ui.keymap("k", function() bump(1) end)
-nu.ui.keymap("down", function() bump(-1) end)
-nu.ui.keymap("j", function() bump(-1) end)
+enu.ui.keymap("up", function() bump(1) end)
+enu.ui.keymap("k", function() bump(1) end)
+enu.ui.keymap("down", function() bump(-1) end)
+enu.ui.keymap("j", function() bump(-1) end)
 
 -- Salir: emite core:shutdown (§4), que el driver de TTY convierte en apagado ordenado
 -- (restaura el terminal). "Lua decide cuándo salir; Go ejecuta el apagado."
-nu.ui.keymap("q", function() nu.events.emit("core:shutdown") end)
-nu.ui.keymap("ctrl+c", function() nu.events.emit("core:shutdown") end)
+enu.ui.keymap("q", function() enu.events.emit("core:shutdown") end)
+enu.ui.keymap("ctrl+c", function() enu.events.emit("core:shutdown") end)
 
 -- Reloj en vivo: una task periódica (§3) que repinta cada segundo. Demuestra que la UI
 -- reacciona a fuentes ASÍNCRONAS, no solo al teclado —el painter coalescea los frames—.
-nu.task.every(1000, function()
+enu.task.every(1000, function()
   state.ticks = state.ticks + 1
   draw()
 end)
 
 -- Resize: "tu región, tu ui:resize" (§9.1). Redibujamos al nuevo tamaño.
-nu.events.on("ui:resize", function() draw() end)
+enu.events.on("ui:resize", function() draw() end)
 
 -- Primer frame.
 draw()
-nu.log.info("tui-demo: UI montada")
+enu.log.info("tui-demo: UI montada")

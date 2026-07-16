@@ -46,7 +46,7 @@ session indefinitely.
 
 | Event | Render |
 |---|---|
-| `agent:delta` | Streaming text into the message block in progress (markdown via `nu.text.markdown`, which is streaming-safe). |
+| `agent:delta` | Streaming text into the message block in progress (markdown via `enu.text.markdown`, which is streaming-safe). |
 | `agent:delta` (thinking) | Reasoning block **collapsed by default**, expandable; dimmed style. |
 | `agent:tool.start/progress/end` | **Collapsible** tool block: header with name + summarized args; `progress` live; on completion, folded result if it's long. |
 | `agent:message` | Seals the message (replaces the deltas with the final render). |
@@ -71,17 +71,17 @@ without `chat` knowing about them. Fallback: folded plain text.
   shrinks** with content (up to a maximum). The **placeholder** (usage hints)
   is visible even when the editor has focus (previously it hid right at
   startup). `enter` sends, `shift+enter` (or `alt+enter` depending on the
-  terminal, via `nu.ui.caps`) inserts a line. History with `↑/↓` at the edge
+  terminal, via `enu.ui.caps`) inserts a line. History with `↑/↓` at the edge
   of the editor. `esc` cancels the turn in progress (`Session:cancel()`);
   while it runs, an **activity** row with a spinner signals it ("Thinking…/
   Running <tool>… · esc to interrupt").
 - **`@` mentions**: opens a fuzzy picker of repo files
-  (`nu.search.files` + `nu.search.fuzzy`); the mention injects the path and
+  (`enu.search.files` + `enu.search.fuzzy`); the mention injects the path and
   the agent decides whether to read it (content is not blindly embedded).
   *(✅ Implemented: [pospuesto.md](pospuesto.md) **P26**, via `chat.picker`.)*
 - **`/` at the start**: command autocompletion (§4) — `tab` opens the
   command picker. *(✅ Implemented: **P29**.)*
-- Correct multiline paste (`paste` event from `nu.ui`).
+- Correct multiline paste (`paste` event from `enu.ui`).
 
 ## 4. Slash commands
 
@@ -155,7 +155,7 @@ chat.statusline.add{ id, side: "left"|"right", priority, render: fn(ctx) -> Span
 
 ## 7. Keymaps and theming
 
-- Default shortcuts registered with `nu.ui.keymap`, all remappable by
+- Default shortcuts registered with `enu.ui.keymap`, all remappable by
   the user in their `init.lua` (the defaults table is public:
   `chat.keys`).
 - **Semantic-only** colors from the toolkit theme (`accent`,
@@ -164,7 +164,7 @@ chat.statusline.add{ id, side: "left"|"right", priority, render: fn(ctx) -> Span
 
 ## 8. Startup and interaction with the rest
 
-- `chat` only activates in an interactive TTY — the test is `nu.has("ui")`
+- `chat` only activates in an interactive TTY — the test is `enu.has("ui")`
   ([api.md](api.md) §9, G20); in headless it isn't even loaded (the
   engine/UI separation in [agente.md](agente.md) §1 is what allows it).
 - **Welcome screen** ([ADR-018](adr.md)). While the conversation is empty,
@@ -175,10 +175,10 @@ chat.statusline.add{ id, side: "left"|"right", priority, render: fn(ctx) -> Span
 - **Chat owns the screen and shutting it down powers off the binary**
   ([G36](problemas.md#g36)). The official set (ADR-015) also activates
   `repl`, but `repl` **yields**: it only auto-mounts its UI if chat isn't
-  active (it checks this with `nu.plugin.list`, without depending on chat).
+  active (it checks this with `enu.plugin.list`, without depending on chat).
   And `Chat:quit` (and `ctrl+c`) emit `core:shutdown`: quitting chat
   **powers off the runtime** instead of leaving the user in a lower layer
-  (the REPL/interpreter). This way `nu` with the official set opens **one**
+  (the REPL/interpreter). This way `enu` with the official set opens **one**
   single TUI; with only `repl` active (G21), it opens the REPL.
 - Creates the initial session (`agent.session`) with the resolved config
   (defaults < global < project), or resumes an existing one
@@ -195,7 +195,7 @@ chat.statusline.add{ id, side: "left"|"right", priority, render: fn(ctx) -> Span
   templates that avoid this path on first startup (ADR-017); a missing
   **API key** doesn't reach here (`providers.resolve` doesn't fail without
   one): the error surfaces in-transcript as `agent:error` on the first turn.
-- Doesn't touch `nu.fs` or `nu.proc` for agent logic: if `chat` needs
+- Doesn't touch `enu.fs` or `enu.proc` for agent logic: if `chat` needs
   something from the agent's domain that the public API doesn't provide,
   the agent's public API is incomplete — same rule as always.
 
@@ -206,10 +206,10 @@ chat.statusline.add{ id, side: "left"|"right", priority, render: fn(ctx) -> Span
 | Slash commands | `chat.command{}` |
 | Tool result renderers | `chat.renderer(tool, fn)` |
 | Statusline segments | `chat.statusline.add{}` |
-| Shortcuts | `nu.ui.keymap` + `chat.keys` table |
+| Shortcuts | `enu.ui.keymap` + `chat.keys` table |
 | Appearance | toolkit themes (semantic) |
 
-<!-- nu:interno -->
+<!-- enu:interno -->
 
 ## 10. Postponed
 
@@ -218,4 +218,4 @@ transcript ([P15](pospuesto.md)), vim mode for the input editor
 ([P16](pospuesto.md)), image rendering in the transcript
 ([P6](pospuesto.md)).
 
-<!-- /nu:interno -->
+<!-- /enu:interno -->

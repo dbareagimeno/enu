@@ -1,55 +1,55 @@
 ---
-title: nu.sys — environment and clock
+title: enu.sys — environment and clock
 description: Platform, environment variables, wall and monotonic clocks, hostname and pid.
 ---
 
-`nu.sys` exposes the process environment and clocks. Everything available in workers
+`enu.sys` exposes the process environment and clocks. Everything available in workers
 **[W]** and nothing suspends: they are local queries.
 
-## `nu.sys.platform` [W]
+## `enu.sys.platform` [W]
 
 ```
-nu.sys.platform() -> "linux" | "darwin" | "windows"
+enu.sys.platform() -> "linux" | "darwin" | "windows"
 ```
 
 ```sh
-nu -e 'return nu.sys.platform()'
+enu -e 'return enu.sys.platform()'
 ```
 
 ```
 linux
 ```
 
-## `nu.sys.env` / `nu.sys.setenv` [W]
+## `enu.sys.env` / `enu.sys.setenv` [W]
 
 ```
-nu.sys.env(name) -> string?
-nu.sys.setenv(name, value)
+enu.sys.env(name) -> string?
+enu.sys.setenv(name, value)
 ```
 
 Reads and sets environment variables. `setenv` affects **only future subprocesses**
-(it doesn't rewrite the environment of the `nu` process already running).
+(it doesn't rewrite the environment of the `enu` process already running).
 
 ```lua
-local home = nu.sys.env("HOME")
-nu.sys.setenv("MI_FLAG", "1")   -- later nu.proc.run calls will see it
+local home = enu.sys.env("HOME")
+enu.sys.setenv("MI_FLAG", "1")   -- later enu.proc.run calls will see it
 ```
 
-## `nu.sys.now_ms` / `nu.sys.mono_ms` [W]
+## `enu.sys.now_ms` / `enu.sys.mono_ms` [W]
 
 ```
-nu.sys.now_ms() -> number   -- wall clock (epoch ms)
-nu.sys.mono_ms() -> number  -- monotonic clock
+enu.sys.now_ms() -> number   -- wall clock (epoch ms)
+enu.sys.mono_ms() -> number  -- monotonic clock
 ```
 
 Use `now_ms` for timestamps; use `mono_ms` to **measure durations** (it doesn't jump
 with clock adjustments).
 
 ```sh
-nu -e '
-local t0 = nu.sys.mono_ms()
+enu -e '
+local t0 = enu.sys.mono_ms()
 local s = 0; for i=1,1000 do s = s + i end
-return (nu.sys.mono_ms() - t0) >= 0
+return (enu.sys.mono_ms() - t0) >= 0
 '
 ```
 
@@ -57,27 +57,27 @@ return (nu.sys.mono_ms() - t0) >= 0
 true
 ```
 
-## `nu.sys.hostname` [W]
+## `enu.sys.hostname` [W]
 
 ```
-nu.sys.hostname() -> string
+enu.sys.hostname() -> string
 ```
 
 Machine name. Together with `pid` it forms the **writer identity** for the
 session locks.
 
-## `nu.sys.pid` [W]
+## `enu.sys.pid` [W]
 
 ```
-nu.sys.pid() -> integer
+enu.sys.pid() -> integer
 ```
 
-Pid of the `nu` process **itself**. Don't confuse it with
-[`nu.proc.alive(pid)`](/nu/en/api/proc/#nuprocalive-w), which validates *other*
+Pid of the `enu` process **itself**. Don't confuse it with
+[`enu.proc.alive(pid)`](/enu/en/api/proc/#enuprocalive-w), which validates *other*
 pids: `pid()` is your own.
 
 ```sh
-nu -e 'return nu.sys.pid() > 0'
+enu -e 'return enu.sys.pid() > 0'
 ```
 
 ```
@@ -86,10 +86,10 @@ true
 
 ```lua
 -- Writer identity for a lockfile.
-local quien = nu.sys.hostname() .. ":" .. nu.sys.pid()
+local quien = enu.sys.hostname() .. ":" .. enu.sys.pid()
 ```
 
 :::note[API level]
-`nu.sys.pid()` was the first addition to the frozen API (it bumped `nu.version.api`
+`enu.sys.pid()` was the first addition to the frozen API (it bumped `enu.version.api`
 from 1 to 2). A good reminder that the surface **grows only by addition**.
 :::

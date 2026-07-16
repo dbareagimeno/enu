@@ -9,10 +9,10 @@ import (
 
 // EvalString compila y ejecuta `code` como un chunk Lua sobre el ESTADO PRINCIPAL
 // de la Instance wasm (no como task) y devuelve sus valores de retorno convertidos
-// a string (vía `tostring`), en orden. Es lo que respalda `nu -e`: el chunk
-// `return nu.version.api` produce `["2"]` (G32 lo subió de 1).
+// a string (vía `tostring`), en orden. Es lo que respalda `enu -e`: el chunk
+// `return enu.version.api` produce `["2"]` (G32 lo subió de 1).
 //
-// El chunk puede lanzar tasks con `nu.task.spawn` pero no usar funciones ⏸ (que
+// El chunk puede lanzar tasks con `enu.task.spawn` pero no usar funciones ⏸ (que
 // exigen estar en una task, §1.3). Tras evaluarlo, `RunTasks` drena las tasks que
 // haya lanzado (el equivalente de `waitIdle`) antes de devolver sus valores.
 //
@@ -136,13 +136,13 @@ end`
 // EvalTaskString compila `code` y lo ejecuta **como una task** (§3), no como el
 // chunk principal: a diferencia de `EvalString`, aquí el chunk corre sobre su propio
 // thread con el puente de suspensión disponible, de modo que puede llamar directamente
-// a `nu.fs.read`, `nu.http.stream`, `Session:send` del agente, etc. Espera a que la
+// a `enu.fs.read`, `enu.http.stream`, `Session:send` del agente, etc. Espera a que la
 // task —y cualquier otra que ella lance— termine, y devuelve sus valores de retorno
 // convertidos a string (vía `tostring`), en orden.
 //
 // Es el **ejecutor headless** del binario: respalda los modos del CLI que orquestan
 // extensiones suspendientes sin TTY (un turno de agente headless, `--continue`), la
-// contraparte ⏸ de `nu -e`. NO es superficie Lua sagrada (igual que `EvalString` o
+// contraparte ⏸ de `enu -e`. NO es superficie Lua sagrada (igual que `EvalString` o
 // `RenderBareScreen`): es la interfaz Go del ejecutable, fuera de api.md. El core
 // sigue sin saber lo que es un agente (ADR-003): aquí solo corre un chunk Lua a
 // término; la lógica de agente vive en la extensión `agent` y en el driver Lua que
@@ -207,7 +207,7 @@ func (rt *Runtime) EvalTaskString(code string) ([]string, error) {
 func evalTaskWrapper(code string) string {
 	return `__eval_ok = nil; __eval_n = 0; __eval_results = nil
 __eval_err_code = nil; __eval_err_msg = nil; __eval_err_str = nil
-nu.task.spawn(function()
+enu.task.spawn(function()
   local packed = table.pack(pcall(function()
 ` + code + `
   end))

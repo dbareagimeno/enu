@@ -71,14 +71,14 @@ sequenceDiagram
     participant C as Compositor (Go)
     participant T as Terminal
 
-    P->>N: nu.http.stream(...) ⏸ (the task suspends)
+    P->>N: enu.http.stream(...) ⏸ (the task suspends)
     Note over L: the loop keeps handling input and other events
     N-->>L: headers received
     L->>P: resumes the task with the Stream
     loop for each SSE event
         N-->>L: chunk (queued)
         L->>P: resumes the Stream:events() iterator
-        P->>TX: nu.text.markdown(partial text)
+        P->>TX: enu.text.markdown(partial text)
         TX-->>P: Block
         P->>C: region:blit(Block)
         Note over C: marks damage — does NOT paint yet
@@ -100,7 +100,7 @@ placing it.
 2. **Cancellation is cooperative.** `Task:cancel()` only takes effect at the
    next suspension point. A pure CPU loop in Lua is not cancelable: only the
    watchdog aborts it. The abort is not catchable with `pcall`; resources
-   are released with `nu.task.cleanup` (api.md §1.3). Moreover, canceling
+   are released with `enu.task.cleanup` (api.md §1.3). Moreover, canceling
    **does not interrupt the in-flight ⏸ primitive**: the task sees
    `ECANCELED` instantly, but the Go operation in progress (`fs.write`,
    `http.request`…) runs to its natural end and its effects may land after
@@ -109,14 +109,14 @@ placing it.
    copied JSON-able values. What doesn't cross: closures, userdata, or
    **Blocks**. Practical consequence: a worker can't pre-render UI; it sends
    digested data and the main state requests the Blocks and places them.
-4. **Workers have no `nu.ui` or `nu.events`.** Their only channel to the
+4. **Workers have no `enu.ui` or `enu.events`.** Their only channel to the
    world is messaging with the parent. Deliberate design (a single UI
    writer), but it means a worker can't react to bus events or emit them
    directly. The worker's API can be trimmed even further at creation time
    (`opts.caps`), down to only the granted modules.
 5. **In headless mode the pump returns at foreground quiescence** (`Boot`
    and the `Eval` calls of `-e`/`-p`): while no loop is pumping, background
-   timers (`nu.task.every`) don't tick — they get **paused** (their
+   timers (`enu.task.every`) don't tick — they get **paused** (their
    in-flight request keeps running and the result waits) and the next drain
    resumes them. In interactive mode the pumping is **continuous**
    ([G44](problemas.md#g44), resolved and built 2026-07-13): `PumpTasks`

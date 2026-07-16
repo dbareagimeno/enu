@@ -1,13 +1,13 @@
 ---
-title: What is nu
-description: nu's idea in one page — a minimal Lua kernel over the terminal where everything, including the agent, is an extension.
+title: What is enu
+description: enu's idea in one page — a minimal Lua kernel over the terminal where everything, including the agent, is an extension.
 ---
 
-`nu` is **a terminal-oriented Lua runtime whose killer app is a coding
+`enu` is **a terminal-oriented Lua runtime whose killer app is a coding
 harness**: a single Go binary with a minimal kernel where everything else —
 including the agent itself— are Lua extensions.
 
-Put another way: `nu` is a CLI/TUI coding harness, but that phrase describes
+Put another way: `enu` is a CLI/TUI coding harness, but that phrase describes
 the *product*. The *project* is a **tiny kernel and an extension system**
 where the agent loop, the chat UI, MCP support, and LLM providers have no
 architectural privilege whatsoever: they're Lua, just like whatever you write.
@@ -28,10 +28,10 @@ architectural privilege whatsoever: they're Lua, just like whatever you write.
    Breaking a signature breaks the world.
 5. **Batteries included, but not plugged in.** The binary ships with the
    official extensions embedded, but none activates on its own: a freshly
-   installed `nu` is a bare runtime, and the harness is a choice made by the
+   installed `enu` is a bare runtime, and the harness is a choice made by the
    user.
 
-## What nu is not
+## What enu is not
 
 - **It's not an editor.** It doesn't compete with Neovim: there are no giant
   buffers to keep highlighted on every keystroke.
@@ -46,11 +46,11 @@ architectural privilege whatsoever: they're Lua, just like whatever you write.
 - **Getting started** (this section): installation, your first script, your
   first agent, and the concepts you need so you don't fight the execution
   model.
-- **API reference**: one page per `nu.*` namespace, with the signature, the
+- **API reference**: one page per `enu.*` namespace, with the signature, the
   semantics, and runnable examples for each function.
 
 :::tip
 If you're here to read code right away, jump to [Your first
-script](/nu/en/docs/primer-script/). If you want to understand *why* `nu`
-is the way it is, continue with [Key concepts](/nu/en/docs/conceptos/).
+script](/enu/en/docs/primer-script/). If you want to understand *why* `enu`
+is the way it is, continue with [Key concepts](/enu/en/docs/conceptos/).
 :::

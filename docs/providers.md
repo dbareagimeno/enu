@@ -16,7 +16,7 @@ Dos audiencias:
 
 ## 1. El registro: `providers.toml`
 
-Vive en `nu.config.dir()`. Declara *datos*, nunca lógica.
+Vive en `enu.config.dir()`. Declara *datos*, nunca lógica.
 
 ```toml
 # Provider con adaptador oficial: solo datos.
@@ -146,7 +146,7 @@ resuelta desde el TOML.
 Obligaciones del adaptador:
 
 1. **`stream` es una función suspendiente** que devuelve un iterador de
-   `Event`s (típicamente envolviendo `nu.http.stream` + `Stream:events()`).
+   `Event`s (típicamente envolviendo `enu.http.stream` + `Stream:events()`).
    Se ejecuta dentro de la task del agente: la cancelación de esa task
    cancela la petición (el runtime cierra el `Stream` subyacente).
 2. **Errores**: lanza errores estructurados (ADR-009) con código
@@ -180,11 +180,11 @@ return {
   caps = { tools = true, images = true, system = true, usage = true },
   stream = function(req, provider)
     local body = to_wire(req)                       -- canónico → dialecto
-    local s = nu.http.stream{
+    local s = enu.http.stream{
       url = provider.base_url .. "/chat/completions",
       method = "POST",
       headers = auth_headers(provider),
-      body = nu.json.encode(body),
+      body = enu.json.encode(body),
     }
     if s.status >= 400 then
       error({ code = "EPROVIDER", message = read_error(s),
@@ -212,13 +212,13 @@ return {
   `providers.list() -> ModelInfo[]` (alimenta el selector de modelos de la UI).
 - `providers.approx_tokens(s) -> integer`: estimación heurística de tokens
   (agnóstica de modelo, ~4 bytes/token), en Lua puro. Vivía en el core como
-  `nu.text.approx_tokens` y salió de él (G23): "token" es vocabulario de
+  `enu.text.approx_tokens` y salió de él (G23): "token" es vocabulario de
   esta extensión, y una división no merece primitiva. Para exactitud, el
   `count_tokens?` del adaptador (§3).
 
 **Suscripciones / OAuth (G13).** El camino v1 es el que no necesita
-servidor local: **device flow o pegado manual de código** (`nu.http.request`
-en polling + abrir el navegador con `nu.proc` — el patrón de `gh` o
+servidor local: **device flow o pegado manual de código** (`enu.http.request`
+en polling + abrir el navegador con `enu.proc` — el patrón de `gh` o
 `gcloud`). Tokens de refresco: en `data_dir()/plugins/<nombre>/`, permisos
 `0600`, en claro (coherente con [P7](pospuesto.md): el cifrado en reposo es
 del filesystem). El flujo con callback localhost requeriría un listener

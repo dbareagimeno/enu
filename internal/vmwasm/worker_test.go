@@ -42,11 +42,11 @@ func runMain(t *testing.T, setup string) string {
 func TestWorkerRoundTrip(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[
-			local m = nu.worker.parent.recv()
-			nu.worker.parent.send({ text = m.text, n = m.n * 2 })
+		local w = enu.worker.spawn([[
+			local m = enu.worker.parent.recv()
+			enu.worker.parent.send({ text = m.text, n = m.n * 2 })
 		]])
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			w:send({ text = "hola", n = 21 })
 			local r = w:recv()
 			out = r.text .. ":" .. tostring(r.n)
@@ -61,12 +61,12 @@ func TestWorkerRoundTrip(t *testing.T) {
 func TestWorkerAislamiento(t *testing.T) {
 	out := runMain(t, `
 		GLOBAL_PADRE = "soy-padre"
-		local w = nu.worker.spawn([[
+		local w = enu.worker.spawn([[
 			GLOBAL_WORKER = "soy-worker"
 			-- el global del padre no existe aquí:
-			nu.worker.parent.send({ ve_padre = (GLOBAL_PADRE == nil), yo = GLOBAL_WORKER })
+			enu.worker.parent.send({ ve_padre = (GLOBAL_PADRE == nil), yo = GLOBAL_WORKER })
 		]])
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local r = w:recv()
 			-- y el global del worker no existe en el padre:
 			out = tostring(r.ve_padre) .. ":" .. r.yo .. ":" .. tostring(GLOBAL_WORKER == nil)
@@ -84,18 +84,18 @@ func TestWorkerBackpressure(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
 		-- el worker consume 1 y luego duerme: la cola se llena y no se vacía.
-		local w = nu.worker.spawn([[ nu.worker.parent.recv() ; nu.task.sleep(100000) ]])
+		local w = enu.worker.spawn([[ enu.worker.parent.recv() ; enu.task.sleep(100000) ]])
 		local enviados = 0
 		local acabado = false
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			for i = 1, 1000 do
 				w:send({ i = i })
 				enviados = enviados + 1
 			end
 			acabado = true
 		end)
-		nu.task.spawn(function()
-			nu.task.sleep(80)   -- tiempo de sobra para llenar la cola y bloquear
+		enu.task.spawn(function()
+			enu.task.sleep(80)   -- tiempo de sobra para llenar la cola y bloquear
 			-- backpressure: el sender NO acabó (bloqueado) y el count está acotado
 			-- por la cola (16) + el 1 consumido, no llegó a 1000.
 			out = tostring((not acabado) and enviados >= 16 and enviados <= 18)
@@ -111,11 +111,11 @@ func TestWorkerBackpressure(t *testing.T) {
 func TestWorkerMensajeCopiado(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[
-			local m = nu.worker.parent.recv()
-			nu.worker.parent.send({ visto = m.v })
+		local w = enu.worker.spawn([[
+			local m = enu.worker.parent.recv()
+			enu.worker.parent.send({ visto = m.v })
 		]])
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local t = { v = 7 }
 			w:send(t)
 			t.v = 999          -- muta DESPUÉS de enviar
@@ -131,8 +131,8 @@ func TestWorkerMensajeCopiado(t *testing.T) {
 func TestWorkerSendNoSerializable(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[ nu.task.sleep(1) ]])
-		nu.task.spawn(function()
+		local w = enu.worker.spawn([[ enu.task.sleep(1) ]])
+		enu.task.spawn(function()
 			local ok, e = pcall(function() w:send({ fn = function() end }) end)
 			out = tostring(ok) .. ":" .. tostring(e.code)
 			w:terminate()
@@ -151,15 +151,15 @@ func TestWorkerCapsGranularidades(t *testing.T) {
 		p.Register("http.get", func(inst *Instance, a []any) ([]any, error) { return []any{"g"}, nil })
 	}
 	probe := `[[
-		nu.worker.parent.send({
-			fs = (nu.fs ~= nil),
-			fs_read = (nu.fs ~= nil and nu.fs.read ~= nil),
-			fs_write = (nu.fs ~= nil and nu.fs.write ~= nil),
-			http = (nu.http ~= nil),
-			task = (nu.task ~= nil),
-			ui = (nu.ui ~= nil),
-			spawn = (nu.worker.spawn ~= nil),
-			parent = (nu.worker.parent ~= nil),
+		enu.worker.parent.send({
+			fs = (enu.fs ~= nil),
+			fs_read = (enu.fs ~= nil and enu.fs.read ~= nil),
+			fs_write = (enu.fs ~= nil and enu.fs.write ~= nil),
+			http = (enu.http ~= nil),
+			task = (enu.task ~= nil),
+			ui = (enu.ui ~= nil),
+			spawn = (enu.worker.spawn ~= nil),
+			parent = (enu.worker.parent ~= nil),
 		})
 	]]`
 	cases := []struct {
@@ -188,8 +188,8 @@ func TestWorkerCapsGranularidades(t *testing.T) {
 			t.Cleanup(func() { p.StopWorkers(); _ = inst.Close(); _ = p.Close() })
 			setup := `
 				out = ""
-				local w = nu.worker.spawn(` + probe + c.opts + `)
-				nu.task.spawn(function()
+				local w = enu.worker.spawn(` + probe + c.opts + `)
+				enu.task.spawn(function()
 					local r = w:recv()
 					out = r
 				end)`
@@ -226,12 +226,12 @@ func TestWorkerSinPlugin(t *testing.T) {
 
 	setup := `
 		out = ""
-		local w = nu.worker.spawn([[
-			nu.worker.parent.send({
-				plugin = (nu.plugin ~= nil),
+		local w = enu.worker.spawn([[
+			enu.worker.parent.send({
+				plugin = (enu.plugin ~= nil),
 			})
 		]])
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			out = w:recv()
 		end)`
 	if _, lerr, err := inst.Eval(setup); err != nil || lerr != "" {
@@ -259,8 +259,8 @@ func checkCaps(t *testing.T, inst *Instance, want string) {
 func TestWorkerRecvExcluyeOnMessage(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[ nu.task.sleep(100000) ]])
-		nu.task.spawn(function()
+		local w = enu.worker.spawn([[ enu.task.sleep(100000) ]])
+		enu.task.spawn(function()
 			w:on_message(function(m) end)
 			local ok, e = pcall(function() return w:recv() end)
 			out = tostring(ok) .. ":" .. tostring(e.code)
@@ -275,8 +275,8 @@ func TestWorkerRecvExcluyeOnMessage(t *testing.T) {
 func TestWorkerOnMessageSegundoRechazado(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[ nu.task.sleep(100000) ]])
-		nu.task.spawn(function()
+		local w = enu.worker.spawn([[ enu.task.sleep(100000) ]])
+		enu.task.spawn(function()
 			w:on_message(function(m) end)
 			local ok, e = pcall(function() return w:on_message(function(m) end) end)
 			out = tostring(ok) .. ":" .. tostring(e.code)
@@ -291,14 +291,14 @@ func TestWorkerOnMessageSegundoRechazado(t *testing.T) {
 func TestWorkerOnMessageEntrega(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[
-			for i = 1, 5 do nu.worker.parent.send(i) end
+		local w = enu.worker.spawn([[
+			for i = 1, 5 do enu.worker.parent.send(i) end
 		]])
 		local recibidos = {}
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local sub = w:on_message(function(m) recibidos[#recibidos+1] = m end)
 			-- espera a que lleguen los 5 y compón el resultado.
-			while #recibidos < 5 do nu.task.sleep(1) end
+			while #recibidos < 5 do enu.task.sleep(1) end
 			out = table.concat(recibidos, ",")
 			sub.cancel()
 			w:terminate()
@@ -312,12 +312,12 @@ func TestWorkerOnMessageEntrega(t *testing.T) {
 func TestWorkerSinWatchdog(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[
+		local w = enu.worker.spawn([[
 			local s = 0
 			for i = 1, 2000000 do s = s + 1 end
-			nu.worker.parent.send(s)
+			enu.worker.parent.send(s)
 		]])
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			out = tostring(w:recv())
 		end)`)
 	if out != "2000000" {
@@ -338,7 +338,7 @@ func TestWorkerTerminateInterrumpeBucleCPU(t *testing.T) {
 	}
 	t.Cleanup(func() { p.StopWorkers(); _ = inst.Close(); _ = p.Close() })
 	if _, lerr, err := inst.Eval(`
-		W = nu.worker.spawn([[ while true do end ]])   -- bucle infinito de CPU
+		W = enu.worker.spawn([[ while true do end ]])   -- bucle infinito de CPU
 	`); err != nil || lerr != "" {
 		t.Fatalf("spawn: lerr=%q err=%v", lerr, err)
 	}
@@ -367,11 +367,11 @@ func TestWorkerTerminateInterrumpeBucleCPU(t *testing.T) {
 func TestWorkerTerminateNoAfectaPadre(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[ nu.worker.parent.recv() ]])  -- se queda esperando
-		nu.task.spawn(function()
+		local w = enu.worker.spawn([[ enu.worker.parent.recv() ]])  -- se queda esperando
+		enu.task.spawn(function()
 			w:terminate()
 			w:terminate()                 -- idempotente
-			nu.task.sleep(5)
+			enu.task.sleep(5)
 			out = "padre-vivo"            -- el padre sigue corriendo tras terminar el worker
 		end)`)
 	if out != "padre-vivo" {
@@ -383,8 +383,8 @@ func TestWorkerTerminateNoAfectaPadre(t *testing.T) {
 func TestWorkerRecvTrasTerminate(t *testing.T) {
 	out := runMain(t, `
 		out = "?"
-		local w = nu.worker.spawn([[ nu.task.sleep(100000) ]])
-		nu.task.spawn(function()
+		local w = enu.worker.spawn([[ enu.task.sleep(100000) ]])
+		enu.task.spawn(function()
 			w:terminate()
 			local m = w:recv()
 			out = tostring(m)   -- nil
@@ -451,7 +451,7 @@ func TestWorkerRegistroNoCreceA07(t *testing.T) {
 
 	const n = 50
 	for i := 0; i < n; i++ {
-		w, _ := spawnRun(t, inst, `nu.task.sleep(100000)`)
+		w, _ := spawnRun(t, inst, `enu.task.sleep(100000)`)
 		w.terminate()
 		w.wait() // espera al shutdown completo (que se retira del mapa)
 		if c := workerCount(p); c != 0 {
@@ -478,7 +478,7 @@ func TestWorkerSendTrasTerminateReapedA07(t *testing.T) {
 	}
 	t.Cleanup(func() { p.StopWorkers(); _ = inst.Close(); _ = p.Close() })
 
-	w, id := spawnRun(t, inst, `nu.task.sleep(100000)`)
+	w, id := spawnRun(t, inst, `enu.task.sleep(100000)`)
 	w.terminate()
 	w.wait() // reapeado: fuera del mapa
 	if lw, known := p.lookupWorker(id); lw != nil || !known {
@@ -512,7 +512,7 @@ func TestWorkerRecvTrasTerminateReapedA07(t *testing.T) {
 	}
 	t.Cleanup(func() { p.StopWorkers(); _ = inst.Close(); _ = p.Close() })
 
-	w, id := spawnRun(t, inst, `nu.task.sleep(100000)`)
+	w, id := spawnRun(t, inst, `enu.task.sleep(100000)`)
 	w.terminate()
 	w.wait() // reapeado: fuera del mapa
 
@@ -554,8 +554,8 @@ func TestWorkerZombieDrenaYReapeaA07(t *testing.T) {
 	// El worker manda 3 (caben en workerQueueCap) y retorna: fin natural.
 	if _, lerr, err := inst.Eval(`
 		out = "?"
-		__w = nu.worker.spawn([[
-			for i = 1, 3 do nu.worker.parent.send(i) end
+		__w = enu.worker.spawn([[
+			for i = 1, 3 do enu.worker.parent.send(i) end
 		]])`); err != nil || lerr != "" {
 		t.Fatalf("setup: lerr=%q err=%v", lerr, err)
 	}
@@ -572,7 +572,7 @@ func TestWorkerZombieDrenaYReapeaA07(t *testing.T) {
 
 	// Drena: los 3 mensajes se entregan en orden y el nil final reapea.
 	if _, lerr, err := inst.Eval(`
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local got = {}
 			while true do
 				local m = __w:recv()
@@ -609,7 +609,7 @@ func TestWorkerStopWorkersYFinNaturalRetiranA07(t *testing.T) {
 
 	// Cinco workers vivos, bloqueados esperando al padre.
 	for i := 0; i < 5; i++ {
-		spawnRun(t, inst, `nu.worker.parent.recv()`)
+		spawnRun(t, inst, `enu.worker.parent.recv()`)
 	}
 	if c := workerCount(p); c != 5 {
 		t.Fatalf("A-07: se esperaban 5 workers vivos, hay %d", c)

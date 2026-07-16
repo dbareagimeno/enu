@@ -21,11 +21,11 @@ const pref = lang === 'en' ? 'en/' : '';
 const t = i18n[lang]; // build-time en el idioma de la página; el swap es en cliente (data-i18n)
 
 // Etiqueta corta de una sección: último segmento de sus callables
-// (`nu.fs.read` → `read`, `nu.fs.write / nu.fs.append` → `write / append`), o el
+// (`enu.fs.read` → `read`, `enu.fs.write / enu.fs.append` → `write / append`), o el
 // texto limpio si el heading no nombra funciones (`Manipulación`).
 function etiquetaSeccion(text: string): string {
   const limpio = text.replaceAll('⏸', '').replaceAll('[W]', '').trim();
-  const nombres = limpio.match(/nu\.[\w.]+|[A-Z][A-Za-z]*:[a-z_]\w*/g);
+  const nombres = limpio.match(/enu\.[\w.]+|[A-Z][A-Za-z]*:[a-z_]\w*/g);
   if (nombres) return nombres.map((n) => n.split(/[.:]/).pop()).join(' / ');
   return limpio;
 }

@@ -5,8 +5,8 @@ description: Un intérprete de Lua interactivo sobre la API pública — activab
 
 ## Qué hace
 
-`repl` es un **REPL de Lua** sobre la API pública del core: `nu` con solo el
-`repl` activo es un intérprete Lua interactivo con acceso a `nu.*`. Es la prueba
+`repl` es un **REPL de Lua** sobre la API pública del core: `enu` con solo el
+`repl` activo es un intérprete Lua interactivo con acceso a `enu.*`. Es la prueba
 de que el runtime sirve para más que el agente. Compila y ejecuta código del
 usuario con `load` —la base de PUC-Lua 5.4, que compila un string en memoria sin
 IO bloqueante y que el sandbox del core deja disponible a propósito—: no hizo
@@ -15,7 +15,7 @@ falta ninguna primitiva nueva para construirlo.
 Sigue la semántica clásica del REPL de Lua:
 
 - Una **expresión** suelta se evalúa y muestra su valor sin escribir `return`
-  (`1 + 1` imprime `2`; `nu.version.api` imprime su nivel).
+  (`1 + 1` imprime `2`; `enu.version.api` imprime su nivel).
 - Una **sentencia** (`x = 5`, un `for`) se ejecuta y no imprime nada.
 - Un bloque **incompleto** (una función o `do` sin cerrar) no es un error: pide
   otra línea, con el prompt de continuación `..` (modo multilínea).
@@ -27,10 +27,10 @@ Sigue la semántica clásica del REPL de Lua:
 ## Cómo se activa
 
 El `plugin.toml` **no declara `requires`**: el REPL se activa en solitario, sin
-arrastrar el harness. En `nu.toml`:
+arrastrar el harness. En `enu.toml`:
 
 ```toml
-# ~/.config/nu/nu.toml
+# ~/.config/enu/enu.toml
 [plugins]
 enabled = ["repl"]
 ```
@@ -39,9 +39,9 @@ enabled = ["repl"]
   arranque). Sales con `ctrl+d` o `/q` (`/quit`, `/exit`).
 - **Cede al chat.** Si el conjunto oficial está activo (chat *y* repl), es el
   chat quien posee la pantalla: el REPL no monta UI y queda como módulo
-  accesible por `require("repl")`. Así `nu` con el conjunto oficial abre solo el
-  chat; `nu` con solo `repl` abre el REPL.
-- **En headless** (`nu -e`, CI: sin `nu.ui`) no monta ninguna UI; el módulo
+  accesible por `require("repl")`. Así `enu` con el conjunto oficial abre solo el
+  chat; `enu` con solo `repl` abre el REPL.
+- **En headless** (`enu -e`, CI: sin `enu.ui`) no monta ninguna UI; el módulo
   queda accesible para `repl.eval` y scripts.
 
 La UI interactiva usa el [toolkit](toolkit.md) como dependencia **blanda**
@@ -61,7 +61,7 @@ El módulo público se obtiene con `require("repl")`:
 | Firma | Efecto |
 |---|---|
 | `repl.eval(src: string) -> tabla` | Evalúa una línea de Lua **de forma síncrona** y devuelve un resultado estructurado. La lógica pura, probada headless. |
-| `repl.eval_in_task(src: string, cb: función)` | Evalúa `src` **dentro de una task** y entrega el resultado a `cb`. Es la vía cuando el código de usuario llama a funciones suspendientes del core (`nu.fs.read`, `nu.http.request`…), que solo corren dentro de una task. |
+| `repl.eval_in_task(src: string, cb: función)` | Evalúa `src` **dentro de una task** y entrega el resultado a `cb`. Es la vía cuando el código de usuario llama a funciones suspendientes del core (`enu.fs.read`, `enu.http.request`…), que solo corren dentro de una task. |
 | `repl.start(opts?: tabla) -> Repl` | Monta la UI interactiva (solo TTY). `opts.theme` opcional. `EINVAL` en headless o sin toolkit. |
 | `repl.banner() -> string` | El banner de bienvenida (versión, nivel de API y cómo salir). |
 
@@ -91,10 +91,10 @@ pantalla —en un test, un script o un pipe. Para expresiones y llamadas a la AP
 ```lua
 local repl = require("repl")
 
-local r = repl.eval("nu.version.api")
+local r = repl.eval("enu.version.api")
 print(r.display)                       --> el nivel de API
 
-repl.eval_in_task("nu.fs.read('README.md')", function(res)
+repl.eval_in_task("enu.fs.read('README.md')", function(res)
   if res.ok then print(#res.values[1] .. " bytes") end
 end)
 ```

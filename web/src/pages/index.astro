@@ -9,10 +9,10 @@ import { INSTALL_CMD, RELEASES_URL, VERSION, LICENSE, GITHUB_URL } from '../lib/
 import { i18n } from '../lib/i18n';
 
 const es = i18n.es; // build-time en español; el swap a EN es en cliente
-const themes = ['nu', 'dracula', 'gruvbox', 'solarized'];
+const themes = ['enu', 'dracula', 'gruvbox', 'solarized'];
 const langs = ['es', 'en'];
 ---
-<Base title="nu">
+<Base title="enu">
   <div class="terminal" tabindex="0">
     <!-- Header desktop (pickers a la derecha); en móvil se oculta y los pickers
          bajan al footer. -->
@@ -25,7 +25,7 @@ const langs = ['es', 'en'];
     </header>
 
     <main class="body">
-      <div class="prompt-line">$ nu</div>
+      <div class="prompt-line">$ enu</div>
       <h1 class="slogan">
         <span data-i18n="sloganA">{es.sloganA}</span><br />
         <span class="key" data-i18n="sloganB">{es.sloganB}</span>
@@ -35,22 +35,22 @@ const langs = ['es', 'en'];
       <!-- Menú desktop: líneas [x] etiqueta — descripción. -->
       <nav class="menu-desktop">
         <div class="mrow">
-          <span class="nu-key">[<b>i</b>]</span>
+          <span class="enu-key">[<b>i</b>]</span>
           <span data-i18n="k1">{es.k1}</span>
           <span class="dim"> — {INSTALL_CMD}</span>
         </div>
         <div class="mrow">
-          <span class="nu-key">[<b>d</b>]</span>
+          <span class="enu-key">[<b>d</b>]</span>
           <span data-i18n="k2">{es.k2}</span>
           <span class="dim"> — <span data-i18n="k2d">{es.k2d}</span></span>
         </div>
         <div class="mrow">
-          <span class="nu-key">[<b>a</b>]</span>
+          <span class="enu-key">[<b>a</b>]</span>
           <span>api</span>
           <span class="dim"> — <span data-i18n="kApiD">{es.kApiD}</span></span>
         </div>
         <div class="mrow">
-          <span class="nu-key">[<b>g</b>]</span>
+          <span class="enu-key">[<b>g</b>]</span>
           <span>github ↗</span>
         </div>
       </nav>
@@ -59,30 +59,30 @@ const langs = ['es', 'en'];
            anuncia que la línea es tecleable (W-06); keyboard.ts lo oculta al
            primer carácter y lo restaura al vaciarse el buffer. -->
       <div class="prompt">
-        <span id="nu-prompt" class="dim">&gt;</span>
-        <span id="nu-typed" class="bright"></span><span class="nu-cursor"></span>
-        <span id="nu-hint" class="prompt-hint" data-i18n="hint">{es.hint}</span>
+        <span id="enu-prompt" class="dim">&gt;</span>
+        <span id="enu-typed" class="bright"></span><span class="enu-cursor"></span>
+        <span id="enu-hint" class="prompt-hint" data-i18n="hint">{es.hint}</span>
       </div>
-      <div id="nu-feedback" class="feedback"></div>
+      <div id="enu-feedback" class="feedback"></div>
 
       <!-- Menú móvil: filas táctiles de ancho completo. La primaria [i] con
            borde key; el resto con borde border. -->
       <nav class="menu-mobile">
         <a href={INSTALL_CMD} class="trow primary" data-touch-menu="i">
-          <span class="nu-key">[<b>i</b>]</span>
+          <span class="enu-key">[<b>i</b>]</span>
           <span data-i18n="k1">{es.k1}</span>
           <span class="tail dim">curl | sh</span>
         </a>
         <a href="#" class="trow" data-touch-menu="d">
-          <span class="nu-key">[<b>d</b>]</span>
+          <span class="enu-key">[<b>d</b>]</span>
           <span data-i18n="k2">{es.k2}</span>
         </a>
         <a href="#" class="trow" data-touch-menu="a">
-          <span class="nu-key">[<b>a</b>]</span>
+          <span class="enu-key">[<b>a</b>]</span>
           <span>api</span>
         </a>
         <a href={GITHUB_URL} class="trow" data-touch-menu="g">
-          <span class="nu-key">[<b>g</b>]</span>
+          <span class="enu-key">[<b>g</b>]</span>
           <span>github ↗</span>
         </a>
       </nav>
@@ -101,10 +101,10 @@ const langs = ['es', 'en'];
         {themes.map((t) => (
           <span
             data-theme-pick={t}
-            style={t === 'nu'
+            style={t === 'enu'
               ? 'color:var(--key);font-weight:600'
               : 'color:var(--dim);font-weight:400'}
-          >{t === 'nu' ? `[${t}]` : t}</span>
+          >{t === 'enu' ? `[${t}]` : t}</span>
         ))}
       </div>
       <div class="m-langrow">

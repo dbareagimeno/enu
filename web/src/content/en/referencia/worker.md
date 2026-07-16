@@ -1,11 +1,11 @@
 ---
-title: nu.worker — parallelism
+title: enu.worker — parallelism
 description: Opt-in workers — isolated Lua states, JSON-able message passing, capabilities, and the channel with the parent.
 ---
 
-`nu.worker` is real parallelism: a new Lua state in its own goroutine,
+`enu.worker` is real parallelism: a new Lua state in its own goroutine,
 **with no shared memory**. Communication happens via **JSON-able message
-passing** (copied, not by reference). `nu.worker.spawn` belongs only to the
+passing** (copied, not by reference). `enu.worker.spawn` belongs only to the
 main state.
 
 :::tip[Do you need a worker?]
@@ -15,14 +15,14 @@ already are ones). A worker is for *your* heavy computation in pure Lua that
 you don't want to freeze the loop.
 :::
 
-## `nu.worker.spawn`
+## `enu.worker.spawn`
 
 ```
-nu.worker.spawn(module: string, opts?) -> Worker
+enu.worker.spawn(module: string, opts?) -> Worker
 ```
 
 Spins up a new Lua state loading `module` (resolvable by the loader). Inside
-it, `nu.ui`, `nu.events` (the main bus), and nested workers **don't exist**;
+it, `enu.ui`, `enu.events` (the main bus), and nested workers **don't exist**;
 the rest of the API marked **[W]** does.
 
 ### Capabilities (`opts.caps`)
@@ -40,7 +40,7 @@ whole [W] API.
 
 ```lua
 -- A worker that can only read files and parse JSON: nothing else.
-local w = nu.worker.spawn("my-plugin/analyzer", {
+local w = enu.worker.spawn("my-plugin/analyzer", {
   caps = { "fs.read", "json" },
 })
 ```
@@ -63,9 +63,9 @@ other is pending throws `EINVAL` on the spot (never a silent priority).
 
 ```lua
 -- Main state
-nu.task.spawn(function()
-  local w = nu.worker.spawn("my-plugin/worker")
-  nu.task.cleanup(function() w:terminate() end)
+enu.task.spawn(function()
+  local w = enu.worker.spawn("my-plugin/worker")
+  enu.task.cleanup(function() w:terminate() end)
 
   w:send({ task = "process", data = { 1, 2, 3 } })
   local result = w:recv()        -- waits for the digested response
@@ -78,22 +78,22 @@ end)
 The worker talks to the parent over a symmetric channel:
 
 ```
-nu.worker.parent.send(msg) ⏸
-nu.worker.parent.recv() -> msg ⏸
+enu.worker.parent.send(msg) ⏸
+enu.worker.parent.recv() -> msg ⏸
 ```
 
 ```lua
 -- my-plugin/worker.lua (the loaded module)
-nu.task.spawn(function()
+enu.task.spawn(function()
   while true do
-    local msg = nu.worker.parent.recv()
+    local msg = enu.worker.parent.recv()
     local total = 0
     for _, n in ipairs(msg.data) do total = total + n end
-    nu.worker.parent.send({ total = total })
+    enu.worker.parent.send({ total = total })
   end
 end)
 ```
 
 Each worker is a **complete mini-runtime**: its own scheduler, several tasks,
-timers, and futures (all of `nu.task` [W]). **No watchdog**: workers exist to
+timers, and futures (all of `enu.task` [W]). **No watchdog**: workers exist to
 burn CPU freely; control is `terminate()` from the parent, plus `caps`.

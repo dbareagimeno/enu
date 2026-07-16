@@ -5,7 +5,7 @@
 // Comportamiento (ver el handoff §"14c — Búsqueda" y §"Interactions"):
 //   - Panel overlay (fondo bg, borde border) sobre el contenido, entre el
 //     header y la statusline (su geometría se mide al abrir).
-//   - La statusline izquierda (#nu-status-left) se convierte en `/término▊` y
+//   - La statusline izquierda (#enu-status-left) se convierte en `/término▊` y
 //     la derecha en las teclas disponibles; ambas se restauran al cerrar.
 //   - Mientras está abierto, ESTE módulo captura el teclado (keydown en window
 //     con capture:true + stopPropagation): keyboard.ts no ve nada. Caracteres →
@@ -23,7 +23,7 @@ import '../styles/search.css';
 import { setStatusLeft } from './keyboard';
 import { i18n, type Lang } from '../lib/i18n';
 
-const BASE: string = import.meta.env.BASE_URL; // p. ej. '/nu/'
+const BASE: string = import.meta.env.BASE_URL; // p. ej. '/enu/'
 
 // Límites de presentación (evitan listas kilométricas; N y M se cuentan sobre
 // lo MOSTRADO, como pide el handoff).
@@ -160,7 +160,7 @@ function coloca(): void {
 
 // ── Statusline (izquierda = /término▊, derecha = teclas) ──────────────────────
 function statusLeftEl(): HTMLElement | null {
-  return document.getElementById('nu-status-left');
+  return document.getElementById('enu-status-left');
 }
 function statusRightEl(): HTMLElement | null {
   return document.querySelector<HTMLElement>('.statusline .right');
@@ -171,7 +171,7 @@ function renderStatusLeft(): void {
   if (!el) return;
   el.textContent = '/' + term;
   const cur = document.createElement('span');
-  cur.className = 'nu-cursor';
+  cur.className = 'enu-cursor';
   el.appendChild(cur);
 }
 
@@ -504,7 +504,7 @@ function cierra(): void {
 
   // Restaura scroll y statusline.
   document.documentElement.style.overflow = prevOverflow;
-  setStatusLeft(prevLeft); // restaura #nu-status-left vía keyboard.ts
+  setStatusLeft(prevLeft); // restaura #enu-status-left vía keyboard.ts
   const right = statusRightEl();
   if (right) right.innerHTML = prevRight;
 
@@ -522,5 +522,5 @@ function esTactil(): boolean {
   );
 }
 
-// Por si algún día se cierra desde fuera (simetría con 'nu:search-open').
+// Por si algún día se cierra desde fuera (simetría con 'enu:search-open').
 window.addEventListener('nu:search-close-request', () => cierra());

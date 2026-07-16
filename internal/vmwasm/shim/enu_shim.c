@@ -1,4 +1,4 @@
-/* Shim productivo de nu.wasm (migracion-vm.md M02): la superficie C que el
+/* Shim productivo de enu.wasm (migracion-vm.md M02): la superficie C que el
  * kernel Go ve del estado Lua compilado a WebAssembly. Promueve el shim del
  * spike (spike/lua-wasm/shim/lua_shim.c) a calidad de kernel:
  *
@@ -12,7 +12,7 @@
  *     Lua→Go, sobre la que M05 construye el marshaling y todas las primitivas
  *     `nu.*`. Sustituye a los host functions hardcodeados del spike
  *     (host_note/host_render, que eran de benchmark);
- *   - el callback del trampolín de desenrollado (nu_call_pfunc, nu_unwind.h).
+ *   - el callback del trampolín de desenrollado (nu_call_pfunc, enu_unwind.h).
  *
  * MULTI-INSTANCIA (DM3/M12): el estado (GL) y el buffer (BUF) son variables de
  * la memoria lineal del módulo. wazero da una memoria lineal NUEVA por cada
@@ -67,7 +67,7 @@ static void set_result_len(int len) {
   RESULT_LEN = len;
 }
 
-/* --- trampolín de desenrollado (nu_unwind.h) --------------------------------
+/* --- trampolín de desenrollado (enu_unwind.h) --------------------------------
  * El callback que Go re-entra para correr el cuerpo protegido de LUAI_TRY. */
 typedef void (*pfunc_t)(lua_State *, void *);
 __attribute__((export_name("nu_call_pfunc")))
@@ -78,7 +78,7 @@ void nu_call_pfunc(lua_State *L, pfunc_t f, void *ud) { f(L, ud); }
  * de args en BUF, ejecuta la primitiva `id`, escribe el resultado en BUF y
  * devuelve su longitud (>=0) o un negativo -(code) para señalar error. M05
  * define el formato de args/resultado (marshaling) y el catálogo de ids. */
-__attribute__((import_module("nu"), import_name("host_dispatch")))
+__attribute__((import_module("enu"), import_name("host_dispatch")))
 extern int nu_host_dispatch(int id, int len);
 
 /* __nu_host(id, argstr) -> (ok, resultstr): el puente Lua sobre el dispatch.
@@ -137,7 +137,7 @@ static int l_await(lua_State *L) {
 /* nu_over_budget(): import host (Go). Devuelve 1 si el slice de la task en curso
  * rebasó su deadline (fijado por __reset_budget antes de reanudar la task). Es
  * race-free: mismo goroutine que conduce el Call, invocación síncrona. */
-__attribute__((import_module("nu"), import_name("nu_over_budget")))
+__attribute__((import_module("enu"), import_name("nu_over_budget")))
 extern int nu_over_budget(void);
 
 /* WD_COUNT: instrucciones entre chequeos. Compromiso entre granularidad del corte

@@ -1,32 +1,32 @@
 ---
-title: nu.ui — terminal
-description: Regions, blocks, styles, stack-based input, and nu's compositor. Main state only, TTY only.
+title: enu.ui — terminal
+description: Regions, blocks, styles, stack-based input, and enu's compositor. Main state only, TTY only.
 ---
 
-`nu.ui` is the terminal surface: cells, regions, and the compositor. The
+`enu.ui` is the terminal surface: cells, regions, and the compositor. The
 compositor, diffing, and painting live in Go; changes are coalesced and
 painted at most every ~30 ms. **There is no manual "flush".**
 
-:::caution[Headless: nu.ui doesn't exist]
-Without an interactive TTY (`nu -e`, CI, redirected output) the `nu.ui`
+:::caution[Headless: enu.ui doesn't exist]
+Without an interactive TTY (`enu -e`, CI, redirected output) the `enu.ui`
 module **simply doesn't exist** — the same model as worker `caps`: a surface
 that wasn't granted isn't there. Detect it with
-[`nu.has("ui")`](/nu/en/api/nu/#nuhas-w), **never** by probing and
+[`enu.has("ui")`](/enu/en/api/enu/#enuhas-w), **never** by probing and
 catching the error. That's why the examples on this page aren't runnable
-with `nu -e`.
+with `enu -e`.
 :::
 
 **Main state only** (not workers). Always start with:
 
 ```lua
-if not nu.has("ui") then return end   -- degrade in headless mode
+if not enu.has("ui") then return end   -- degrade in headless mode
 ```
 
 ## Surface
 
 ```
-nu.ui.size() -> { w, h }            -- terminal size in cells
-nu.ui.region(opts) -> Region        -- opts: x, y, w, h, z?
+enu.ui.size() -> { w, h }            -- terminal size in cells
+enu.ui.region(opts) -> Region        -- opts: x, y, w, h, z?
 ```
 
 **Regions** are the composition unit: rectangles with z-order, owned by
@@ -42,11 +42,11 @@ Region:cursor(x, y | nil)           -- places (or hides with nil) the real curso
 ```
 
 ```lua
-if not nu.has("ui") then return end
-local sz = nu.ui.size()
-local r = nu.ui.region{ x = 0, y = 0, w = sz.w, h = 3, z = 10 }
+if not enu.has("ui") then return end
+local sz = enu.ui.size()
+local r = enu.ui.region{ x = 0, y = 0, w = sz.w, h = 3, z = 10 }
 r:fill()
-r:blit(0, 0, nu.ui.block({ "Hello from a region" }))
+r:blit(0, 0, enu.ui.block({ "Hello from a region" }))
 ```
 
 ### Resize and viewport
@@ -66,19 +66,19 @@ re-render**: scrolling costs exactly as much as copying the visible window.
 -- Scroll: re-blit the same Block with a different offset (nothing recomputed).
 local offset = 0
 local function paint() r:blit(0, -offset, doc) end
-nu.ui.keymap("j", function() offset = offset + 1; paint() end)
+enu.ui.keymap("j", function() offset = offset + 1; paint() end)
 ```
 
 ## Blocks and styles
 
 A **Block** is an opaque handle to styled lines, produced by
-[`nu.text.*`](/nu/en/api/text/) or built by hand. It has a width and a
+[`enu.text.*`](/enu/en/api/text/) or built by hand. It has a width and a
 height.
 
 ```
-nu.ui.block(lines: (string | Span[])[]) -> Block   -- Span = { text, style? }
-nu.ui.caps() -> { colors, kitty_keyboard, mouse, images }
-nu.ui.clipboard_set(s) / nu.ui.clipboard_get() -> string?  ⏸   -- OSC 52
+enu.ui.block(lines: (string | Span[])[]) -> Block   -- Span = { text, style? }
+enu.ui.caps() -> { colors, kitty_keyboard, mouse, images }
+enu.ui.clipboard_set(s) / enu.ui.clipboard_get() -> string?  ⏸   -- OSC 52
 ```
 
 A `Style` is `{ fg?, bg?, bold?, italic?, underline?, reverse? }` with
@@ -92,7 +92,7 @@ local line = {
   { text = "ERROR ", style = { fg = "#ff5555", bold = true } },
   { text = "something failed" },
 }
-local block = nu.ui.block({ "first line", line })
+local block = enu.ui.block({ "first line", line })
 ```
 
 ## Input
@@ -102,16 +102,16 @@ it lets it pass through. Fine-grained focus routing is the toolkit's job,
 not the core's.
 
 ```
-nu.ui.on_input(fn) -> InputHandle    -- fn(ev) -> boolean (true = consumed)
+enu.ui.on_input(fn) -> InputHandle    -- fn(ev) -> boolean (true = consumed)
   InputHandle:pop()
-nu.ui.keymap(seq: string, fn, opts?) -> Keymap
+enu.ui.keymap(seq: string, fn, opts?) -> Keymap
   Keymap:unmap()
 ```
 
 The `ev` event is `{ type: "key"|"mouse"|"paste", key?, mods?, x?, y?, text?, path? }`.
 
 ```lua
-local h = nu.ui.on_input(function(ev)
+local h = enu.ui.on_input(function(ev)
   if ev.type == "key" and ev.key == "q" then
     -- quit
     return true   -- consumed
@@ -125,7 +125,7 @@ end)
 `"alt+enter"`, or sequences like `"g g"`:
 
 ```lua
-local km = nu.ui.keymap("ctrl+s", function() save() end)
+local km = enu.ui.keymap("ctrl+s", function() save() end)
 -- km:unmap() to remove it
 ```
 

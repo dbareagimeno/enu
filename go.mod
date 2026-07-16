@@ -1,4 +1,4 @@
-module github.com/dbareagimeno/nu
+module github.com/dbareagimeno/enu
 
 go 1.26.3
 

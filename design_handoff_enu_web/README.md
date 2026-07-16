@@ -2,7 +2,7 @@
 
 ## Overview
 
-Rediseño completo de la web de [nu](https://github.com/dbareagimeno/nu) (runtime de Lua orientado a terminal cuya killer app es un coding harness). Sustituye a la web Astro existente. El concepto: **la web ES un terminal** — la portada replica una pantalla de arranque de nu, la wiki es un pager tipo less(1), y toda la navegación funciona con teclado real. La marca no es un color sino una **paleta de terminal** ("theme nu", cian por defecto) intercambiable por themes famosos, reflejando la hiperconfigurabilidad del producto.
+Rediseño completo de la web de [nu](https://github.com/dbareagimeno/enu) (runtime de Lua orientado a terminal cuya killer app es un coding harness). Sustituye a la web Astro existente. El concepto: **la web ES un terminal** — la portada replica una pantalla de arranque de nu, la wiki es un pager tipo less(1), y toda la navegación funciona con teclado real. La marca no es un color sino una **paleta de terminal** ("theme nu", cian por defecto) intercambiable por themes famosos, reflejando la hiperconfigurabilidad del producto.
 
 ## About the Design Files
 

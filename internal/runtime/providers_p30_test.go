@@ -87,7 +87,7 @@ aliases    = ["m"]
 // tool call (nombre, args.city del Message ensamblado), usage, stop_reason.
 const driveTurn = `
 	out = {}
-	nu.task.spawn(function()
+	enu.task.spawn(function()
 		local p = require("providers")
 		local r = p.resolve("p/m")
 		local req = {
@@ -225,7 +225,7 @@ func TestGeminiStreamCanonico(t *testing.T) {
 // `texts` = los textos de los bloques `text` separados por `|`, `nblocks`.
 const driveOrder = `
 	out = {}
-	nu.task.spawn(function()
+	enu.task.spawn(function()
 		local p = require("providers")
 		local r = p.resolve("p/m")
 		local req = {
@@ -344,7 +344,7 @@ aliases = ["opus"]
 	h := bootWithToml(t, "", cfg, WithForceUI(true))
 
 	h.eval(`
-		nu.task.spawn(function()
+		enu.task.spawn(function()
 			local p = require("providers")
 			local r = p.resolve("anthropic/opus")
 			local req = {

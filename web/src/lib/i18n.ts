@@ -17,8 +17,8 @@ export interface Dict {
   // Portada — menú [i][d][a][g]
   k1: string; // instalar
   k2: string; // documentación
-  k2d: string; // la wiki de nu
-  kApiD: string; // referencia nu.*
+  k2d: string; // la wiki de enu
+  kApiD: string; // referencia enu.*
   hint: string; // placeholder tenue del prompt de la portada ("escribe help ↵")
   // Feedback de la línea de comandos
   fb_i: string;
@@ -85,21 +85,21 @@ export const i18n: Record<Lang, Dict> = {
   es: {
     sloganA: 'Tu agente de código.',
     sloganB: 'Tus reglas.',
-    body: 'Instálalo con una línea. Úsalo tal cual, o cámbialo entero escribiendo Lua. nu es el coding harness que es tuyo de verdad.',
+    body: 'Instálalo con una línea. Úsalo tal cual, o cámbialo entero escribiendo Lua. enu es el coding harness que es tuyo de verdad.',
     k1: 'instalar',
     k2: 'documentación',
-    k2d: 'la wiki de nu',
-    kApiD: 'referencia nu.*',
+    k2d: 'la wiki de enu',
+    kApiD: 'referencia enu.*',
     hint: 'escribe help ↵',
     fb_i: '→ copia y pega: curl -fsSL enu.sh/install | sh',
-    fb_d: '→ abriendo la wiki de nu…',
+    fb_d: '→ abriendo la wiki de enu…',
     fb_g: '→ github.com/dbareagimeno/enu',
     fb_a: '→ abriendo la referencia de la api…',
     fb_nf: 'no encontrado — prueba [i], [d], [g] o help',
     fb_help:
-      'comandos: i · d · g · theme <nu|dracula|gruvbox|solarized> · lang <es|en>\n…y si sabes lua, ya sabes qué hacer',
+      'comandos: i · d · g · theme <enu|dracula|gruvbox|solarized> · lang <es|en>\n…y si sabes lua, ya sabes qué hacer',
     fb_theme: 'theme = ',
-    fb_theme_nf: 'theme no encontrado: nu · dracula · gruvbox · solarized',
+    fb_theme_nf: 'theme no encontrado: enu · dracula · gruvbox · solarized',
     fb_lang: 'lang = ',
     fb_repl: 'lua (demo del navegador) — escribe salir para volver',
     fb_repl_out: 'hasta luego',
@@ -148,21 +148,21 @@ export const i18n: Record<Lang, Dict> = {
   en: {
     sloganA: 'Your coding agent.',
     sloganB: 'Your rules.',
-    body: 'Install it with one line. Use it as is, or rewrite the whole thing in Lua. nu is the coding harness that is truly yours.',
+    body: 'Install it with one line. Use it as is, or rewrite the whole thing in Lua. enu is the coding harness that is truly yours.',
     k1: 'install',
     k2: 'documentation',
-    k2d: 'the nu wiki',
-    kApiD: 'nu.* reference',
+    k2d: 'the enu wiki',
+    kApiD: 'enu.* reference',
     hint: 'type help ↵',
     fb_i: '→ copy & paste: curl -fsSL enu.sh/install | sh',
-    fb_d: '→ opening the nu wiki…',
+    fb_d: '→ opening the enu wiki…',
     fb_g: '→ github.com/dbareagimeno/enu',
     fb_a: '→ opening the api reference…',
     fb_nf: 'not found — try [i], [d], [g] or help',
     fb_help:
-      'commands: i · d · g · theme <nu|dracula|gruvbox|solarized> · lang <es|en>\n…and if you know lua, you know what to do',
+      'commands: i · d · g · theme <enu|dracula|gruvbox|solarized> · lang <es|en>\n…and if you know lua, you know what to do',
     fb_theme: 'theme = ',
-    fb_theme_nf: 'theme not found: nu · dracula · gruvbox · solarized',
+    fb_theme_nf: 'theme not found: enu · dracula · gruvbox · solarized',
     fb_lang: 'lang = ',
     fb_repl: 'lua (browser demo) — type exit to leave',
     fb_repl_out: 'see you',

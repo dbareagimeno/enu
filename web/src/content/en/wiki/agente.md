@@ -14,7 +14,7 @@ the loop, runs tools, emits events. The chat interface is **another**
 official extension (`chat`) that consumes this contract just as any third
 party could. Sought-after consequences:
 
-- Free scripting/CI mode: `nu -e "script.lua"` can use the agent without
+- Free scripting/CI mode: `enu -e "script.lua"` can use the agent without
   an interactive terminal.
 - Subagents can run in workers (without `ui`) with no special case.
 - The official UI has no privileged access: the public API is enough, or
@@ -35,7 +35,7 @@ Session:fork(at?: integer, opts?: table) ⏸ -> Session -- forks and re-homes; c
 Session:compact() ⏸                                  -- manual compaction
 Session:set_model(model: string)                     -- hot swap (G19)
 Session:set_thinking(thinking)                        -- hot reasoning change (ADR-016)
-Session:close()                                      -- releases the writer lock (G39); synchronous on purpose: callable from nu.task.cleanup
+Session:close()                                      -- releases the writer lock (G39); synchronous on purpose: callable from enu.task.cleanup
 Session.id / Session.usage -> { context_tokens, cost_usd, turns }
 ```
 
@@ -114,7 +114,7 @@ the exact prefix, each re-homed in its worktree via `opts.cwd`.
 `Session:close()` releases the writer lock ([sesiones.md](sesiones.md) §6)
 and marks the session closed (idempotent; subsequent methods fail with an
 actionable error). House rule: whoever opens sessions closes them
-(`nu.task.cleanup`); GC as a non-deterministic safety net, same as
+(`enu.task.cleanup`); GC as a non-deterministic safety net, same as
 [api.md](api.md) §6's `Proc`.
 
 **Reasoning control ([ADR-016](adr.md#adr-016--modelo-canónico-de-thinking-con-mode-y-traducción-por-modelo-en-el-adaptador))**:
@@ -153,13 +153,13 @@ agent.tool{
   dogfooding.
 - MCP fits here without a special case: the `mcp` extension registers each
   remote tool with `agent.tool{...}` and its handler speaks JSON-RPC via
-  `nu.proc`.
+  `enu.proc`.
 
 ## 4. Hooks
 
 Two mechanisms, deliberately separate:
 
-**Notifications** (fire-and-forget, core bus `nu.events`, namespace
+**Notifications** (fire-and-forget, core bus `enu.events`, namespace
 `agent:`): `session.start`, `session.end`, `turn.start`, `turn.end`,
 `delta`, `message`, `tool.start`, `tool.progress`, `tool.end`, `compact`,
 `error`, `permission.asked`, `permission.denied` (G40, §5). For painting,
@@ -218,8 +218,8 @@ Pipeline for each tool call: `deny` (cuts) → `allow` (grants) →
 `permission` hooks (can grant/deny programmatically) → if nobody decides
 and `mode = "ask"`: `agent:permission.asked` is emitted and the turn waits
 for a response (`agent.permission.respond(id, ...)` — the `chat` extension
-paints the dialog). **In headless mode — there's no `nu.ui`; the test is
-`nu.has("ui")` ([api.md](api.md) §9, G20) — with no response there's no
+paints the dialog). **In headless mode — there's no `enu.ui`; the test is
+`enu.has("ui")` ([api.md](api.md) §9, G20) — with no response there's no
 grant: default deny**, with three amortizers that remove almost all the
 friction:
 
@@ -286,7 +286,7 @@ otherwise.
 > repo's content goes through the TOFU gate (§11.2, `agent.trust`).
 
 Compatible with the existing ecosystem's format: a directory with
-`SKILL.md` (YAML frontmatter: `name`, `description` — via `nu.yaml`).
+`SKILL.md` (YAML frontmatter: `name`, `description` — via `enu.yaml`).
 
 - Discovery: `config.dir()/skills/` (user) + `<repo>/.nu/skills/`
   (project). `agent.skills.list() -> SkillInfo[]`. The repo's content is
@@ -300,12 +300,12 @@ Compatible with the existing ecosystem's format: a directory with
 ## 7. System prompt
 
 Assembled from ordered pieces: extension base → skills index → project
-context file (`nu.md` at the repo root, if it exists) → `opts.system`. The
+context file (`enu.md` at the repo root, if it exists) → `opts.system`. The
 `request.pre` hooks can touch up the result. Every piece is replaceable
 via configuration — there's no inaccessible magic prompt.
 
 > ✅ **Implemented** ([pospuesto.md](pospuesto.md) **P24**). The assembly is
-> `base → skills index → nu.md (after TOFU) → opts.system`. Discovery is
+> `base → skills index → enu.md (after TOFU) → opts.system`. Discovery is
 > captured when the session opens; whether the repo's content is included
 > is decided by trust at each assembly.
 
@@ -409,7 +409,7 @@ rules, without sandbox or constant dialogs:
    them to their global config or grant them in-session. Zero friction,
    closes the "cloning and opening executes the repo's will" vector.
 2. **One-keystroke TOFU for content that reaches the model.** The first
-   time nu opens in a repo with `.nu/skills/` or `nu.md`, a single
+   time enu opens in a repo with `.enu/skills/` or `enu.md`, a single
    question ("this repo brings skills/context, use them? — remembered
    per repo", persisted in `data_dir`). Without an affirmative answer
    (including headless), that content isn't injected. It's the same
@@ -420,7 +420,7 @@ MCP servers' tool descriptions aren't covered here: installing an MCP
 server is a conscious act by the user — their responsibility, like
 installing a plugin.
 
-<!-- nu:interno -->
+<!-- enu:interno -->
 
 ## 12. Relationship to what's postponed
 
@@ -428,4 +428,4 @@ Parallel tool calls ([P12](pospuesto.md)), nested workers for subagents
 ([P11](pospuesto.md)) and session retention ([P10](pospuesto.md)) have
 entries in the postponed register with their trigger.
 
-<!-- /nu:interno -->
+<!-- /enu:interno -->

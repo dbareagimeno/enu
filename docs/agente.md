@@ -35,7 +35,7 @@ Session:fork(at?: integer, opts?: tabla) ⏸ -> Session -- bifurca y re-aloja; c
 Session:compact() ⏸                                  -- compactación manual
 Session:set_model(model: string)                     -- cambio en caliente (G19)
 Session:set_thinking(thinking)                        -- razonamiento en caliente (ADR-016)
-Session:close()                                      -- suelta el lock de escritor (G39); síncrona a propósito: llamable desde nu.task.cleanup
+Session:close()                                      -- suelta el lock de escritor (G39); síncrona a propósito: llamable desde enu.task.cleanup
 Session.id / Session.usage -> { context_tokens, cost_usd, turns }
 ```
 
@@ -112,7 +112,7 @@ K variantes que comparten el prefijo exacto, cada una re-alojada en su
 worktree vía `opts.cwd`. `Session:close()` suelta el lock de escritor
 ([sesiones.md](sesiones.md) §6) y marca la sesión cerrada (idempotente;
 los métodos posteriores fallan con error accionable). La regla de la casa:
-quien abre sesiones las cierra (`nu.task.cleanup`); el GC como red de
+quien abre sesiones las cierra (`enu.task.cleanup`); el GC como red de
 seguridad no determinista, igual que los `Proc` de [api.md](api.md) §6.
 
 **Control de razonamiento ([ADR-016](adr.md#adr-016--modelo-canónico-de-thinking-con-mode-y-traducción-por-modelo-en-el-adaptador))**:
@@ -149,13 +149,13 @@ agent.tool{
 - Las tools básicas (read/write/edit de ficheros, bash, grep, glob...) las
   trae la propia extensión, registradas con esta misma función — dogfooding.
 - MCP encaja aquí sin caso especial: la extensión `mcp` registra cada tool
-  remota con `agent.tool{...}` y su handler habla JSON-RPC por `nu.proc`.
+  remota con `agent.tool{...}` y su handler habla JSON-RPC por `enu.proc`.
 
 ## 4. Hooks
 
 Dos mecanismos, deliberadamente separados:
 
-**Notificaciones** (fire-and-forget, bus del core `nu.events`, namespace
+**Notificaciones** (fire-and-forget, bus del core `enu.events`, namespace
 `agent:`): `session.start`, `session.end`, `turn.start`, `turn.end`,
 `delta`, `message`, `tool.start`, `tool.progress`, `tool.end`, `compact`,
 `error`, `permission.asked`, `permission.denied` (G40, §5). Para pintar, loggear, observar. *(El evento
@@ -212,7 +212,7 @@ Pipeline para cada tool call: `deny` (corta) → `allow` (concede) → hooks
 `permission` (pueden conceder/denegar programáticamente) → si nadie decide
 y `mode = "ask"`: se emite `agent:permission.asked` y el turno espera la
 respuesta (`agent.permission.respond(id, ...)` — la extensión `chat` pinta
-el diálogo). **En headless — no existe `nu.ui`; el test es `nu.has("ui")`
+el diálogo). **En headless — no existe `enu.ui`; el test es `enu.has("ui")`
 ([api.md](api.md) §9, G20) — sin respuesta no hay concesión: default
 deny**, con tres amortiguadores que eliminan casi toda la fricción:
 
@@ -276,9 +276,9 @@ worker sin `proc` no ejecuta procesos, opine quien opine.
 > del repo va tras la puerta TOFU (§11.2, `agent.trust`).
 
 Compatibles con el formato del ecosistema existente: directorio con
-`SKILL.md` (frontmatter YAML: `name`, `description` — vía `nu.yaml`).
+`SKILL.md` (frontmatter YAML: `name`, `description` — vía `enu.yaml`).
 
-- Descubrimiento: `config.dir()/skills/` (usuario) + `<repo>/.nu/skills/`
+- Descubrimiento: `config.dir()/skills/` (usuario) + `<repo>/.enu/skills/`
   (proyecto). `agent.skills.list() -> SkillInfo[]`. El contenido del repo
   está sujeto al modelo de confianza de §11.
 - Inyección en dos fases (economía de contexto): el system prompt lleva solo
@@ -290,12 +290,12 @@ Compatibles con el formato del ecosistema existente: directorio con
 ## 7. System prompt
 
 Ensamblado por piezas ordenadas: base de la extensión → índice de skills →
-fichero de contexto del proyecto (`nu.md` en la raíz del repo, si existe) →
+fichero de contexto del proyecto (`enu.md` en la raíz del repo, si existe) →
 `opts.system`. Los hooks `request.pre` pueden retocar el resultado. Cada
 pieza es sustituible por configuración — no hay prompt mágico inaccesible.
 
 > ✅ **Implementado** ([pospuesto.md](pospuesto.md) **P24**). El ensamblado es
-> `base → índice de skills → nu.md (tras TOFU) → opts.system`. El descubrimiento
+> `base → índice de skills → enu.md (tras TOFU) → opts.system`. El descubrimiento
 > se captura al abrir la sesión; la inclusión del contenido del repo se decide por
 > confianza en cada ensamblado.
 
@@ -370,7 +370,7 @@ Sub:cancel()
 de compactación, **razonamiento por defecto** (`[thinking]` con `mode` y
 `budget`, ADR-016), política de retención de sesiones ([P10](pospuesto.md)),
 permisos globales. La precedencia es la estándar: defaults < global <
-proyecto (`<repo>/.nu/agent.toml`) < sesión (`opts`) — con la excepción de
+proyecto (`<repo>/.enu/agent.toml`) < sesión (`opts`) — con la excepción de
 seguridad de §11: los permisos del proyecto solo recortan.
 
 La extensión acuña su código de error estructurado, **`EAGENT`** (forma de
@@ -394,12 +394,12 @@ El repo no es el usuario: su config la escribió un tercero. Dos reglas, sin
 sandbox ni diálogos constantes:
 
 1. **El repo solo recorta permisos, jamás amplía.** Los `deny` de
-   `<repo>/.nu/agent.toml` se honran siempre; sus `allow` y su `mode` se
+   `<repo>/.enu/agent.toml` se honran siempre; sus `allow` y su `mode` se
    **ignoran** — si el usuario los quiere, los copia a su config global o
    los concede en sesión. Cero fricción, cierra el vector "clonar y abrir
    ejecuta la voluntad del repo".
 2. **TOFU de una tecla para el contenido que llega al modelo.** La primera
-   vez que enu se abre en un repo con `.nu/skills/` o `nu.md`, una sola
+   vez que enu se abre en un repo con `.enu/skills/` o `enu.md`, una sola
    pregunta ("este repo trae skills/contexto, ¿usarlas? — se recuerda por
    repo", persistido en `data_dir`). Sin respuesta afirmativa (incluido
    headless), ese contenido no se inyecta. Es el mismo patrón `:trust` /
@@ -409,7 +409,7 @@ Las descripciones de tools de servidores MCP no entran aquí: instalar un
 servidor MCP es un acto consciente del usuario — su responsabilidad, como
 instalar un plugin.
 
-<!-- nu:interno -->
+<!-- enu:interno -->
 
 ## 12. Relación con lo pospuesto
 
@@ -417,4 +417,4 @@ Tool calls paralelas ([P12](pospuesto.md)), workers anidados para subagentes
 ([P11](pospuesto.md)) y retención de sesiones ([P10](pospuesto.md)) tienen
 entrada en el registro de pospuestos con su disparador.
 
-<!-- /nu:interno -->
+<!-- /enu:interno -->

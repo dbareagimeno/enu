@@ -1,9 +1,9 @@
-# Web de documentación de `nu`
+# Web de documentación de `enu`
 
-La web de `nu`: portada, wiki (los documentos de diseño de `docs/`), referencia
+La web de `enu`: portada, wiki (los documentos de diseño de `docs/`), referencia
 función a función de la API del core y guía del primer plugin. Construida con
 [Astro](https://astro.build/), sin ningún theme de terceros: **la web ES un
-terminal** — la portada replica la pantalla de arranque de nu, la wiki es un
+terminal** — la portada replica la pantalla de arranque de enu, la wiki es un
 pager tipo `less(1)` y toda la navegación funciona con teclado real. La
 especificación de diseño completa vive en `design_handoff_nu_web/README.md`
 (tokens de los 4 themes, gramática visual TTY, las 8 pantallas canónicas).
@@ -26,7 +26,7 @@ sin etiqueta para firmas, ` -- ` para comentarios de cola).
 ```sh
 cd web
 npm install
-npm run dev      # servidor de desarrollo en http://localhost:4321/nu/
+npm run dev      # servidor de desarrollo en http://localhost:4321/enu/
 npm run build    # sitio estático en dist/ + índice de búsqueda (pagefind)
 npm run preview  # sirve el build (necesario para probar la búsqueda)
 ```
@@ -35,7 +35,7 @@ npm run preview  # sirve el build (necesario para probar la búsqueda)
 
 ```
 web/
-├── astro.config.mjs              # base /nu/, shiki css-variables, plugins md
+├── astro.config.mjs              # base /enu/, shiki css-variables, plugins md
 ├── scripts/
 │   ├── check-drift.mjs           # detector de deriva web ↔ docs/api.md
 │   └── generar-og.mjs            # regenera public/og.png desde el wordmark
@@ -43,7 +43,7 @@ web/
 │   ├── content.config.ts         # colecciones: wiki (../docs), empezar, referencia
 │   ├── content/docs/
 │   │   ├── empezando/            # instalación y primeros pasos (→ /docs/…)
-│   │   └── referencia/           # una página por namespace nu.* (→ /api/…)
+│   │   └── referencia/           # una página por namespace enu.* (→ /api/…)
 │   ├── pages/                    # index (portada), docs/[slug], api/[slug],
 │   │   │                         # plugins, 404
 │   ├── layouts/ · components/    # Base, headers, statusline, sidebars, carriles
@@ -60,7 +60,7 @@ La **wiki** (`/docs/<slug>`) se genera desde los `.md` reales de `../docs/` vía
 content collections; el commit y la fecha de "última edición" de cada página
 salen de git en build (`src/lib/gitmeta.ts`). Las páginas de `empezando/` son
 las únicas con fichero propio aquí (extraídas del README raíz). Los 4 themes
-(nu, dracula, gruvbox, solarized) son CSS custom properties bajo
+(enu, dracula, gruvbox, solarized) son CSS custom properties bajo
 `[data-theme]`, persistidos en localStorage; el chrome es bilingüe es/en y el
 contenido se publica en ambos idiomas (ES bajo `/docs`·`/api`·`/plugins`, EN
 bajo `/en/…`).
@@ -70,7 +70,7 @@ bajo `/en/…`).
 El **español es la fuente de verdad**. El contenido inglés bajo
 `src/content/en/` (`wiki/`, `empezando/`, `extensiones/`, `referencia/`) es una
 **instantánea traducida** de su gemelo ES —mismos slugs, mismo orden de docmap,
-mismos marcadores `<!-- nu:interno -->`—, servida en rutas estáticas paralelas
+mismos marcadores `<!-- enu:interno -->`—, servida en rutas estáticas paralelas
 `/en/docs`, `/en/api` y `/en/plugins` (resolución del hallazgo W-04). El
 template es único por sección (`components/pages/{WikiPage,ApiPage,PluginsPage}
 .astro`) y se parametriza por idioma; los wrappers de `pages/en/` solo cambian
@@ -78,22 +78,22 @@ la colección de origen.
 
 **Al cambiar `docs/` o cualquier contenido ES, hay que regenerar la traducción
 EN afectada** —no se actualiza sola—. El picker de idioma navega a la página
-homóloga (`/nu/docs/x` ↔ `/nu/en/docs/x`), así que una página EN ausente sería
+homóloga (`/enu/docs/x` ↔ `/enu/en/docs/x`), así que una página EN ausente sería
 un 404. Nota: `check:drift` vigila **solo la referencia ES** frente a
 `docs/api.md` (la superficie sagrada); la referencia EN, al ser instantánea, no
 entra en ese gate.
 
 ## Ejemplos verificados
 
-Los ejemplos `nu -e '...'` de la referencia están comprobados contra el binario
-real (`go build -o nu . && nu -e '...'`). Recuerda que el chunk de `nu -e` corre
+Los ejemplos `enu -e '...'` de la referencia están comprobados contra el binario
+real (`go build -o enu . && enu -e '...'`). Recuerda que el chunk de `enu -e` corre
 en el estado principal: las funciones suspendientes (⏸) van envueltas en
-`nu.task.spawn(...)`.
+`enu.task.spawn(...)`.
 
 ## Despliegue
 
 `.github/workflows/docs.yml` construye y publica el sitio en GitHub Pages al
 hacer push a `main` cuando cambia algo bajo `web/`. El `base` del sitio es
-`/nu/` (project page); para un dominio propio, vacía `base` en
+`/enu/` (project page); para un dominio propio, vacía `base` en
 `astro.config.mjs`. El dominio del `curl` de instalación es un placeholder
 centralizado en `src/lib/const.ts` (`DOMAIN`), pendiente de decisión.

@@ -121,7 +121,7 @@ Las extensiones oficiales del conjunto de producto: `providers` (registro de
 modelos y adaptadores de LLM), `sessions` (persistencia JSONL append-only),
 `agent` (el motor headless: turno, tools, permisos, hooks, subagentes), `chat`
 (la UI de terminal), `mcp` (puente con servidores MCP), `toolkit` (widgets sobre
-`nu.ui`) y `repl` (un intérprete de Lua sobre la API pública, activable sin el
+`enu.ui`) y `repl` (un intérprete de Lua sobre la API pública, activable sin el
 harness). Ninguna tiene privilegio de kernel: una alternativa de terceros puede
 sustituir cualquiera.
 
@@ -130,7 +130,7 @@ sustituir cualquiera.
 ## Escribir un plugin
 
 Un plugin es un directorio con un `plugin.toml` (`name`, `version`, `requires?`)
-y un `init.lua`. Tiene a su disposición la **API del core** `nu.*` (fs, proc,
+y un `init.lua`. Tiene a su disposición la **API del core** `enu.*` (fs, proc,
 http, ws, search, text, re, ui, events, task, workers, codecs — pequeña y
 estable) y los contratos de las extensiones oficiales para colgarse de ellas:
 `agent.tool{}`, `agent.hook(...)`, `chat.command{}`,
