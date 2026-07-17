@@ -18,6 +18,7 @@ package runtime
 //   - NO REGRESIÓN: headless (`WithForceUI(false)`) → `bareScreenActive` es false.
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,10 +105,11 @@ func TestBareScreenContent(t *testing.T) {
 	lines := rt.RenderBareScreen()
 	joined := strings.Join(lines, "\n")
 
-	// Versión + nivel de API (§2). El nivel subió a 2 en S38 (enu.sys.pid, G32),
-	// a 3 con los frames binarios de enu.ws (G52) y a 4 con el control de redirects
-	// de enu.http (G54).
-	wantVer := "enu 0.1.4 · API 4"
+	// Versión + nivel de API (§2). El nivel sube con cada adición a la superficie
+	// sagrada (G32 enu.sys.pid → 2, G52 frames binarios de enu.ws → 3, G54 control de
+	// redirects de enu.http → 4, G57 opts.mode de enu.fs.write → 5); se compone desde
+	// las constantes para no reescribirlo.
+	wantVer := fmt.Sprintf("enu %d.%d.%d · API %d", VersionMajor, VersionMinor, VersionPatch, APILevel)
 	if !strings.Contains(joined, wantVer) {
 		t.Errorf("falta la versión/API %q en la pantalla:\n%s", wantVer, joined)
 	}
