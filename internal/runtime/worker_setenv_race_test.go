@@ -35,7 +35,7 @@ func TestSpawnDesdeWorkerConcurrenteConSetenv(t *testing.T) {
 	}
 
 	const iter = 60
-	h := g56Harness(t, fmt.Sprintf(`
+	h := g56Harness(t, `
 		-- Spawn del worker DURANTE el init de p (su foto de dueño es "p"). El worker
 		-- espera el número de iteraciones y lanza esos procesos, esperando cada uno:
 		-- cada enu.proc.spawn lee la foto del overlay de setenv DESDE su goroutine.
@@ -47,7 +47,7 @@ func TestSpawnDesdeWorkerConcurrenteConSetenv(t *testing.T) {
 			end
 			enu.worker.parent.send("done")
 		]])
-	`))
+	`)
 
 	// Task del estado principal: arranca el worker y, EN PARALELO a los spawns del
 	// worker, machaca enu.sys.setenv (escribe el overlay desde la goroutine de la VM).
