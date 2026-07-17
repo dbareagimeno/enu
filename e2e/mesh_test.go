@@ -392,7 +392,9 @@ end)`
 
 	outA := readOutcome(t, wsA)["gane"]
 	outB := readOutcome(t, wsB)["gane"]
-	if !((outA == "true" && outB == "false") || (outA == "false" && outB == "true")) {
+	ganaA := outA == "true" && outB == "false"
+	ganaB := outA == "false" && outB == "true"
+	if !ganaA && !ganaB {
 		t.Fatalf("exactamente uno debía ganar el claim; got A=%q B=%q", outA, outB)
 	}
 

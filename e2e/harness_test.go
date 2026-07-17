@@ -51,13 +51,13 @@ func TestMain(m *testing.M) {
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		os.RemoveAll(binDir)
+		_ = os.RemoveAll(binDir)
 		panic("e2e: fallo compilando el binario enu:\n" + string(out) + "\n" + err.Error())
 	}
 	enuBin = bin
 
 	code := m.Run()
-	os.RemoveAll(binDir)
+	_ = os.RemoveAll(binDir)
 	os.Exit(code)
 }
 
