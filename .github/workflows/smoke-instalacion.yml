@@ -102,14 +102,16 @@ jobs:
           echo "- \`${{ matrix.image }}\`: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
 
   # macOS no corre contenedores Linux; el runner es el objetivo «limpio» nativo.
-  # Intel (macos-13) y ARM (macos-14) por separado: paths, señales y arranque
-  # difieren por arquitectura.
+  # Solo Apple Silicon (macos-14, ARM): el Intel (macos-13) se descarta a
+  # propósito —hardware legacy, y sus runners de GitHub son escasos y encolan la
+  # matriz—; quien siga en un Mac Intel casi siempre corre Linux encima, que ya
+  # está cubierto. Se deja como matriz de un elemento por si algún día se reabre.
   macos:
     name: Limpio ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-13, macos-14]
+        runner: [macos-14]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -150,7 +152,7 @@ jobs:
             "schema": "smoke-instalacion.v1",
             "estado": "verde",
             "linux": ["debian:stable-slim", "ubuntu:latest", "fedora:latest", "alpine:latest"],
-            "macos": ["macos-13 (intel)", "macos-14 (arm)"],
+            "macos": ["macos-14 (arm)"],
             "humo": ["enu -e 'return enu.version.api'", "enu --default-config", "enu -e (con oficial activo)"]
           }
           JSON
@@ -159,7 +161,7 @@ jobs:
             echo "## Matriz de instalación — verde"
             echo "El binario estático arranca en todas las plataformas limpias:"
             echo "- Linux (contenedores mínimos): debian-slim · ubuntu · fedora · alpine (musl)"
-            echo "- macOS: Intel (macos-13) · ARM (macos-14)"
+            echo "- macOS: ARM (macos-14) — Intel descartado (legacy)"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Subir el dato de la matriz
         uses: actions/upload-artifact@v4

@@ -20,7 +20,7 @@ destaparían.
 **Qué se entregó.** El workflow con cuatro jobs: `construir` (binario estático
 linux/amd64 una vez → artefacto), `linux` (matriz `debian:stable-slim`,
 `ubuntu:latest`, `fedora:latest`, `alpine:latest`, cada imagen vía `docker run`),
-`macos` (matriz `macos-13` Intel + `macos-14` ARM, build nativo), y `matriz`
+`macos` (`macos-14` ARM, build nativo; Intel descartado, ver decisión 6), y `matriz`
 (consolida el resultado como dato: JSON + `$GITHUB_STEP_SUMMARY`). Humo en cada
 plataforma: `enu -e 'return enu.version.api'` (arranca el runtime headless,
 imprime el nivel de API) → `enu --default-config` (escribe el conjunto oficial,
@@ -45,6 +45,17 @@ sale 0) → segundo `enu -e` con el oficial activo.
    planificación, no una grieta de API—; se corrigió la fila y el smoke usa
    `enu -e 'return enu.version.api'`, que además es una prueba de liveness más
    fuerte (arranca el runtime y el embed, no solo imprime un string).
+6. **macOS Intel (`macos-13`) descartado de la matriz** (operador, durante la PR
+   #105): la primera ejecución mostró los cuatro contenedores Linux y `macos-14`
+   (ARM) en verde en segundos, pero `macos-13` quedó **encolado** — los runners
+   macOS de GitHub son escasos y varios jobs de macOS competían por ellos. Es
+   hardware legacy y quien lo use casi siempre corre Linux encima (ya cubierto),
+   así que no compensa el coste/latencia. La matriz macOS queda en solo ARM.
+   **Ojo (pendiente de decisión aparte):** `release.yml` **sigue construyendo y
+   publicando el artefacto `darwin-amd64`** — dejar de smoke-testearlo no es lo
+   mismo que dejar de shipearlo; si se quiere retirar el soporte de Mac Intel de
+   verdad, es un cambio de release (release.yml + release.md + G9) que no se hizo
+   aquí.
 
 **DoD y desviación de protocolo.** No se tocó Go: `go build ./...` verde (rc=0,
 confirmado). **No hay BDD/TDD ni test unitario 🔒**: la lógica no es nuestra
