@@ -18,12 +18,17 @@ import (
 	"golang.org/x/term"
 )
 
-// managementSubcommands es el conjunto CERRADO de verbos de gestión (ADR-026 pieza 1).
-// `init` está implementado (S49); `doctor`/`update`/`uninstall` están reservados y
-// llegan en S50/S51. Nada de producto entra aquí.
-var managementSubcommands = map[string]bool{
-	"init": true, "doctor": true, "update": true, "uninstall": true,
-}
+// emitf/emitln escriben mensajes de `init`/wizard a un `io.Writer`, descartando A
+// PROPÓSITO el error de escritura: un stdout roto no es accionable en este flujo
+// interactivo, y centralizar el descarte evita salpicar `_, _ =` por todo el wizard
+// (errcheck lo ve una sola vez). Los errores REALES —de escritura de config— sí se
+// comprueban (WriteInitConfig/WriteDefaultConfig).
+func emitf(w io.Writer, format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
+func emitln(w io.Writer, a ...any)               { _, _ = fmt.Fprintln(w, a...) }
+
+// El conjunto CERRADO de verbos de gestión (ADR-026 pieza 1) es el `switch` de abajo:
+// `init` implementado (S49); `doctor`/`update`/`uninstall` reservados (S50/S51). Nada
+// de producto entra ahí.
 
 // dispatchSubcommand decide si os.Args (sin el argv[0]) expresa un SUBCOMANDO y, si es
 // así, lo ejecuta. GRAMÁTICA (decisión de S49, superficie CLI, no espec sagrada): el
@@ -92,14 +97,14 @@ func initNonInteractive(rt *runtime.Runtime, out io.Writer) int {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return exitError
 	}
-	fmt.Fprintf(out, "conjunto oficial de producto activado en %s/enu.toml: %s\n",
+	emitf(out, "conjunto oficial de producto activado en %s/enu.toml: %s\n",
 		dir, strings.Join(names, ", "))
 	if len(created) > 0 {
-		fmt.Fprintf(out, "plantillas de config creadas: %s\n", strings.Join(created, ", "))
+		emitf(out, "plantillas de config creadas: %s\n", strings.Join(created, ", "))
 	} else {
-		fmt.Fprintln(out, "las plantillas de config ya existían: se respetan (no-op)")
+		emitln(out, "las plantillas de config ya existían: se respetan (no-op)")
 	}
-	fmt.Fprintf(out, "exporta tu API key (p. ej. ANTHROPIC_API_KEY) o edita %s/providers.toml; "+
+	emitf(out, "exporta tu API key (p. ej. ANTHROPIC_API_KEY) o edita %s/providers.toml; "+
 		"luego ejecuta `enu` (chat) o `enu -p '<prompt>'` (headless)\n", dir)
 	return exitOK
 }
@@ -114,19 +119,19 @@ func initWizard(rt *runtime.Runtime, in io.Reader, out io.Writer) int {
 	const keyEnv = "ANTHROPIC_API_KEY"
 	const defModel = "anthropic/opus"
 
-	fmt.Fprintln(out, "enu init — configuración guiada")
+	emitln(out, "enu init — configuración guiada")
 	// 1. Provider. v1 ofrece solo anthropic (G61); se enuncia, no se pregunta.
-	fmt.Fprintln(out, "provider: anthropic (el asistente v1 solo configura anthropic; edita providers.toml para otros)")
+	emitln(out, "provider: anthropic (el asistente v1 solo configura anthropic; edita providers.toml para otros)")
 
 	// 2. Clave por variable de entorno (nunca al fichero).
 	if os.Getenv(keyEnv) != "" {
-		fmt.Fprintf(out, "clave: %s detectada en el entorno — se referenciará como api_key_env, nunca se escribe en fichero\n", keyEnv)
+		emitf(out, "clave: %s detectada en el entorno — se referenciará como api_key_env, nunca se escribe en fichero\n", keyEnv)
 	} else {
-		fmt.Fprintf(out, "clave: %s no está exportada; expórtala antes de usar el agente (nunca se escribe en fichero)\n", keyEnv)
+		emitf(out, "clave: %s no está exportada; expórtala antes de usar el agente (nunca se escribe en fichero)\n", keyEnv)
 	}
 
 	// 3. Modelo: propone el default, acepta con enter o teclea otro.
-	fmt.Fprintf(out, "modelo por defecto [%s]: ", defModel)
+	emitf(out, "modelo por defecto [%s]: ", defModel)
 	line, err := readLine(r)
 	if err != nil {
 		return abortWizard(out)
@@ -137,7 +142,7 @@ func initWizard(rt *runtime.Runtime, in io.Reader, out io.Writer) int {
 	}
 
 	// 4. Activar el conjunto oficial de producto (por defecto sí).
-	fmt.Fprint(out, "¿activar el conjunto oficial de producto (agente, chat, providers…)? [S/n]: ")
+	emitf(out, "¿activar el conjunto oficial de producto (agente, chat, providers…)? [S/n]: ")
 	line, err = readLine(r)
 	if err != nil {
 		return abortWizard(out)
@@ -152,17 +157,17 @@ func initWizard(rt *runtime.Runtime, in io.Reader, out io.Writer) int {
 	}
 
 	if activate {
-		fmt.Fprintf(out, "conjunto oficial activado en %s/enu.toml: %s\n", dir, strings.Join(activated, ", "))
+		emitf(out, "conjunto oficial activado en %s/enu.toml: %s\n", dir, strings.Join(activated, ", "))
 	} else {
-		fmt.Fprintf(out, "conjunto oficial NO activado (edita %s/enu.toml para activarlo)\n", dir)
+		emitf(out, "conjunto oficial NO activado (edita %s/enu.toml para activarlo)\n", dir)
 	}
 	if len(created) > 0 {
-		fmt.Fprintf(out, "plantillas creadas: %s\n", strings.Join(created, ", "))
+		emitf(out, "plantillas creadas: %s\n", strings.Join(created, ", "))
 	}
 	if len(respected) > 0 {
-		fmt.Fprintf(out, "config ya existente, respetada: %s\n", strings.Join(respected, ", "))
+		emitf(out, "config ya existente, respetada: %s\n", strings.Join(respected, ", "))
 	}
-	fmt.Fprintf(out, "listo. Exporta %s (o edita %s/providers.toml) y ejecuta `enu`\n", keyEnv, dir)
+	emitf(out, "listo. Exporta %s (o edita %s/providers.toml) y ejecuta `enu`\n", keyEnv, dir)
 	return exitOK
 }
 
@@ -179,6 +184,6 @@ func readLine(r *bufio.Reader) (string, error) {
 // abortWizard reporta un wizard abandonado (EOF a mitad) sin haber escrito ficheros y
 // sale con código no cero (1): la interacción no se completó.
 func abortWizard(out io.Writer) int {
-	fmt.Fprintln(out, "\ninit cancelado: no se escribió ninguna configuración")
+	emitln(out, "\ninit cancelado: no se escribió ninguna configuración")
 	return exitError
 }
