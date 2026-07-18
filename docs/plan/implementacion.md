@@ -442,6 +442,52 @@ La Fase 8 es larga, así que lleva checkpoints **internos**, no solo al cierre:
 > A partir de aquí, el resto del trabajo (repl, CLI, más adaptadores) puede
 > hacerse con el propio enu — la señal de que el harness ya se sostiene.
 
+## Fase 9 — Producto (ADR-025, Fase 1: demostrar la promesa operativa)
+
+La primera fase post-kernel: no construye features de runtime sino la
+**promesa operativa** del reposicionamiento
+([ADR-025](../decisions/adr/adr-025-reposicionamiento-motor-de-harnesses.md),
+pieza 3, Fase 1), que ordena expresamente que estas capacidades entren al plan
+por `/planificar-sesion`. Ninguna sesión de esta fase toca `api.md` ni el
+kernel.
+
+**DoD propio de la fase** (sustituye al Contrato de sesión general, que
+presupone código de runtime): una sesión de Fase 9 está hecha cuando (1) su
+criterio de hecho se cumple de forma **observable** (el artefacto publicado
+contiene lo exigido y no contiene lo excluido); (2) los gates existentes que
+toque siguen en verde (`go build ./...` si toca el árbol Go, los gates de la
+web —check-drift, i18n— si toca `web/`, la CI si toca workflows); (3) el
+frente público resultante está **en inglés** y la fuente interna en español
+(ADR-025, pieza 5); y (4) cierra con puntero ▶ avanzado y fila de bitácora en
+el mismo commit, registrando en `docs/worklog/sNN-*.md` las decisiones bajo
+umbral. El inventario 🔒 no crece con esta fase: no hay lógica de runtime
+nuestra (los workflows de CI son steps, no lógica — sus *decisiones* se
+registran, ver S48).
+
+| Sesión | Feature | Depende de | Espec | Criterio de hecho |
+|---|---|---|---|---|
+| **S46** | **README raíz en inglés** según ADR-025: hero directo («a self-extensible coding harness shipped as a single static binary»), quickstart de 3 comandos, diagrama de capas kernel/API/plugins, plugin de ejemplo ~10 líneas, tabla comparativa **con Pi** (honesta: admite madurez/ecosistema superiores), bloque de estado breve y rutas de doc por intención del lector. Elimina del camino de entrada: «45 sesiones cerradas», «la release va por detrás», el CTA a la competencia y el pseudocódigo-como-validación (se enlazan, no se reproducen). Actualiza `filosofia.md` a la tesis de la pieza 1 — **en español** (es fuente interna; puede citar el lema inglés). | — | ADR-025 piezas 1-2 y 5 · [auditoría externa 2026-07-18](../audits/auditoria-externa-concepto-2026-07-18.md) §triaje | El README publicado contiene los siete elementos y ninguno de los cuatro eliminados; `filosofia.md` coherente con ADR-025; versión española enlazada. |
+| **S47** | **Portada y legibilidad de la web**: demo visual tras el hero (GIF/asciinema de 30-45s), snippet de plugin con la nota «this is not a special extension API», enlaces primarios visibles sobre los atajos de tecla, legibilidad de doc larga (cuerpo 15-16px, más contraste, ancho de texto 70-75 col), y páginas `que-es-enu`/`primer-agente` (es/en) actualizadas a la tesis de ADR-025. **No** se añade ningún theme ni fidelidad TTY nueva (congelación de ADR-025). | S46 (el copy nuevo manda) | ADR-025 pieza 3 (Fase 1) y consecuencias · auditoría externa §web | La portada muestra demo + snippet + jerarquía nueva; las dos páginas reflejan la tesis; gates de la web en verde; cero themes nuevos. |
+| **S48** | **Matriz de smoke tests de instalación en sistemas limpios**: workflow de CI que instala el binario en contenedores limpios y ejecuta el humo (`enu --version`, `enu -e 'return enu.version.api'`, `enu --default-config` + arranque headless). **Matriz cerrada en este alta** (decisión, no step): `debian:stable`, `ubuntu:latest`, `fedora:latest`, `alpine:latest` (sí aplica: binario estático `CGO_ENABLED=0`, ADR-001) + `macos` Intel y ARM (runners de GH). Publica el resultado como dato consumible por la web (badge/JSON). Las decisiones de tubería se registran en el `worklog` de la sesión como refinamiento de ADR-013 (los steps siguen sin ser API). | — | ADR-013 (CI/releases) · ADR-025 pieza 3 (Fase 1) | El workflow corre la matriz completa en verde; un fallo de instalación en cualquier plataforma pone la CI en rojo; la matriz es visible como dato. |
+
+> 🔎 **CP-12 · El camino del desconocido** (cierre de fase, tras S46-S48).
+> Prueba de humo de extremo a extremo del funnel completo: partiendo solo del
+> README nuevo, seguir el quickstart al pie de la letra en un contenedor
+> limpio de la matriz de S48 y llegar a un `enu` funcional (headless si no hay
+> credenciales). Si algún paso del README no se sostiene contra el binario
+> real, la fase no cierra. Es la versión operativa del CP-11: el dogfooding
+> era «enu se construye con enu»; este es «enu se adopta sin ayuda».
+
+**Fuera de esta fase por la puerta SDD** (diseño primero, alta después):
+`enu init`, `enu doctor` y el instalador endurecido (`enu.sh` con checksums
+obligatorios, `ENU_VERSION`/`ENU_INSTALL_DIR`, `enu update/uninstall`)
+carecen de espec con semántica completa. Su diseño pasa por un **ADR que
+refine o reemplace ADR-015/ADR-017** — cuyo disparador de reapertura («una
+tercera o cuarta acción de configuración del binario») suena precisamente con
+init+doctor+update — y, para el instalador, por especificar antes
+[docs/ops/release.md](../ops/release.md). Solo entonces vuelven por
+`/planificar-sesion`.
+
 ## Hitos de validación
 
 No todo el valor está en las features; tres puntos son **decisiones con veto**
