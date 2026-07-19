@@ -155,7 +155,7 @@ añaden aquí con el mismo método.
 ## Índice
 
 > Los números G24–G25 no existen como fichero: son un hueco histórico que
-> nunca se asignó. La numeración es append-only: el próximo hallazgo es G63,
+> nunca se asignó. La numeración es append-only: el próximo hallazgo es G64,
 > los huecos no se reutilizan.
 
 | # | Título | Docs afectados | Estado | Fichero |
@@ -220,3 +220,4 @@ añaden aquí con el mismo método.
 | G60 | El `.jsonl.lock` nace huérfano en el arranque del chat: `enu.task.cleanup` no puede ⏸ y la promesa de liberación de `sesiones.md` §6 es inimplementable tal como está | `api.md` §3 / `sesiones.md` §6 / `guia-plugins.md` / `modelo-ejecucion.md` / `malla.md` / ADR-029 / sessions / chat | RESUELTO (ADR-029) | [g60-el-lock-de-sesion-nace-huerfano.md](g60-el-lock-de-sesion-nace-huerfano.md) |
 | G61 | El wizard de `enu init` ofrece 4 providers pero solo `anthropic` tiene plantilla (espec presupone plantillas inexistentes) | ADR-026 pieza 2 / providers.md / S49 | RESUELTO | [g61-el-wizard-de-init-ofrece-providers-sin-plantilla.md](g61-el-wizard-de-init-ofrece-providers-sin-plantilla.md) |
 | G62 | Los 4 checks de producto de `enu doctor` presuponen introspección de extensiones (consulta sin efectos + API de herramientas externas) que no existe | ADR-026 pieza 3 / doctor.md / S50 | RESUELTO | [g62-los-checks-de-producto-de-doctor-presuponen-introspeccion-inexistente.md](g62-los-checks-de-producto-de-doctor-presuponen-introspeccion-inexistente.md) |
+| G63 | Las releases se publican sin firma ni atestación de procedencia: el checksum viaja por el mismo canal que el binario (eleva SEC-06 a grieta) | release.yml / install.sh / `docs/ops/release.md` / ADR-013 | ABIERTO | [g63-las-releases-se-publican-sin-firma-ni-atestacion.md](g63-las-releases-se-publican-sin-firma-ni-atestacion.md) |
