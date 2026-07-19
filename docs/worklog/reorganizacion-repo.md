@@ -2,7 +2,7 @@
 title: "Reorganización del repo: binario a `cmd/enu/`, archivo del spike, destilado del handoff y `docs/plan`·`docs/postponed` a un-fichero-por-entrada"
 type: "sesion"
 id: "REORG"
-status: "en-curso"
+status: "cerrada"
 date: "2026-07-19"
 ---
 # REORG — Reorganización del repo (2026-07-19)
@@ -93,3 +93,53 @@ quedan en git si hicieran falta).
 (como `README.md`): **no** es página publicada. El `npm run build` completo no se
 corrió en local (sin `node_modules`); los cambios web son no-renderizables (un
 doc de raíz + comentarios + un enlace), y el gate `docs.yml` lo cubre en CI.
+
+## D · `docs/plan` y `docs/postponed` sostenibles (ADR-031)
+
+**Motivación.** `estado.md` pesaba 298 KB: el puntero ▶ era una línea de 66.683
+chars (11 cierres acaparados) y la bitácora, 71 filas de hasta 7.500 chars que
+**duplicaban** `worklog/`. `pospuesto.md` eran 46 P## en una tabla. Eran las dos
+únicas carpetas de Capa 2 sin la convención «un fichero por entrada».
+
+**Qué se hizo.**
+- **`estado.md` → 4 KB** (74× menos): puntero recortado a su línea imperativa,
+  tablero condensado, sección «Cierres» que apunta a `worklog/`. El histórico
+  completo (S01–S45 + lote post-plan) se archivó **verbatim** en
+  `docs/archive/bitacora-plan.md` (sin pérdida).
+- **`pospuesto.md` → 46 ficheros `pNN-<slug>.md` + `README.md`** índice (patrón
+  `findings/`), vía un **workflow de 6 agentes** (verificado: 46 ficheros, 34
+  vigentes / 2 decididas / 10 implementadas, P1–P46 completos, frontmatter y
+  enlaces íntegros, contenido verbatim).
+- **`implementacion.md` → 516 líneas** (de 553): el inventario 🔒 se extrajo a
+  `docs/plan/inventario-tests.md`; se reescribió §«Seguimiento» al protocolo
+  nuevo (worklog en vez de bitácora).
+- **Reapuntado de referencias**: las ~60 citas de P## que apuntaban al viejo
+  `pospuesto.md` se redirigieron a su fichero `pNN-*.md` (o al índice para las
+  que citan varias P##), con una pasada scripted precisa.
+- **Maquinaria del flujo** actualizada en el mismo cambio: skills `sesion`
+  (cierre → crea `worklog/`, ya no añade fila de bitácora), `planificar-sesion`,
+  `hallazgo`, `ronda`, `juicio`, `mutacion`; agentes `auditor-docs` (barrido P##
+  sobre `pNN-*.md`) y `juez-tests` (inventario en su fichero); `docs/README.md`,
+  `CLAUDE.md` y `.claude/README.md` (mapa, tabla de estructura, términos
+  bitácora→worklog). El término «bitácora» solo se mantuvo donde es legítimo
+  (`worklog/` = «bitácora operativa»; `salud/bitacora.md` = log de salud).
+
+**Decisión de alcance.** El puntero ▶ se **mantiene** (era lo pedido); lo que se
+elimina es la duplicación historia-en-`estado.md` vs `worklog/`. `implementacion.md`
+**no** se trocea por sesiones (sectorizado por fases ya es navegable; YAGNI).
+
+**Verificación.** Ningún enlace markdown colgando a `pospuesto.md`; todos los
+ficheros nuevos con frontmatter válido; `estado.md`/`inventario-tests.md`/
+`postponed/README.md`/los archivos resuelven. Cierre con el agente
+`auditor-docs`: **cero enlaces rotos**, contador del índice exacto, frontmatter
+coherente, ningún disparador P## suena; sus 6 hallazgos menores (prosa desfasada:
+nombres de fichero pre-reorg, «bitácora de implementacion.md» → archivo,
+exclusiones de `spike/`/`main.go` en `/mutacion`, rótulos `[pospuesto.md]`)
+quedaron corregidos.
+
+**Pendiente (fuera de alcance, para `/sync-web`).** El espejo inglés
+`web/src/content/en/wiki/*.md` (instantánea traducida a mano de los contratos)
+aún enlaza `../postponed/pospuesto.md`. No es un enlace de filesystem (lo
+resuelve el plugin docmap de la web en build) y `postponed/` no es sección
+publicada, así que su comportamiento no cambia de clase por la reorg; se propaga
+a la Capa 1 con `/sync-web`, no a mano.

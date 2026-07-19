@@ -64,7 +64,7 @@ tablas 0,41×), peajes concentrados en las fronteras (llamada host ~1 µs, throw
   G41) se vuelve imposible por construcción en el destino; mientras tanto, el
   statu quo blindado sigue siendo operable.
 - La memoria lineal por instancia de WASM abre **aislamiento físico** para
-  workers y `caps` — [P2](../../postponed/pospuesto.md) (actores aislados) y [P3](../../postponed/pospuesto.md)
+  workers y `caps` — [P2](../../postponed/p02-actores-por-plugin.md) (actores aislados) y [P3](../../postponed/p03-plugins-wasm-segunda-capa.md)
   (plugins WASM) ganan un camino natural y barato el día de la migración.
 - Costes asumidos: ~+0,7 MB de binario; fronteras más caras (irrelevantes con
   el patrón "Lua decide, Go ejecuta", que ya minimiza cruces); una API

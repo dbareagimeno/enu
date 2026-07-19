@@ -16,7 +16,7 @@ limitaciones, con diagramas), en [modelo-ejecucion.md](modelo-ejecucion.md).
 Contratos de las extensiones oficiales: [providers.md](../contracts/providers.md),
 [sesiones.md](../contracts/sesiones.md), [agente.md](../contracts/agente.md), [chat.md](../contracts/chat.md).
 Convenciones prácticas para autores: [guia-plugins.md](../contracts/guia-plugins.md). Lo
-aplazado, con su disparador de reapertura: [pospuesto.md](../postponed/pospuesto.md).
+aplazado, con su disparador de reapertura: [pospuestos](../postponed/README.md).
 Grietas pendientes de resolver antes de congelar: [problemas.md](../findings/README.md).
 
 ## Vista general
@@ -144,7 +144,7 @@ recompilación. El contrato del adaptador y el formato del registro están en
   sin especificación condicional. **Mac Intel (`darwin/amd64`) no se publica**
   ([ADR-027](../decisions/adr/adr-027-sin-binario-de-mac-intel.md): legacy;
   quien lo necesite compila desde fuente o usa Linux). Windows nativo:
-  [P18](../postponed/pospuesto.md).
+  [P18](../postponed/p18-windows-nativo-sin-wsl2.md).
 - Además del binario, el release publica una **imagen de contenedor multi-arch**
   (`linux/amd64`+`arm64`) en GHCR
   ([ADR-028](../decisions/adr/adr-028-imagen-de-contenedor-publicada.md)): el
