@@ -235,7 +235,7 @@ escriben bajo `data_dir()/plugins/<nombre>/`.
    sobre `agent.session{ resume }`) se decidirá aquí: G18 lo dejó
    deliberadamente fuera de los contratos.~~ **RESUELTA** por la
    implementación de S45 ([implementacion.md](../plan/implementacion.md)). La
-   superficie CLI vive en el **binario** (`main.go`), NO en la API sagrada
+   superficie CLI vive en el **binario** (`cmd/enu/`), NO en la API sagrada
    `enu.*` (api.md): es la interfaz de línea de comandos del ejecutable, y el
    core sigue sin saber lo que es un agente (ADR-003) — el CLI orquesta las
    extensiones (`agent`, `sessions`) por la API pública, como podría hacerlo un

@@ -93,7 +93,7 @@ entra en ese gate.
 ## Ejemplos verificados
 
 Los ejemplos `enu -e '...'` de la referencia están comprobados contra el binario
-real (`go build -o enu . && enu -e '...'`). Recuerda que el chunk de `enu -e` corre
+real (`go build -o enu ./cmd/enu && enu -e '...'`). Recuerda que el chunk de `enu -e` corre
 en el estado principal: las funciones suspendientes (⏸) van envueltas en
 `enu.task.spawn(...)`.
 
