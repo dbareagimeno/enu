@@ -1,11 +1,11 @@
 ---
 title: "El binario vive en `cmd/enu/`; la raíz del repo queda sin código Go (refina la ubicación de ADR-026)"
 type: "adr"
-id: "ADR-030"
+id: "ADR-031"
 status: "aceptada"
 date: "2026-07-19"
 ---
-# ADR-030 · El binario vive en `cmd/enu/`; la raíz del repo queda sin código Go
+# ADR-031 · El binario vive en `cmd/enu/`; la raíz del repo queda sin código Go
 
 **Estado:** Aceptada · 2026-07-19 (**refina** la *ubicación* de la superficie
 CLI de [ADR-026](adr-026-subcomandos-de-gestion-del-binario.md) y complementa

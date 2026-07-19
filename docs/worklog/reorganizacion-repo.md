@@ -11,10 +11,10 @@ Esto **no es una sesión del plan** (el plan está cerrado): es una pasada de
 organización pedida por el operador para «dejar el repo lo más organizado
 posible». Cuatro frentes independientes, cada uno con su verificación. La API
 sagrada (`api.md`) **no se toca**: es puramente estructura. Registrado por el
-flujo de diseño (CLAUDE.md) con dos ADR de decisión ([ADR-030](../decisions/adr/adr-030-el-binario-vive-en-cmd-enu.md)
-y el de `plan/postponed`) y esta entrada de worklog.
+flujo de diseño (CLAUDE.md) con dos ADR de decisión ([ADR-031](../decisions/adr/adr-031-el-binario-vive-en-cmd-enu.md)
+y [ADR-032](../decisions/adr/adr-032-plan-y-postponed-un-fichero-por-entrada.md)) y esta entrada de worklog.
 
-## A · El binario a `cmd/enu/` (ADR-030)
+## A · El binario a `cmd/enu/` (ADR-031)
 
 **Motivación.** 11 `.go` sueltos en la raíz (5 fuentes + 6 tests `main_*`, todos
 `package main`) no es el layout idiomático de Go; el usuario lo señaló como el
@@ -31,11 +31,11 @@ doc de instalación de la web (ES/EN) y los tres ejemplos (`go run ./cmd/enu`).
 También se actualizó la única prosa **viva** que ubicaba la CLI en `main.go`
 (`docs/core/arquitectura.md` §nº5). La prosa **congelada** (ADR-026 §«vive en
 `main.go`», auditorías cerradas, worklog previo, el ejemplo de ADR-013) **no se
-reescribe**; ADR-030 refina la ubicación.
+reescribe**; ADR-031 refina la ubicación.
 
 **Decisión de alcance.** `cmd/enu/` y no `internal/cli/` + `main.go` fino: un
 único binario no justifica partir `package main` en un paquete exportado (YAGNI;
-razonamiento en ADR-030).
+razonamiento en ADR-031).
 
 **Residuo de ADR-022 corregido de paso.** `.gitignore` ignoraba `/nu` (nombre
 pre-rename) y por tanto **no** ignoraba el binario compilado `/enu`; se cambió a
@@ -94,7 +94,7 @@ quedan en git si hicieran falta).
 corrió en local (sin `node_modules`); los cambios web son no-renderizables (un
 doc de raíz + comentarios + un enlace), y el gate `docs.yml` lo cubre en CI.
 
-## D · `docs/plan` y `docs/postponed` sostenibles (ADR-031)
+## D · `docs/plan` y `docs/postponed` sostenibles (ADR-032)
 
 **Motivación.** `estado.md` pesaba 298 KB: el puntero ▶ era una línea de 66.683
 chars (11 cierres acaparados) y la bitácora, 71 filas de hasta 7.500 chars que

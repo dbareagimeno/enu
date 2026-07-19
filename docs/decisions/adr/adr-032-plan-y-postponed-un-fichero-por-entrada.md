@@ -1,11 +1,11 @@
 ---
 title: "`plan/` y `postponed/` adoptan un fichero por entrada; `estado.md` se reduce a puntero + tablero (el registro por sesión vive en `worklog/`)"
 type: "adr"
-id: "ADR-031"
+id: "ADR-032"
 status: "aceptada"
 date: "2026-07-19"
 ---
-# ADR-031 · `plan/` y `postponed/` adoptan un fichero por entrada; `estado.md` se adelgaza
+# ADR-032 · `plan/` y `postponed/` adoptan un fichero por entrada; `estado.md` se adelgaza
 
 **Estado:** Aceptada · 2026-07-19 (extiende la convención «un fichero por
 entrada» de 2026-07-17 —hoy en `decisions/adr/`, `findings/`, `worklog/`,
