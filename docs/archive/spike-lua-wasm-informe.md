@@ -1,3 +1,21 @@
+---
+title: "Informe del spike: PUC-Lua sobre wazero como VM (evidencia de ADR-019)"
+type: "archivo"
+status: "archivado"
+adr: "ADR-019"
+date: "2026-07-03"
+---
+> **■ ARCHIVADO (2026-07-19, REORG).** Este es el informe del spike original
+> (`spike/lua-wasm/`, rama `claude/spike-lua-wasm`). El **código del spike**
+> (módulo Go aislado, shim en C, `build.sh`, tests y benchmarks) se **retiró**
+> del repo: era código muerto de facto (módulo aislado, sin wiring de build) una
+> vez que sus aprendizajes se productivizaron en `internal/vmwasm/` (migración
+> M17; ver [migracion-vm.md](migracion-vm.md)). Sigue siendo **reproducible**
+> desde el historial de git y desde la receta descrita en este informe. Se
+> conserva por su valor documental: es la evidencia técnica y los números que
+> citó ADR-019. Texto histórico, escrito pre-ADR-022 (se refiere al proyecto
+> como «nu»).
+
 # Informe del spike: PUC-Lua sobre wazero como VM de nu
 
 Fecha: 2026-07-03 · Rama: `claude/spike-lua-wasm` · Duración real: una sesión.

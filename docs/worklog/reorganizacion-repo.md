@@ -47,3 +47,49 @@ vacío ✓ · `go vet ./...` ✓ · `go test ./cmd/enu` ✓ · smoke
 `enu -e 'return enu.version.api'` → `5` ✓ · e2e smoke (rebuild del binario vía
 `TestMain` desde `./cmd/enu`) ✓. `go build ./...`, `gofmt` y golangci sobre todo
 el repo siguen válidos: `cmd/enu` es un paquete más bajo `./...`.
+
+## B · El spike a `docs/archive/` (borrando el código muerto)
+
+**Motivación.** `spike/lua-wasm/` era un módulo Go aislado
+(`nu-spike-lua-wasm`), sin wiring de build, ya promovido a `internal/vmwasm/`
+(migración M17). La auditoría H-14 (2026-07-08) ya pedía archivarlo.
+
+**Qué se hizo.** `git mv` de `INFORME.md` →
+`docs/archive/spike-lua-wasm-informe.md` (con frontmatter `type: archivo` +
+banner «archivado, histórico»); `git rm -r spike/` (módulo Go, shim C,
+`build.sh`, tests y benchmarks). El código es **reproducible** desde git y desde
+la receta del propio informe; los aprendizajes viven en `internal/vmwasm/`.
+
+**Enlaces reapuntados.** `docs/archive/migracion-vm.md` (el link de evidencia y
+la prosa de «piezas heredadas») y el link de evidencia de **ADR-019** — solo el
+*target* del enlace markdown; la prosa histórica del ADR **no se reescribe**
+(convención: los ADR no se reescriben). Las auditorías cerradas (H-14) quedan
+congeladas.
+
+**Verificación.** Ningún enlace markdown colgando a `spike/`; `go build ./...`
+verde (el módulo aislado ya no existe).
+
+## C · El handoff destilado a `web/DISENO.md` (borrando la carpeta)
+
+**Motivación.** `design_handoff_enu_web/` (380 KB) ya estaba implementado en
+`web/` y **superado** por la auditoría web 2026-07-15 (W-02 contraste AA, W-03
+IBM Plex Sans); su único enlace entrante (`web/README.md`) estaba **roto** por el
+rename (apuntaba a `design_handoff_nu_web`).
+
+**Qué se hizo.** Se creó `web/DISENO.md` como **guía de diseño viva**,
+destilando del `README.md` del handoff lo escrito y no capturado en otro sitio
+(gramática visual «reglas duras», dimensiones por pantalla, mapa de teclado +
+mini-REPL easter-egg, copy de portada ES/EN, semántica de tokens, decisiones
+abiertas), con `nu→enu` corregido y una nota explícita de que los **valores
+vigentes mandan** desde `tokens.css` (W-02/W-03). Se arregló el enlace roto de
+`web/README.md` y se reapuntaron a `DISENO.md` los **6 comentarios de código**
+que citaban «el handoff» como rationale (`tokens.css`, `const.ts`, `search.ts`
+×2, `404.astro` ×2, `i18n.ts`). `git rm -r design_handoff_enu_web/` (incluidos
+el prototipo HTML de 139 KB, `support.js` generado de 64 KB y las 8 screenshots;
+quedan en git si hicieran falta).
+
+**Verificación.** `check-drift` verde (113 callables); ningún ref vivo a
+«handoff» salvo el propio `DISENO.md`. `DISENO.md` vive en la raíz de `web/`
+(como `README.md`): **no** es página publicada. El `npm run build` completo no se
+corrió en local (sin `node_modules`); los cambios web son no-renderizables (un
+doc de raíz + comentarios + un enlace), y el gate `docs.yml` lo cubre en CI.

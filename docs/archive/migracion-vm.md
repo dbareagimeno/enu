@@ -7,7 +7,7 @@ adr: "ADR-019"
 # Plan de migración de la VM: de gopher-lua a PUC-Lua sobre wazero
 
 Ejecuta [ADR-019](../decisions/adr/adr-019-la-vm-objetivo-del-kernel.md).
-Evidencia técnica y números: [spike/lua-wasm/INFORME.md](../../spike/lua-wasm/INFORME.md)
+Evidencia técnica y números: [el informe del spike](spike-lua-wasm-informe.md)
 (el spike es la semilla de las sesiones M02-M03 y el detector anti-caducidad).
 Rama de la migración: **`claude/migracion-vm-wasm`**.
 
@@ -155,7 +155,8 @@ Runtime ──> backend gopher-lua  (el actual; intacto hasta M17)
                  y para tests: variable de entorno NU_VM (M04)
 ```
 
-Piezas heredadas del spike (`spike/lua-wasm/`), que NO se copian a ciegas sino
+Piezas heredadas del spike (`spike/lua-wasm/`, hoy retirado — solo se conserva
+[el informe](spike-lua-wasm-informe.md)), que NO se copian a ciegas sino
 que se promueven con calidad de kernel: el build de `lua.wasm` (PUC-Lua 5.4.7
 sin parches + `spike_unwind.h`), el trampolín de desenrollado sobre
 `Snapshot/Restore`, y las lecciones documentadas (la no-reentrancia de

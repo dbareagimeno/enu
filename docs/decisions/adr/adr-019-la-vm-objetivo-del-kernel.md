@@ -7,7 +7,7 @@ date: "2026-07"
 ---
 # ADR-019 · La VM objetivo del kernel es PUC-Lua sobre wazero; gopher-lua queda en mantenimiento
 
-**Estado:** Aceptada · 2026-07 (dirección; la ejecución es por fases, sin fecha comprometida. Basada en el spike [spike/lua-wasm/INFORME.md](../../../spike/lua-wasm/INFORME.md); relacionada con ADR-011 —que la fase de migración reemplazará— y con [G31](../../findings/g31-el-puente-no-puede-ceder.md)/[G41](../../findings/g41-un-error-capturado-por-pcall.md))
+**Estado:** Aceptada · 2026-07 (dirección; la ejecución es por fases, sin fecha comprometida. Basada en el spike [(informe archivado)](../../archive/spike-lua-wasm-informe.md); relacionada con ADR-011 —que la fase de migración reemplazará— y con [G31](../../findings/g31-el-puente-no-puede-ceder.md)/[G41](../../findings/g41-un-error-capturado-por-pcall.md))
 
 **Contexto.** gopher-lua —la VM sobre la que corre todo el Lua de nu— está sin
 mantenimiento efectivo: la v1.1.2 pineada es su última release, `state.go` no se
