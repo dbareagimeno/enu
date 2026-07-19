@@ -14,7 +14,13 @@ resolución se aplica a los documentos afectados y la entrada pasa a
 aquello es lo que decidimos no decidir; esto son agujeros que la v1 sí
 necesita cerrados.
 
-**Estado: 60 registradas, 58 resueltas, 2 abiertas** (G62 añadida y **resuelta**
+**Estado: 61 registradas, 58 resueltas, 3 abiertas** (G63 añadida 2026-07-19
+desde la [auditoría del feedback «10/10»](../audits/auditoria-feedback-10-de-10-2026-07-19.md):
+las releases se publican sin firma ni atestación de procedencia —el checksum
+viaja por el mismo canal que el binario—; eleva a grieta el SEC-06 de la
+auditoría de seguridad por decisión del operador (tensión T5), invirtiendo su
+triaje original de «bug de infra»; **queda ABIERTA**, opciones (atestación
+nativa de GitHub / cosign keyless / GPG + SBOM) en discusión. G62 añadida y **resuelta**
 2026-07-18 desde el escenarista BDD de S50: los 4 checks de producto de `enu
 doctor` (`provider.model`/`provider.key`/`tools.external`/`provider.reach`)
 presuponen consultar la semántica de una extensión sin efectos —hoy solo
