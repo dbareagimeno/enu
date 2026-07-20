@@ -53,6 +53,46 @@ mantiene pequeño: solo dónde estamos, no la historia de cómo llegamos.
 > terminal real (lo visual de CP-7) y CP-11 contra un provider real
 > (red/credenciales).
 
+## Orden del backlog (post-plan) — adopción primero (2026-07-20)
+
+Con el plan del kernel completo, el trabajo restante son findings/postponed y las
+fases de producto de ADR-025. **Decisión del operador (2026-07-20): adopción
+primero.** La **1.0 no es objetivo cercano** — llega cuando el producto esté muy
+maduro, con la importancia que merece; su camino crítico (forge+plugin como
+criterios de corte, RPC/ACP de la Fase 3) **no dirige** el orden inmediato. Orden
+establecido:
+
+1. **G64 + G65** — bugs pequeños de correctitud (MCP interactivo; `enu.proc`
+   ignora `env` array en silencio). Ya caracterizados. Rápidos.
+2. **Onramp de primer arranque** — la primera impresión interactiva. Tres piezas:
+   *provider-neutral* ([P44](../postponed/p44-wizard-init-multi-provider.md)
+   reabierto → ADR que superseda ADR-017 p.1), *setup navegable en Lua*
+   ([G66](../findings/g66-la-activacion-interactiva-no-siembra-config.md)) y
+   *reset* (subcomando propio). Ver esas fichas.
+3. **ADR-025 Fase 2** — `enu plugin add/remove/update/lock`
+   ([P4](../postponed/p04-package-manager-de-plugins.md), decidida) + **`forge`**
+   (autoconstrucción verificable; demo insignia).
+4. **[P43](../postponed/p43-pasada-visual-de-la-portada.md)** — pasada visual de la
+   web / demo; **cuelga de `forge`**.
+5. **[P49](../postponed/p49-enu-env-reproducibilidad-entorno.md) (`enu env`)** —
+   reproducibilidad del harness completo; comprometida («tiene que estar») pero
+   mercado corporativo/air-gapped; **cuelga del lockfile de Fase 2**.
+6. **[G63](../findings/g63-las-releases-se-publican-sin-firma-ni-atestacion.md)** —
+   firma/procedencia de releases (seguridad); independiente.
+7. **[P40](../postponed/p40-registry-central-plugins.md)** — registry central;
+   lejos (espera masa de plugins de terceros).
+8. **ADR-025 Fase 3** — plataforma (RPC/JSONL, ACP, mesh); lejos (territorio 1.0).
+
+**Qué puede ir en paralelo** (superficies que no se pisan):
+- **G64/G65** y **G63** son fixes pequeños e independientes: caben en cualquier
+  hueco o en paralelo a lo demás.
+- El **onramp** (superficie: degradación del chat en Lua + plantillas de providers
+  + CLI) y **Fase 2** (superficie: plugin manager + forge) son **independientes**:
+  pueden avanzar a la vez si hay capacidad; adopción-primero pone el onramp delante
+  cuando haya que elegir uno.
+- Dentro de la Fase 2 hay dependencias internas: `forge` se apoya en el plugin
+  manager; **P43** necesita `forge`; **P49** necesita el lockfile de Fase 2.
+
 ## Cierres
 
 El registro por sesión vive en **[docs/worklog/](../worklog/)** — un fichero por
