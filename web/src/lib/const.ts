@@ -1,8 +1,8 @@
 // Constantes globales del sitio. Centralizadas aquí para que la web tenga una
 // única fuente de verdad de dominio, versión y URLs.
 
-// Dominio placeholder: el dominio real está pendiente de decisión (ver el
-// handoff, "Decisiones abiertas"). Al fijarlo, solo se cambia aquí.
+// Dominio placeholder: el dominio real está pendiente de decisión (ver
+// DISENO.md, "Decisiones abiertas"). Al fijarlo, solo se cambia aquí.
 export const DOMAIN = 'enu.sh';
 
 // La línea de instalación de una sola línea. La usan la portada ([i]) y el
@@ -13,8 +13,8 @@ export const GITHUB_URL = 'https://github.com/dbareagimeno/enu';
 export const RELEASES_URL = `${GITHUB_URL}/releases`;
 
 // Versión visible (footer, chrome). La versión sin `v` la usa el REPL
-// (`enu.version` → "0.3.0").
-export const VERSION = 'v0.3.0';
+// (`enu.version` → "0.3.1").
+export const VERSION = 'v0.3.1';
 
 export const LICENSE = 'apache-2.0';
 

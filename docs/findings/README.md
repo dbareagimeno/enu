@@ -10,11 +10,17 @@ Lista de trabajo viva: grietas encontradas en las rondas de validación
 **pendientes de resolver**.
 Método: se resuelven una a una, discutiendo opciones; al decidirse, la
 resolución se aplica a los documentos afectados y la entrada pasa a
-"Resuelto" con enlace al cambio. Distinto de [pospuesto.md](../postponed/pospuesto.md):
+"Resuelto" con enlace al cambio. Distinto de [las discusiones pospuestas](../postponed/README.md):
 aquello es lo que decidimos no decidir; esto son agujeros que la v1 sí
 necesita cerrados.
 
-**Estado: 60 registradas, 58 resueltas, 2 abiertas** (G62 añadida y **resuelta**
+**Estado: 61 registradas, 59 resueltas, 2 abiertas** (G63 añadida 2026-07-19
+desde la [auditoría del feedback «10/10»](../audits/auditoria-feedback-10-de-10-2026-07-19.md):
+las releases se publican sin firma ni atestación de procedencia —el checksum
+viaja por el mismo canal que el binario—; eleva a grieta el SEC-06 de la
+auditoría de seguridad por decisión del operador (tensión T5), invirtiendo su
+triaje original de «bug de infra»; **queda ABIERTA**, opciones (atestación
+nativa de GitHub / cosign keyless / GPG + SBOM) en discusión. G62 añadida y **resuelta**
 2026-07-18 desde el escenarista BDD de S50: los 4 checks de producto de `enu
 doctor` (`provider.model`/`provider.key`/`tools.external`/`provider.reach`)
 presuponen consultar la semántica de una extensión sin efectos —hoy solo
@@ -32,8 +38,12 @@ huérfano en el arranque** del chat — la task efímera que abre la sesión
 dispara un `enu.task.cleanup` que no puede ⏸ (`EINVAL`) y que además deja
 `closed=true` antes de borrar, envenenando el cierre explícito posterior —, lo
 que destapa que la promesa de liberación de `sesiones.md` §6 vía cleanup es
-inimplementable tal como está escrita; **queda ABIERTA**, opciones en
-discusión. G58 y G59 añadidas
+inimplementable tal como está escrita; **resuelta 2026-07-19 (ADR-029)**:
+doctrina de lease reclamable + reconciliación en `sesiones.md` §6 —unificada con
+el claim/heartbeat que `malla.md` §3 ya encarna—, drenaje del apagado (A2) en
+`modelo-ejecucion.md`, cleanups aclarados síncronos/solo-memoria en `api.md` §3
+(patrón cleanup→spawn), H-D corregido en `agente.md`, H-A absorbido (sin G##
+propio), A1→P46 y flock descartado. G58 y G59 añadidas
 2026-07-18 desde la misma suite e2e de los plugins oficiales, caracterizando
 dos bugs de producto PREEXISTENTES en vez de un hueco de API: G58, el bucle del
 driver del chat (`select` sin timeout sobre `<-chunks`) no observaba el
@@ -78,7 +88,7 @@ añadidas 2026-07-12 desde la auditoría integral
 ([auditoria-2026-07-12.md](../audits/auditoria-2026-07-12.md)): G47–G51 —incoherencias
 documentales— resueltas el mismo día; G44 —el bombeo del scheduler— resuelta
 y **construida** el 2026-07-13 con la opción (b), `RunTasks` persistente
-(bitácora de [implementacion.md](../plan/implementacion.md)); G45 —la superficie [W]
+([bitácora histórica del plan](../archive/bitacora-plan.md)); G45 —la superficie [W]
 de los workers— resuelta y **construida** el 2026-07-13 con la opción (a),
 marca worker-safe por snippet de preludio; G46 —el replay de `event`—
 resuelta y **construida** el 2026-07-13 con la opción (a) más la (c):
@@ -145,7 +155,7 @@ añaden aquí con el mismo método.
 ## Índice
 
 > Los números G24–G25 no existen como fichero: son un hueco histórico que
-> nunca se asignó. La numeración es append-only: el próximo hallazgo es G63,
+> nunca se asignó. La numeración es append-only: el próximo hallazgo es G64,
 > los huecos no se reutilizan.
 
 | # | Título | Docs afectados | Estado | Fichero |
@@ -207,6 +217,7 @@ añaden aquí con el mismo método.
 | G57 | El transcript y el lock de sesiones no alcanzan el `0600` prometido: la API no dejaba fijar el modo de creación | `api.md` §5/§17 / `sesiones.md` §2/§6/§8 / `guia-plugins.md` §7 | RESUELTO | [g57-transcript-y-lock-de-sesiones-no-alcanzan-0600.md](g57-transcript-y-lock-de-sesiones-no-alcanzan-0600.md) |
 | G58 | El chat no se cierra hasta la siguiente tecla: `/quit` despacha `core:shutdown` desde una task, pero el driver solo lo sondea al llegar más input | `chat.md` §8 / driver | RESUELTO | [g58-el-chat-no-se-cierra-hasta.md](g58-el-chat-no-se-cierra-hasta.md) |
 | G59 | El auto-connect de `mcp.toml` es inservible en headless `-p`: la task efímera desconecta las tools antes del turno, y `env` (array) no llega al subproceso | extensión `mcp` / `enu.proc` | ABIERTO | [g59-el-auto-connect-de-mcp-toml.md](g59-el-auto-connect-de-mcp-toml.md) |
-| G60 | El `.jsonl.lock` nace huérfano en el arranque del chat: `enu.task.cleanup` no puede ⏸ y la promesa de liberación de `sesiones.md` §6 es inimplementable tal como está | `api.md` §3 / `sesiones.md` §6 / `guia-plugins.md` / sessions / chat | ABIERTO | [g60-el-lock-de-sesion-nace-huerfano.md](g60-el-lock-de-sesion-nace-huerfano.md) |
+| G60 | El `.jsonl.lock` nace huérfano en el arranque del chat: `enu.task.cleanup` no puede ⏸ y la promesa de liberación de `sesiones.md` §6 es inimplementable tal como está | `api.md` §3 / `sesiones.md` §6 / `guia-plugins.md` / `modelo-ejecucion.md` / `malla.md` / ADR-029 / sessions / chat | RESUELTO (ADR-029) | [g60-el-lock-de-sesion-nace-huerfano.md](g60-el-lock-de-sesion-nace-huerfano.md) |
 | G61 | El wizard de `enu init` ofrece 4 providers pero solo `anthropic` tiene plantilla (espec presupone plantillas inexistentes) | ADR-026 pieza 2 / providers.md / S49 | RESUELTO | [g61-el-wizard-de-init-ofrece-providers-sin-plantilla.md](g61-el-wizard-de-init-ofrece-providers-sin-plantilla.md) |
 | G62 | Los 4 checks de producto de `enu doctor` presuponen introspección de extensiones (consulta sin efectos + API de herramientas externas) que no existe | ADR-026 pieza 3 / doctor.md / S50 | RESUELTO | [g62-los-checks-de-producto-de-doctor-presuponen-introspeccion-inexistente.md](g62-los-checks-de-producto-de-doctor-presuponen-introspeccion-inexistente.md) |
+| G63 | Las releases se publican sin firma ni atestación de procedencia: el checksum viaja por el mismo canal que el binario (eleva SEC-06 a grieta) | release.yml / install.sh / `docs/ops/release.md` / ADR-013 | ABIERTO | [g63-las-releases-se-publican-sin-firma-ni-atestacion.md](g63-las-releases-se-publican-sin-firma-ni-atestacion.md) |

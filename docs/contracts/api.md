@@ -124,7 +124,7 @@ Proc...) son userdata opacos con métodos.
 | `enu.task.defer(fn)` | Ejecuta `fn` en el siguiente tick del loop. |
 | `enu.task.future() -> Future` | Rendez-vous de un solo uso: `Future:set(v)` (síncrono, una sola vez; llamadas posteriores lanzan `EINVAL`) y `Future:await() -> v` ⏸ (varios pueden esperar; si ya está resuelto, retorna inmediato). Es la pieza para "una task espera un valor que otro código producirá" (diálogos, pickers, proxies) sin polling. |
 | `Task:cancel()` | Cancelación cooperativa: aborta la task en su siguiente punto de suspensión (no capturable, §1.3); corren sus `cleanup`s. |
-| `enu.task.cleanup(fn)` [W] | Registra un liberador (síncrono) en la pila LIFO de la task actual; corren todos al terminar — éxito, error o aborto. El `defer` de esta casa: procesos, regiones, handlers de input. |
+| `enu.task.cleanup(fn)` [W] | Registra un liberador **síncrono y solo-memoria** en la pila LIFO de la task actual; corren todos al terminar — éxito, error o aborto. El `defer` de esta casa: procesos, regiones, handlers de input. Corre en la frontera de terminación **sin contexto de task**, así que **no puede llamar funciones ⏸** (lo intenta → `EINVAL`), igual que un handler síncrono (§1.3). Para liberar un recurso cuyo cierre necesita I/O suspendente (borrar un lock o un worktree en disco), el liberador **lanza una task** con `enu.task.spawn` (patrón *cleanup→spawn*, válido dentro de un cleanup: `spawn` no exige task actual): esa task hace el I/O y corre antes de salir gracias al drenaje del apagado ([modelo-ejecucion.md](../core/modelo-ejecucion.md) §limitaciones). Doctrina y jerarquía de garantías: [G60](../findings/g60-el-lock-de-sesion-nace-huerfano.md) / [ADR-029](../decisions/adr/adr-029-resiliencia-lease-reclamable-reconciliacion.md). |
 | `Task:await() -> any` ⏸ | Espera el resultado de otra task. |
 
 ---
@@ -311,7 +311,7 @@ Pegar una imagen (G30): cuando el portapapeles trae contenido **no-texto**
 vez de `text`. La UI inserta esa ruta igual que una mención `@` y el agente
 decide leerla (no se incrusta el contenido a ciegas); así los bytes binarios
 nunca cruzan las fronteras de texto/JSON (coherente con G11, §12). Pintar la
-imagen en pantalla es otra cosa ([pospuesto.md](../postponed/pospuesto.md) P6).
+imagen en pantalla es otra cosa ([pospuestos](../postponed/README.md) P6).
 
 ---
 
@@ -388,7 +388,7 @@ de `enu.proc` (§6) lanzados desde el worker se registran bajo ese plugin. En
 los artefactos de atribución se anota distinguible como `<plugin> (worker)` —
 p. ej. `agent (worker)`— para que la traza diga quién *y desde dónde*.
 Consecuencia de supervisión: como el estado principal posee todos los workers
-([P11](../postponed/pospuesto.md)), un `enu.plugin.reload` (§14) del plugin dueño sigue
+([P11](../postponed/p11-workers-anidados.md)), un `enu.plugin.reload` (§14) del plugin dueño sigue
 soltando también los procesos lanzados por sus workers — el árbol de
 supervisión no tiene fugas por la frontera del worker.
 
@@ -418,15 +418,24 @@ core — la activación de plugins (las extensiones oficiales embebidas están
 **Pantalla de runtime desnudo (G21)**: con TTY interactivo y ningún plugin
 activo, el kernel pinta una pantalla fija hecha solo de sus capacidades —
 versión y nivel de API, rutas de config y plugins, extensiones embebidas
-disponibles — y sus acciones: activar el conjunto oficial (escribe
-`plugins.enabled` y continúa el arranque canónico, sin red), activar
-extensiones sueltas (p. ej. solo `repl`), o salir. No es la UI de un
-producto sino la del runtime: las extensiones embebidas y su activación
-son capacidad del loader, así que el kernel habla de lo suyo
-([filosofia.md](../core/filosofia.md) §2) — render fijo, pre-Lua, sin widgets ni
-lógica. Es lo que se ve siempre que enu arranca sin nada activo, no un
-diálogo de primera vez. Sin TTY no hay pantalla: arranca desnudo, y los
-errores por extensión inactiva son accionables (nombran la línea de
+disponibles — y sus **tres acciones**, que dispara desde el teclado: activar
+el conjunto oficial (escribe `plugins.enabled` y continúa el arranque
+canónico, sin red), activar extensiones sueltas —navegando con el cursor el
+catálogo de embebidas que ya lista y eligiendo una (p. ej. solo `repl`)— o
+salir. No es la UI de un producto sino la del runtime: las extensiones
+embebidas y su activación son capacidad del loader, así que el kernel habla
+de lo suyo ([filosofia.md](../core/filosofia.md) §2) — render **pre-Lua**, sin
+widgets de `enu.ui` ni lógica de producto. La respuesta al teclado —incluida
+la máquina de estados de esa selección acotada (menú ↔ catálogo, cursor,
+guarda de re-entrada contra doble activación)— es lógica de *input del
+driver*: vive en el binario, con el mismo estatus que el cierre de CP-7 (una
+tecla → `core:shutdown`), y **no añade nada a `enu.*` ni mueve
+`enu.version.api`**. El selector no crece por la vía de hecho: cualquier
+enriquecimiento más allá de navegar y elegir del catálogo (filtro, búsqueda,
+descripciones, paneles) es hallazgo/ADR, no código — la pantalla desnuda no
+es una TUI del kernel. Es lo que se ve siempre que enu arranca sin nada
+activo, no un diálogo de primera vez. Sin TTY no hay pantalla: arranca
+desnudo, y los errores por extensión inactiva son accionables (nombran la línea de
 `enu.toml` que lo arregla, como los de permisos en
 [agente.md](agente.md) §5). El onramp sin TTY (CI, Docker, scripts) es el
 flag de CLI `enu --default-config` (ADR-015, G33): escribe ese mismo conjunto

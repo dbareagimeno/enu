@@ -30,7 +30,7 @@ incompletas (ADR-003). La Ronda 8 validó exactamente eso antes de construir
    sería producto encima del producto — cuando duela escribirlo a mano, se
    reabre.
 2. **Pull-only.** enu solo actúa de **cliente** (git, y en el futuro `enu.ws`
-   saliente): sin listener, [P1/P19](../postponed/pospuesto.md) siguen dormidos.
+   saliente): sin listener, [P1/P19](../postponed/README.md) siguen dormidos.
 3. **Git es el único sustrato v0.1**: transporte, almacén y coordinación
    (claim por CAS de refs). La Ronda 8 (escenario 36) validó que la capa
    Role/Job es agnóstica al sustrato; el broker queda pospuesto con disparador
@@ -97,9 +97,15 @@ mesh.release(job_id, opts?) ⏸               -- borra la claim-ref (job termina
 - El contenido del commit de claim/heartbeat es `{ hostname, ts }`
   (`enu.sys.hostname/now_ms`). **Los relojes de los nodos no están
   sincronizados**: el umbral de staleness que un re-claimer aplique sobre
-  `claim_info().ts` debe ser generoso (minutos, no segundos). El lock local de
-  [sesiones.md](sesiones.md) §6 (pid + `proc.alive`) no cruza máquinas — aquí
-  la liveness es el heartbeat, deliberadamente.
+  `claim_info().ts` debe ser generoso (minutos, no segundos). `heartbeat` +
+  staleness **es** la doctrina de lease reclamable de
+  [sesiones.md](sesiones.md) §6
+  ([ADR-029](../decisions/adr/adr-029-resiliencia-lease-reclamable-reconciliacion.md))
+  llevada al plano distribuido: el dueño renueva (`--force-with-lease`) y lo
+  rancio se reconcilia. El lock local de sesión sigue el mismo principio en un
+  solo host, pero su lease **no cruza máquinas** — entre nodos la liveness es el
+  heartbeat sobre git, deliberadamente (`enu.proc.alive` solo vería su propia
+  máquina).
 - Robar un claim viejo = `release` + `claim` (el CAS arbitra si dos re-claimers
   compiten).
 
@@ -126,7 +132,11 @@ mesh.run_job(job, role, opts?) ⏸ -> Result
 Pasos (todo sobre contratos públicos; cada paso es sustituible componiendo las
 piezas de §2-§4 a mano):
 
-1. Worktree desde `job.base` (§4) con `cleanup` garantizado.
+1. Worktree desde `job.base` (§4), liberado con `cleanup` — pero su `remove` es
+   ⏸: un `enu.task.cleanup` no puede borrarlo directamente (G60, [api.md](api.md)
+   §3), así que el runner lo cierra explícitamente al terminar o vía
+   *cleanup→spawn*, y lo que quede huérfano lo reconcilia un reaper por la
+   doctrina de lease (§3, [ADR-029](../decisions/adr/adr-029-resiliencia-lease-reclamable-reconciliacion.md)).
 2. **Verificación de skills pineadas** (§9): el hash de cada skill del Role se
    comprueba contra el worktree (`git hash-object`); mismatch → `EMESH`
    accionable y el job falla ANTES de abrir sesión.
@@ -244,7 +254,7 @@ end
 - **Broker como segundo sustrato** (`enu.ws` saliente): validado como expresable
   (Ronda 8, escenario 36); se construirá cuando exista una malla real donde el
   polling de git no baste.
-- **Tool calls paralelas** ([P12](../postponed/pospuesto.md)): un job sigue siendo secuencial
+- **Tool calls paralelas** ([P12](../postponed/p12-ejecucion-paralela-tool-calls.md)): un job sigue siendo secuencial
   por dentro; el paralelismo de la malla es entre jobs/variantes.
-- **Workers anidados** ([P11](../postponed/pospuesto.md)): irrelevante aquí — la carga es
+- **Workers anidados** ([P11](../postponed/p11-workers-anidados.md)): irrelevante aquí — la carga es
   LLM+IO y se solapa entre tasks (escenario 26).
